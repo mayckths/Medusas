@@ -640,9 +640,10 @@ function setupPhotoWidget() {
       <div class="pw-section">Qué mostrar</div>
       <button class="pw-opt ${cfg.mode === 'featured' ? 'active' : ''}" data-mode="featured"><span class="material-symbols-outlined">star</span> Solo destacadas</button>
       <button class="pw-opt ${cfg.mode === 'all' ? 'active' : ''}" data-mode="all"><span class="material-symbols-outlined">photo_library</span> Todas las fotos</button>
-      ${albums.length ? `<div class="pw-section">Álbumes</div>${albums.map(a => `
-        <button class="pw-opt ${cfg.mode === 'album:'+a ? 'active' : ''}" data-mode="album:${escapeHtml(a)}"><span class="material-symbols-outlined">folder</span> ${escapeHtml(a)}</button>
-      `).join('')}` : ''}
+      <div class="pw-section">Álbumes</div>
+      ${albums.length
+        ? albums.map(a => `<button class="pw-opt ${cfg.mode === 'album:'+a ? 'active' : ''}" data-mode="album:${escapeHtml(a)}"><span class="material-symbols-outlined">folder</span> ${escapeHtml(a)}</button>`).join('')
+        : `<div style="padding:.4rem .65rem;font-size:.78rem;color:var(--text-dim);">Aún no tienes álbumes.<br/>Crea uno desde 📸 Fotos.</div>`}
       <div class="pw-section">Intervalo</div>
       <div class="pw-row">
         <input type="number" min="2" max="60" step="1" id="pw-interval" value="${(cfg.interval_ms || 6000)/1000}" />
@@ -925,8 +926,10 @@ function getMediaCategory(m) {
 
 function renderMusica(root) {
   const featured = state.media.filter(m => m.featured);
-  const buckets = { musica: [], playlists: [], videos: [] };
-  for (const m of state.media) buckets[getMediaCategory(m)].push(m);
+  const filter = state.filterMedia || 'all';
+  const filterCounts = { all: state.media.length, musica: 0, playlists: 0, videos: 0 };
+  for (const m of state.media) filterCounts[getMediaCategory(m)]++;
+  const items = filter === 'all' ? state.media : state.media.filter(m => getMediaCategory(m) === filter);
 
   root.innerHTML = `
     <div class="page-head">
@@ -942,35 +945,31 @@ function renderMusica(root) {
       <div class="featured-label"><span class="material-symbols-outlined">star</span> Destacadas</div>
       <div class="featured-strip" id="featured-media-strip"></div>
     ` : ''}
-    <div class="media-section" data-cat="musica">
-      <div class="section-head"><h2><span class="material-symbols-outlined">music_note</span> Música <span class="count">${buckets.musica.length}</span></h2></div>
-      <div class="grid-cards" data-grid="musica"></div>
+    <div class="tag-filter-row" id="media-filter">
+      <button class="tag-chip ${filter === 'all' ? 'active' : ''}" data-f="all" style="--tag-color: var(--text-dim);">Todo <span class="count">${filterCounts.all}</span></button>
+      <button class="tag-chip ${filter === 'musica' ? 'active' : ''}" data-f="musica" style="--tag-color: #1db954;"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:-3px;">music_note</span> Canciones <span class="count">${filterCounts.musica}</span></button>
+      <button class="tag-chip ${filter === 'playlists' ? 'active' : ''}" data-f="playlists" style="--tag-color: #6d5be6;"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:-3px;">queue_music</span> Playlists <span class="count">${filterCounts.playlists}</span></button>
+      <button class="tag-chip ${filter === 'videos' ? 'active' : ''}" data-f="videos" style="--tag-color: #ff4040;"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:-3px;">play_circle</span> Videos <span class="count">${filterCounts.videos}</span></button>
     </div>
-    <div class="media-section" data-cat="playlists">
-      <div class="section-head"><h2><span class="material-symbols-outlined">queue_music</span> Playlists <span class="count">${buckets.playlists.length}</span></h2></div>
-      <div class="grid-cards" data-grid="playlists"></div>
-    </div>
-    <div class="media-section" data-cat="videos">
-      <div class="section-head"><h2><span class="material-symbols-outlined">play_circle</span> Videos <span class="count">${buckets.videos.length}</span></h2></div>
-      <div class="grid-cards" data-grid="videos"></div>
-    </div>
+    <div class="grid-cards" id="media-grid"></div>
   `;
 
   $('#new-media-btn').addEventListener('click', () => openMediaEditor(null));
+  $('#media-filter').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-f]');
+    if (!b) return;
+    state.filterMedia = b.dataset.f;
+    renderMusica(root);
+  });
 
   if (featured.length) {
     const strip = $('#featured-media-strip');
     featured.forEach(m => strip.appendChild(renderMediaCard(m)));
   }
 
-  for (const cat of ['musica', 'playlists', 'videos']) {
-    const grid = $(`[data-grid="${cat}"]`);
-    if (!buckets[cat].length) {
-      grid.innerHTML = `<div class="empty">Sin ${cat === 'musica' ? 'canciones' : cat}.</div>`;
-      continue;
-    }
-    buckets[cat].forEach(m => grid.appendChild(renderMediaCard(m)));
-  }
+  const grid = $('#media-grid');
+  grid.appendChild(renderNewCtaTile('Nuevo', () => openMediaEditor(null)));
+  items.forEach(m => grid.appendChild(renderMediaCard(m)));
 }
 
 function renderMediaCard(m) {
@@ -1024,6 +1023,13 @@ function renderMediaCard(m) {
   overlay.className = 'play-overlay';
   overlay.innerHTML = '<div class="play"><span class="material-symbols-outlined">play_arrow</span></div>';
   thumbWrap.appendChild(overlay);
+
+  // Kind chip pinned to bottom-right of thumbnail
+  const kindChip = document.createElement('div');
+  kindChip.className = 'kind-chip';
+  kindChip.textContent = m.kind === 'spotify' ? 'Spotify' : 'YouTube';
+  thumbWrap.appendChild(kindChip);
+
   card.appendChild(thumbWrap);
 
   const body = document.createElement('div');
@@ -1039,9 +1045,8 @@ function renderMediaCard(m) {
   }
   const meta = document.createElement('div');
   meta.className = 'meta';
-  const kindLabel = m.kind === 'spotify' ? 'Spotify' : 'YouTube';
-  const featuredMark = m.featured ? '<span class="material-symbols-outlined" style="font-size:14px;vertical-align:-2px;color:#f9b233;">star</span>' : '';
-  meta.innerHTML = `<span>${fmtDate(m.created_at)} · ${escapeHtml(m.created_by || '?')} ${featuredMark}</span><span class="badge">${kindLabel}</span>`;
+  const featuredMark = m.featured ? '<span class="material-symbols-outlined filled" style="font-size:14px;vertical-align:-2px;color:#f9b233;">star</span>' : '';
+  meta.innerHTML = `<span>${fmtDate(m.created_at)} · ${escapeHtml(m.created_by || '?')} ${featuredMark}</span>`;
   body.appendChild(meta);
   card.appendChild(body);
 
@@ -1495,15 +1500,14 @@ const SECTION_LABELS = {
   places: 'Lugares recientes',
 };
 
-let configActiveTab = 'clave';
+let configActiveTab = 'dashboard';
 
 function renderConfig(root) {
   const tabs = [
-    { id: 'clave', icon: 'key', label: 'Contraseña' },
-    { id: 'dashboard', icon: 'home', label: 'Dashboard' },
+    { id: 'dashboard', icon: 'home', label: 'Inicio' },
     { id: 'login', icon: 'lock_open', label: 'Login' },
     { id: 'tags', icon: 'sell', label: 'Etiquetas' },
-    { id: 'logout', icon: 'logout', label: 'Cerrar sesión' },
+    { id: 'cuenta', icon: 'account_circle', label: 'Cuenta' },
   ];
 
   root.innerHTML = `
@@ -1533,12 +1537,54 @@ function renderConfig(root) {
 
 function renderConfigTab(body) {
   switch (configActiveTab) {
-    case 'clave': renderConfigClave(body); break;
     case 'dashboard': renderConfigDashboard(body); break;
     case 'login': renderConfigLogin(body); break;
     case 'tags': renderConfigTags(body); break;
-    case 'logout': renderConfigLogout(body); break;
+    case 'cuenta': renderConfigCuenta(body); break;
+    // Legacy targets fall through to cuenta
+    case 'clave':
+    case 'logout': renderConfigCuenta(body); break;
   }
+}
+
+function renderConfigCuenta(body) {
+  body.innerHTML = `
+    <div class="settings-card">
+      <h3>Mi clave</h3>
+      <div class="field"><label>Usuario</label><input type="text" value="${escapeHtml(state.currentUser)}" disabled /></div>
+      <div class="field"><label>Clave actual</label><input type="password" id="cfg-old-pw" placeholder="0000" /></div>
+      <div class="field"><label>Nueva clave</label><input type="password" id="cfg-new-pw" placeholder="Mínimo 4 caracteres" /></div>
+      <div class="row" style="margin-top:.4rem;">
+        <button class="btn primary" id="cfg-save-pw">Cambiar clave</button>
+        <span class="status" id="cfg-pw-status"></span>
+      </div>
+    </div>
+    <div class="settings-card">
+      <h3>Cerrar sesión</h3>
+      <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Tendrás que volver a meter la clave la próxima vez.</div>
+      <div class="row" style="margin-top:.7rem;">
+        <button class="btn primary" id="cfg-logout"><span class="material-symbols-outlined">logout</span> Cerrar sesión ahora</button>
+      </div>
+    </div>
+  `;
+  $('#cfg-save-pw').addEventListener('click', async () => {
+    const oldp = $('#cfg-old-pw').value;
+    const newp = $('#cfg-new-pw').value;
+    const statusEl = $('#cfg-pw-status');
+    if (!oldp || !newp) { setStatus(statusEl, 'Llena los dos campos', true); return; }
+    if (newp.length < 4) { setStatus(statusEl, 'La nueva clave debe tener al menos 4 caracteres', true); return; }
+    setStatus(statusEl, 'Cambiando…');
+    try {
+      const { data, error } = await supabase.rpc('update_password', {
+        p_name: state.currentUser, p_old_password: oldp, p_new_password: newp,
+      });
+      if (error) throw error;
+      if (!data) { setStatus(statusEl, 'Clave actual incorrecta', true); return; }
+      setStatus(statusEl, 'Clave cambiada ✓');
+      $('#cfg-old-pw').value = ''; $('#cfg-new-pw').value = '';
+    } catch (e) { setStatus(statusEl, `Error: ${e.message || e}`, true); }
+  });
+  $('#cfg-logout').addEventListener('click', () => logout());
 }
 
 function renderConfigClave(body) {
@@ -1708,44 +1754,45 @@ function toHexColor(input) {
 function renderConfigLogin(body) {
   body.innerHTML = `
     <div class="settings-card">
-      <h3>Imágenes del login</h3>
-      <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Tu avatar y la foto que aparece cuando te seleccionan. Y la foto de fondo por defecto (cuando nadie está seleccionado).</div>
-
+      <h3>Mi avatar</h3>
+      <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Pequeña imagen circular (idealmente cuadrada).</div>
       <div class="asset-row">
         <div class="asset-preview" id="cfg-avatar-preview"></div>
         <div class="asset-info">
-          <div class="asset-label">Mi avatar</div>
-          <div class="asset-sub">Pequeña imagen circular (idealmente cuadrada)</div>
           <label class="btn primary" for="cfg-avatar-input">Cambiar</label>
           <input type="file" accept="image/*" id="cfg-avatar-input" hidden />
           <button class="btn ghost" id="cfg-avatar-clear" type="button">Quitar</button>
         </div>
       </div>
+    </div>
 
+    <div class="settings-card">
+      <h3>Mi foto del login</h3>
+      <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Se ve cuando te seleccionan a ti.</div>
       <div class="asset-row">
         <div class="asset-preview wide" id="cfg-bg-preview"></div>
         <div class="asset-info">
-          <div class="asset-label">Mi foto del login</div>
-          <div class="asset-sub">Se ve cuando te seleccionan a ti</div>
           <label class="btn primary" for="cfg-bg-input">Cambiar</label>
           <input type="file" accept="image/*" id="cfg-bg-input" hidden />
           <button class="btn ghost" id="cfg-bg-clear" type="button">Quitar</button>
         </div>
       </div>
+    </div>
 
+    <div class="settings-card">
+      <h3>Foto por defecto</h3>
+      <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Cuando nadie está seleccionado, idealmente una foto de los dos.</div>
       <div class="asset-row">
         <div class="asset-preview wide" id="cfg-default-bg-preview"></div>
         <div class="asset-info">
-          <div class="asset-label">Foto por defecto</div>
-          <div class="asset-sub">Cuando nadie está seleccionado (idealmente una foto de los dos)</div>
           <label class="btn primary" for="cfg-default-bg-input">Cambiar</label>
           <input type="file" accept="image/*" id="cfg-default-bg-input" hidden />
           <button class="btn ghost" id="cfg-default-bg-clear" type="button">Quitar</button>
         </div>
       </div>
-
-      <span class="status" id="cfg-assets-status"></span>
     </div>
+
+    <span class="status" id="cfg-assets-status"></span>
   `;
   setupAssetUploaders();
 }
@@ -2423,8 +2470,12 @@ const lightboxState = { list: [], index: 0 };
 function openLightbox(list, index) {
   lightboxState.list = list;
   lightboxState.index = index;
+  // Preserve scroll position when opening the modal
+  const scrollY = window.scrollY;
   renderLightbox();
   if (!dlgLightbox.open) dlgLightbox.showModal();
+  // Some browsers shift focus & jump scroll; restore it
+  requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'instant' }));
 }
 
 function renderLightbox() {
@@ -2435,8 +2486,11 @@ function renderLightbox() {
   if (p.caption) { $('#lightbox-cap').textContent = p.caption; $('#lightbox-cap').hidden = false; }
   else $('#lightbox-cap').hidden = true;
 
+  // Toggle icon FILL: filled when active, outlined when not
   $('#lb-pin').classList.toggle('is-on', !!p.pinned);
+  $('#lb-pin .material-symbols-outlined').classList.toggle('filled', !!p.pinned);
   $('#lb-feature').classList.toggle('is-on', !!p.featured);
+  $('#lb-feature .material-symbols-outlined').classList.toggle('filled', !!p.featured);
 
   if (isUnread(p)) markSeen('photos', p);
 }
@@ -2487,7 +2541,11 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === 'ArrowRight') { e.preventDefault(); lbNav(1); }
 });
 
-dlgLightbox.addEventListener('close', () => router());
+dlgLightbox.addEventListener('close', async () => {
+  const scrollY = window.scrollY;
+  await router();
+  requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'instant' }));
+});
 
 // ============================================================
 // Place editor
