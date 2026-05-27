@@ -181,7 +181,9 @@ async function loadUsersForLogin() {
 }
 
 async function tryLogin(name, password) {
+  console.log('[auth] tryLogin', { name, passwordLength: password?.length });
   const { data, error } = await supabase.rpc('verify_password', { p_name: name, p_password: password });
+  console.log('[auth] tryLogin result', { data, error });
   if (error) throw error;
   return !!data;
 }
@@ -227,11 +229,16 @@ async function initAuthUI() {
 
   const submit = async () => {
     const pwd = $('#auth-password').value;
+    console.log('[auth] submit clicked', { selected, hasPwd: !!pwd });
     if (!pwd) { setStatus($('#auth-status'), 'Escribe la clave', true); return; }
     setStatus($('#auth-status'), 'Verificando…');
     try {
       const ok = await tryLogin(selected, pwd);
-      if (!ok) { setStatus($('#auth-status'), 'Clave incorrecta', true); return; }
+      if (!ok) {
+        console.warn('[auth] verify returned false for', selected);
+        setStatus($('#auth-status'), `Clave incorrecta para ${selected}`, true);
+        return;
+      }
       loginAs(selected);
       $('#auth-status').textContent = '';
       $('#auth-password').value = '';
@@ -239,7 +246,8 @@ async function initAuthUI() {
       await loadSettings();
       await router();
     } catch (e) {
-      setStatus($('#auth-status'), `Error: ${e.message || e}`, true);
+      console.error('[auth] submit error', e);
+      setStatus($('#auth-status'), `Error: ${e.message || JSON.stringify(e)}`, true);
     }
   };
   $('#auth-submit').addEventListener('click', submit);
