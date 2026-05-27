@@ -175,42 +175,55 @@ body {
 }
 .auth-pickers .user-btn:not(.is-active) .name { color: rgba(255,255,255,0.7); }
 
-.auth-field-v2 { width: 100%; margin-bottom: 0.75rem; }
-.auth-field-v2 input {
-  width: 100%;
-  padding: 1rem 1.25rem;
-  border: 0;
-  background: rgba(255,255,255,0.08);
-  color: white;
-  font-size: 1.15rem;
-  letter-spacing: 0.55em;
+.auth-pincode {
+  display: flex; gap: 0.6rem; justify-content: center;
+  margin-bottom: 0.5rem;
+}
+.auth-pincode input {
+  width: 60px; height: 70px;
   text-align: center;
-  outline: none;
-  border-radius: 999px;
-  text-transform: uppercase;
-}
-.auth-field-v2 input::placeholder {
-  color: rgba(255,255,255,0.55);
-  letter-spacing: 0.5em;
+  font-size: 1.5rem;
   font-weight: 600;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  border-radius: 16px;
+  color: white;
+  outline: none;
+  caret-color: var(--accent);
+  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease, transform 0.08s ease;
+  -webkit-text-security: disc;
+  text-security: disc;
 }
-.auth-field-v2 input:focus {
-  background: rgba(255,255,255,0.12);
-  box-shadow: 0 0 0 2px rgba(255,255,255,0.18);
+.auth-pincode input:focus {
+  border-color: rgba(255,255,255,0.4);
+  background: rgba(255,255,255,0.08);
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.08);
+}
+.auth-pincode input.filled {
+  border-color: var(--accent);
+  background: rgba(214, 255, 58, 0.10);
+}
+.auth-pincode.is-error input {
+  border-color: rgba(255, 107, 107, 0.6);
+  animation: pin-shake 0.35s ease;
+}
+@keyframes pin-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-4px); }
+  40%, 80% { transform: translateX(4px); }
+}
+.auth-pincode.is-verifying input {
+  border-color: var(--accent);
+  background: rgba(214, 255, 58, 0.10);
 }
 
-.auth-submit-link {
-  background: transparent; border: 0; cursor: pointer;
-  color: rgba(255,255,255,0.7); font-size: 0.92rem;
-  padding: 0.5rem 1.25rem; border-radius: 999px;
-  margin-top: 0.4rem;
-  transition: color 0.15s ease, background 0.15s ease;
+@media (max-width: 540px) {
+  .auth-pincode input { width: 56px; height: 64px; font-size: 1.35rem; }
 }
-.auth-submit-link:hover { color: white; background: rgba(255,255,255,0.08); }
-.auth-submit-link:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .auth-status-v2 {
-  margin-top: 0.6rem; color: rgba(255,255,255,0.6);
+  margin-top: 0.6rem; color: rgba(255,255,255,0.65);
+  min-height: 1.2em; text-align: center;
 }
 .auth-status-v2.error { color: #ff8a80; }
 

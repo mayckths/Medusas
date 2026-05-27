@@ -249,6 +249,9 @@ async function initAuthUI() {
   const picker = $('#user-picker');
   const heroImg = $('#auth-hero-img');
   const heroFb = $('#auth-hero-fallback');
+  const pincode = $('#auth-pincode');
+  const pinInputs = $$('input', pincode);
+  const statusEl = $('#auth-status');
   const users = await loadUsersForLogin();
   const defaultBg = await loadDefaultLoginBg();
 
@@ -258,6 +261,7 @@ async function initAuthUI() {
 
   picker.innerHTML = '';
   let selected = null;
+  let verifying = false;
 
   function setHero(bgPath) {
     if (bgPath) {
@@ -272,6 +276,95 @@ async function initAuthUI() {
   }
   setHero(defaultBg);
 
+  function clearPin(focusFirst = false) {
+    pinInputs.forEach(x => { x.value = ''; x.classList.remove('filled'); });
+    pincode.classList.remove('is-error', 'is-verifying');
+    if (focusFirst) pinInputs[0].focus();
+  }
+
+  async function attemptLogin(pwd) {
+    if (!selected) {
+      setStatus(statusEl, 'Selecciona quién eres', true);
+      pincode.classList.add('is-error');
+      setTimeout(() => clearPin(false), 600);
+      return;
+    }
+    if (verifying) return;
+    verifying = true;
+    pincode.classList.add('is-verifying');
+    setStatus(statusEl, 'Verificando…');
+    try {
+      const ok = await tryLogin(selected, pwd);
+      if (!ok) {
+        pincode.classList.remove('is-verifying');
+        pincode.classList.add('is-error');
+        setStatus(statusEl, `Clave incorrecta`, true);
+        setTimeout(() => clearPin(true), 500);
+        verifying = false;
+        return;
+      }
+      loginAs(selected);
+      statusEl.textContent = '';
+      clearPin();
+      hideLogin();
+      await loadSettings();
+      await router();
+    } catch (e) {
+      console.error('[auth] error', e);
+      pincode.classList.remove('is-verifying');
+      pincode.classList.add('is-error');
+      setStatus(statusEl, `Error: ${e.message || e}`, true);
+      setTimeout(() => clearPin(true), 600);
+    } finally {
+      verifying = false;
+    }
+  }
+
+  // ===== Pincode behaviour =====
+  pinInputs.forEach((input, i) => {
+    input.addEventListener('input', (e) => {
+      // Strip everything but digits, cap at 1 char
+      const raw = (e.target.value || '').replace(/\D/g, '');
+      e.target.value = raw.slice(0, 1);
+      e.target.classList.toggle('filled', !!e.target.value);
+      if (e.target.value && i < pinInputs.length - 1) pinInputs[i + 1].focus();
+
+      // Check if all are filled → auto-submit
+      const all = pinInputs.map(x => x.value).join('');
+      if (all.length === pinInputs.length && /^\d{4}$/.test(all)) attemptLogin(all);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Backspace') {
+        if (!e.target.value && i > 0) {
+          pinInputs[i - 1].focus();
+          pinInputs[i - 1].value = '';
+          pinInputs[i - 1].classList.remove('filled');
+          e.preventDefault();
+        }
+      } else if (e.key === 'ArrowLeft' && i > 0) {
+        pinInputs[i - 1].focus();
+      } else if (e.key === 'ArrowRight' && i < pinInputs.length - 1) {
+        pinInputs[i + 1].focus();
+      }
+    });
+    input.addEventListener('paste', (e) => {
+      e.preventDefault();
+      const text = ((e.clipboardData || window.clipboardData)?.getData('text') || '').replace(/\D/g, '').slice(0, pinInputs.length - i);
+      [...text].forEach((d, idx) => {
+        if (i + idx < pinInputs.length) {
+          pinInputs[i + idx].value = d;
+          pinInputs[i + idx].classList.add('filled');
+        }
+      });
+      const lastIdx = Math.min(i + text.length, pinInputs.length - 1);
+      pinInputs[lastIdx].focus();
+      const all = pinInputs.map(x => x.value).join('');
+      if (all.length === pinInputs.length && /^\d{4}$/.test(all)) attemptLogin(all);
+    });
+    input.addEventListener('focus', () => input.select());
+  });
+
+  // ===== User pickers =====
   for (const u of users) {
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -287,7 +380,6 @@ async function initAuthUI() {
     } else {
       const fb = document.createElement('span');
       fb.className = 'avatar-fallback';
-      // Different default emoji per user position to suggest variety
       fb.textContent = '🪼';
       avatar.appendChild(fb);
     }
@@ -303,36 +395,12 @@ async function initAuthUI() {
       $$('.user-btn', picker).forEach(x => x.classList.remove('is-active'));
       btn.classList.add('is-active');
       setHero(u.background_path || defaultBg);
-      // Focus the password field for convenience
-      setTimeout(() => $('#auth-password').focus(), 0);
+      // Focus the pincode first box
+      clearPin(true);
+      statusEl.textContent = '';
     });
     picker.appendChild(btn);
   }
-
-  const submit = async () => {
-    if (!selected) { setStatus($('#auth-status'), 'Selecciona quién eres', true); return; }
-    const pwd = $('#auth-password').value;
-    if (!pwd) { setStatus($('#auth-status'), 'Escribe la clave', true); return; }
-    setStatus($('#auth-status'), 'Verificando…');
-    try {
-      const ok = await tryLogin(selected, pwd);
-      if (!ok) {
-        setStatus($('#auth-status'), `Clave incorrecta para ${selected}`, true);
-        return;
-      }
-      loginAs(selected);
-      $('#auth-status').textContent = '';
-      $('#auth-password').value = '';
-      hideLogin();
-      await loadSettings();
-      await router();
-    } catch (e) {
-      console.error('[auth] submit error', e);
-      setStatus($('#auth-status'), `Error: ${e.message || JSON.stringify(e)}`, true);
-    }
-  };
-  $('#auth-submit').addEventListener('click', submit);
-  $('#auth-password').addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
 }
 
 // ============================================================

@@ -35,10 +35,12 @@
           </div>
         </div>
         <div class="auth-pickers" id="user-picker"></div>
-        <div class="auth-field-v2">
-          <input type="password" id="auth-password" placeholder="Clave" autocomplete="current-password" inputmode="numeric" maxlength="64" />
+        <div class="auth-pincode" id="auth-pincode" aria-label="Clave de 4 dígitos">
+          <input type="password" inputmode="numeric" autocomplete="one-time-code" maxlength="1" pattern="[0-9]" />
+          <input type="password" inputmode="numeric" autocomplete="off" maxlength="1" pattern="[0-9]" />
+          <input type="password" inputmode="numeric" autocomplete="off" maxlength="1" pattern="[0-9]" />
+          <input type="password" inputmode="numeric" autocomplete="off" maxlength="1" pattern="[0-9]" />
         </div>
-        <button class="auth-submit-link" id="auth-submit">Entrar</button>
         <div class="status auth-status-v2" id="auth-status"></div>
       </div>
     </div>
