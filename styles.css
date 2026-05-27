@@ -59,15 +59,37 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
   inset: -12%; /* expand so the blurred edges never show */
   width: 124%; height: 124%;
   object-fit: cover;
-  filter: blur(64px) saturate(120%) brightness(0.55);
+  filter: blur(64px) saturate(120%) brightness(0.85);
   opacity: 0;
   transition: opacity 0.9s ease;
   will-change: opacity;
 }
 .bg-photo-img.active { opacity: 1; }
 
+/* Dark scrim above the blurred photo so text on top stays legible */
+.bg-photo::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
 :root[data-theme="light"] .bg-photo-img {
-  filter: blur(64px) saturate(110%) brightness(0.95);
+  filter: blur(64px) saturate(110%) brightness(1.0);
+}
+:root[data-theme="light"] .bg-photo::after { background: rgba(0, 0, 0, 0.45); }
+
+/* Text that sits directly on the ambient backdrop (not on cards) — always
+   white so it stays readable on top of the dark scrim, regardless of theme */
+.page-head h1,
+.section-block > .section-head h2,
+.album-section .album-title-row h2 {
+  color: #ffffff;
+}
+.page-head .sub,
+.section-block > .section-head .count,
+.album-section .album-title-row .count {
+  color: rgba(255, 255, 255, 0.72);
 }
 
 /* App shell sits on top of the backdrop */
@@ -593,9 +615,11 @@ button.btn.pin-toggle.is-pinned { background: var(--accent); color: var(--on-acc
 .dashboard-cols .col-right {
   position: sticky;
   top: 16px;
-  /* main.content has top padding of 1.5rem (24px) which the sticky will sit
-     against — so the visible right column height is viewport minus that. */
+  /* Constrain to viewport height — never overflow downward */
   height: calc(100vh - 32px);
+  max-height: calc(100vh - 32px);
+  align-self: start; /* don't let the grid stretch us to the row height */
+  overflow: hidden; /* clip anything that doesn't fit */
 }
 @media (max-width: 980px) {
   .dashboard-cols { grid-template-columns: 1fr; }
@@ -1333,6 +1357,7 @@ dialog.lightbox .lightbox-cap {
 .chat-bubble .read-mark { font-size: 0.7rem; }
 .chat-widget .chat-input {
   display: flex; gap: 0.4rem; padding: 0.5rem; border-top: 1px solid var(--border);
+  flex-shrink: 0; /* never let the input get squeezed out of view */
 }
 .chat-widget .chat-input input {
   flex: 1; border: 1px solid var(--border); background: var(--surface-alt); color: var(--text);
