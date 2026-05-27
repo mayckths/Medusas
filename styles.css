@@ -852,17 +852,33 @@ textarea.content-plain:focus { border-color: var(--accent); background: var(--su
 .dropzone .dz-text { margin-top: 0.4rem; font-size: 0.95rem; }
 .dropzone .dz-sub { color: var(--text-dim); font-size: 0.78rem; margin-top: 0.2rem; }
 
-.upload-list { display: flex; flex-direction: column; gap: 0.35rem; max-height: 220px; overflow-y: auto; margin-bottom: 0.5rem; }
+.upload-list { display: flex; flex-direction: column; gap: 0.4rem; max-height: 320px; overflow-y: auto; margin-bottom: 0.5rem; }
 .upload-row {
-  display: flex; align-items: center; gap: 0.6rem; padding: 0.35rem 0.5rem;
-  border-radius: 6px; background: var(--surface-alt); font-size: 0.82rem;
+  display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.6rem;
+  border-radius: 10px; background: var(--surface-alt); font-size: 0.82rem;
+  border: 1px solid transparent;
+  transition: border-color 0.15s ease, opacity 0.2s ease;
 }
-.upload-row img.preview { width: 36px; height: 36px; object-fit: cover; border-radius: 4px; }
-.upload-row .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.upload-row .progress { width: 80px; height: 4px; background: var(--border); border-radius: 999px; overflow: hidden; }
-.upload-row .progress > div { height: 100%; background: var(--accent); width: 0%; transition: width 0.2s ease; }
+.upload-row img.preview { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
+.upload-row .row-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.upload-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upload-row .album-tag {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  font-size: 0.72rem; color: var(--text-dim);
+}
+.upload-row .album-tag .material-symbols-outlined { font-size: 13px; }
+.upload-row .progress { width: 90px; height: 6px; background: var(--border); border-radius: 999px; overflow: hidden; flex-shrink: 0; }
+.upload-row .progress > div { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s ease; }
+.upload-row .row-status .status-icon { color: var(--text-dim); font-size: 18px; }
+.upload-row.pending { opacity: 0.75; }
+.upload-row.pending .status-icon { color: var(--text-dim); }
+.upload-row.uploading { border-color: var(--accent); }
+.upload-row.uploading .status-icon { color: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
 .upload-row.done .progress > div { background: #22c55e; width: 100% !important; }
-.upload-row.error { color: var(--danger); }
+.upload-row.done .status-icon { color: #22c55e; }
+.upload-row.error { color: var(--danger); border-color: var(--danger); }
+.upload-row.error .status-icon { color: var(--danger); }
+@keyframes pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
 
 /* ======== Lightbox ======== */
 /* Lock the body scroll while any modal is open */

@@ -2452,49 +2452,88 @@ function openPhotoUpload() {
   uploadList.innerHTML = '';
   $('#photo-status').textContent = '';
   $('#photo-input').value = '';
+  // Reset queue + counters for a fresh dialog session
+  uploadQueue.length = 0;
+  uploadTotal = 0;
+  uploadDone = 0;
+  uploadProcessing = false;
   dlgPhoto.showModal();
 }
 
-function pushUploadRow(file) {
+// Upload queue state (lives across multiple handleFiles calls within the
+// same dialog session; reset on openPhotoUpload).
+const uploadQueue = [];
+let uploadProcessing = false;
+let uploadTotal = 0;
+let uploadDone = 0;
+
+function pushUploadRow(file, album) {
   const row = document.createElement('div');
-  row.className = 'upload-row';
+  row.className = 'upload-row pending';
   const reader = new FileReader();
   reader.onload = () => row.querySelector('img.preview').src = reader.result;
   reader.readAsDataURL(file);
-  row.innerHTML = `<img class="preview" src="" alt="" /><span class="name">${escapeHtml(file.name)}</span><div class="progress"><div></div></div>`;
+  row.innerHTML = `
+    <img class="preview" src="" alt="" />
+    <div class="row-info">
+      <div class="name">${escapeHtml(file.name)}</div>
+      <div class="album-tag"><span class="material-symbols-outlined">folder</span> ${escapeHtml(album)}</div>
+    </div>
+    <div class="progress"><div></div></div>
+    <div class="row-status"><span class="material-symbols-outlined status-icon">schedule</span></div>
+  `;
   uploadList.appendChild(row);
   return row;
 }
 
-async function uploadOne(file) {
-  const row = pushUploadRow(file);
+function currentAlbumSelection() {
+  const select = $('#photo-album-select');
+  const v = (select && select.value !== '__new__') ? select.value : $('#photo-album').value.trim();
+  return (!v || v === '__new__') ? null : v;
+}
+
+function updateUploadStatus() {
+  if (uploadTotal === 0) { setStatus($('#photo-status'), ''); return; }
+  if (uploadDone >= uploadTotal && uploadQueue.length === 0) {
+    setStatus($('#photo-status'), `${uploadDone} foto${uploadDone === 1 ? '' : 's'} subida${uploadDone === 1 ? '' : 's'} ✓`);
+  } else {
+    setStatus($('#photo-status'), `Subiendo ${Math.min(uploadDone + 1, uploadTotal)} / ${uploadTotal}…`);
+  }
+}
+
+async function uploadOne(item) {
+  const { file, row, album, caption } = item;
+  row.classList.remove('pending');
+  row.classList.add('uploading');
+  row.querySelector('.status-icon').textContent = 'cloud_upload';
   const bar = row.querySelector('.progress > div');
-  bar.style.width = '20%';
+  bar.style.width = '15%';
   try {
     const ext = (file.name.split('.').pop() || 'png').toLowerCase();
     const path = `${crypto.randomUUID()}.${ext}`;
+    bar.style.width = '40%';
     const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, {
       cacheControl: '3600', upsert: false, contentType: file.type,
     });
-    bar.style.width = '70%';
     if (upErr) throw upErr;
-    const caption = $('#photo-caption').value;
-    const select = $('#photo-album-select');
-    const album = (select && select.value !== '__new__')
-      ? select.value
-      : $('#photo-album').value.trim();
+    bar.style.width = '80%';
     const { error: insErr } = await supabase.from('photos').insert({
       storage_path: path,
       caption,
-      album,
+      album, // captured snapshot, NOT live read
       created_by: state.currentUser,
       seen_by: [state.currentUser],
     });
     if (insErr) throw insErr;
+    bar.style.width = '100%';
+    row.classList.remove('uploading');
     row.classList.add('done');
+    row.querySelector('.status-icon').textContent = 'check_circle';
   } catch (e) {
     console.error(e);
+    row.classList.remove('uploading');
     row.classList.add('error');
+    row.querySelector('.status-icon').textContent = 'error';
     row.querySelector('.name').textContent += ` — ${e.message || e}`;
   }
 }
@@ -2502,15 +2541,35 @@ async function uploadOne(file) {
 async function handleFiles(fileList) {
   const files = Array.from(fileList || []).filter(f => f.type.startsWith('image/'));
   if (!files.length) return;
-  // Album required validation
-  const album = $('#photo-album').value.trim() || $('#photo-album-select').value;
-  if (!album || album === '__new__') {
+  // Snapshot album + caption right now — if user changes them mid-upload,
+  // these queued items will still go where the user intended at pick time.
+  const album = currentAlbumSelection();
+  if (!album) {
     setStatus($('#photo-status'), 'Elige o crea un álbum antes de subir', true);
     return;
   }
-  setStatus($('#photo-status'), `Subiendo ${files.length}…`);
-  for (const file of files) await uploadOne(file);
-  setStatus($('#photo-status'), `Listo. Puedes seguir añadiendo o cerrar el diálogo.`);
+  const caption = $('#photo-caption').value;
+
+  // Enqueue ALL files upfront — user sees the full list with progress bars.
+  for (const file of files) {
+    const row = pushUploadRow(file, album);
+    uploadQueue.push({ file, row, album, caption });
+    uploadTotal++;
+  }
+  updateUploadStatus();
+
+  if (uploadProcessing) return; // another handleFiles call is already draining the queue
+  uploadProcessing = true;
+  try {
+    while (uploadQueue.length > 0) {
+      const item = uploadQueue.shift();
+      await uploadOne(item);
+      uploadDone++;
+      updateUploadStatus();
+    }
+  } finally {
+    uploadProcessing = false;
+  }
 }
 
 $('#photo-pick-btn').addEventListener('click', () => $('#photo-input').click());
