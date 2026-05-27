@@ -11,7 +11,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const publicAssetUrl = (path) => supabase.storage.from(APP_ASSETS_BUCKET).getPublicUrl(path).data.publicUrl;
 
-const TAG_SUGGESTIONS_NOTES = ['Viajes', 'Cuentas', 'Familia', 'Restaurantes', 'Citas', 'Recordar', 'Random'];
+const TAG_SUGGESTIONS_NOTES = ['Citas', 'Recordar', 'Pensamientos', 'Cuentas', 'Viajes', 'Familia', 'Lugares'];
 const TAG_SUGGESTIONS_PLACES = ['Restaurantes', 'Museos', 'Viajes', 'Cafés', 'Bares', 'Naturaleza'];
 
 // ============================================================
@@ -408,16 +408,16 @@ async function saveSetting(key, value) {
 }
 
 function updateSidebarBadges() {
+  // Private notes never generate notifications (intentional — they're personal)
+  const notifNotes = state.notes.filter(n => n.visibility !== 'private' && isUnread(n)).length;
   const counts = {
     'home': 0,
-    'notas-publicas': state.notes.filter(n => n.visibility === 'public' && isUnread(n)).length,
-    'notas-privadas': state.notes.filter(n => n.visibility === 'private' && isUnread(n)).length,
+    'notas': notifNotes,
     'musica': state.media.filter(isUnread).length,
     'fotos': state.photos.filter(isUnread).length,
-    'lugares': state.places.filter(isUnread).length,
     'pelis': state.movies.filter(isUnread).length,
   };
-  counts.home = counts['notas-publicas'] + counts['notas-privadas'] + counts['musica'] + counts['fotos'] + counts['lugares'] + counts['pelis'];
+  counts.home = counts.notas + counts.musica + counts.fotos + counts.pelis;
   $$('[data-unread]').forEach(el => {
     const c = counts[el.dataset.unread] || 0;
     el.hidden = c === 0;
@@ -443,11 +443,14 @@ async function router() {
   await loadAll();
   switch (true) {
     case hash === '#/inicio': renderInicio(content); break;
-    case hash === '#/notas/publicas': renderNotas(content, 'public'); break;
-    case hash === '#/notas/privadas': renderNotas(content, 'private'); break;
+    case hash === '#/notas':
+    case hash === '#/notas/publicas':
+    case hash === '#/notas/privadas':
+      // Legacy public/private URLs collapse into a single notes view
+      renderNotas(content);
+      break;
     case hash === '#/musica': renderMusica(content); break;
     case hash === '#/fotos': renderFotos(content); break;
-    case hash === '#/lugares': renderLugares(content); break;
     case hash === '#/pelis': renderPelis(content); break;
     case hash === '#/configuracion': renderConfig(content); break;
     default: location.hash = '#/inicio';
@@ -458,7 +461,7 @@ window.addEventListener('hashchange', router);
 // ============================================================
 // Page: Inicio (dashboard)
 // ============================================================
-const DEFAULT_DASHBOARD_ORDER = ['notes', 'media', 'photos', 'movies', 'places'];
+const DEFAULT_DASHBOARD_ORDER = ['notes', 'media', 'photos', 'movies'];
 
 function getDashboardOrder() {
   const raw = state.settings.dashboard_order;
@@ -520,13 +523,13 @@ function renderInicio(root) {
   root.innerHTML = `
     <div class="page-head">
       <div>
-        <h1>Hola, ${escapeHtml(state.currentUser)} 🪼</h1>
+        <h1>Hola, ${escapeHtml(state.currentUser)}</h1>
         <div class="sub">Un vistazo a todo lo nuestro</div>
       </div>
       <div class="actions">
         <div class="notif-bell-wrap">
           <button class="notif-bell" id="notif-bell" title="Notificaciones" aria-label="Notificaciones">
-            🔔${totalUnread ? `<span class="notif-count">${totalUnread}</span>` : ''}
+            <span class="material-symbols-outlined">notifications</span>${totalUnread ? `<span class="notif-count">${totalUnread}</span>` : ''}
           </button>
         </div>
       </div>
@@ -601,10 +604,10 @@ function renderInicio(root) {
 }
 
 function totalUnreadCount() {
-  return state.notes.filter(isUnread).length
+  // Private notes never count as notifications
+  return state.notes.filter(n => n.visibility !== 'private' && isUnread(n)).length
     + state.media.filter(isUnread).length
     + state.photos.filter(isUnread).length
-    + state.places.filter(isUnread).length
     + state.movies.filter(isUnread).length;
 }
 
@@ -718,28 +721,22 @@ function wirePwMenu(root, cfg) {
 }
 
 // ============================================================
-// Page: Notas
+// Page: Notas (single unified list)
 // ============================================================
-function renderNotas(root, visibility) {
-  const label = visibility === 'public' ? 'Notas compartidas' : 'Notas privadas';
-  const icon = visibility === 'public' ? '💞' : '🔒';
-  const sub = visibility === 'public' ? 'Las que vemos los dos' : 'Solo tuyas';
+function renderNotas(root) {
   const filterTag = state.filterTag.notas;
-  let filtered = state.notes.filter(n => n.visibility === visibility);
+  let filtered = state.notes.slice();
   if (filterTag) filtered = filtered.filter(n => Array.isArray(n.tags) && n.tags.includes(filterTag));
 
-  // Build tag-count map for filter row
   const tagCounts = new Map();
-  state.notes.filter(n => n.visibility === visibility).forEach(n => {
-    (n.tags || []).forEach(t => tagCounts.set(t, (tagCounts.get(t) || 0) + 1));
-  });
+  state.notes.forEach(n => (n.tags || []).forEach(t => tagCounts.set(t, (tagCounts.get(t) || 0) + 1)));
   const sortedTags = Array.from(tagCounts.entries()).sort((a, b) => b[1] - a[1]);
 
   root.innerHTML = `
     <div class="page-head">
       <div>
-        <h1>${icon} ${label}</h1>
-        <div class="sub">${sub}</div>
+        <h1>Notas</h1>
+        <div class="sub">Lo que recordamos</div>
       </div>
       <div class="view-toggle" id="notes-view-toggle">
         <button data-v="cards" class="${state.view.notas === 'cards' ? 'active' : ''}">Tarjetas</button>
@@ -763,7 +760,7 @@ function renderNotas(root, visibility) {
     const b = e.target.closest('button[data-v]');
     if (!b) return;
     state.view.notas = b.dataset.v;
-    renderNotas(root, visibility);
+    renderNotas(root);
   });
   const filterRow = $('#tag-filter-row');
   if (filterRow) {
@@ -771,12 +768,12 @@ function renderNotas(root, visibility) {
       const b = e.target.closest('button[data-tag]');
       if (!b) return;
       state.filterTag.notas = b.dataset.tag || null;
-      renderNotas(root, visibility);
+      renderNotas(root);
     });
   }
 
   const grid = $('#notes-grid');
-  grid.appendChild(renderNewCtaTile('Nueva nota', () => openNoteEditor(null, visibility)));
+  grid.appendChild(renderNewCtaTile('Nueva nota', () => openNoteEditor(null)));
   filtered.forEach(n => grid.appendChild(renderNoteCard(n)));
   if (!filtered.length && filterTag) {
     const empty = document.createElement('div');
@@ -813,22 +810,20 @@ function renderNoteCard(note) {
     card.appendChild(dot);
   }
 
-  // Actions: pin
-  const actions = document.createElement('div');
-  actions.className = 'card-actions';
-  actions.innerHTML = `<button title="${note.pinned ? 'Desanclar' : 'Anclar'}" class="${note.pinned ? 'is-on' : ''}" data-action="pin">📌</button>`;
-  actions.addEventListener('click', async (e) => {
+  // Pin icon on the card (Material icon)
+  const pinBtn = document.createElement('button');
+  pinBtn.className = 'pin-card-btn';
+  pinBtn.type = 'button';
+  pinBtn.title = note.pinned ? 'Desanclar' : 'Anclar';
+  pinBtn.innerHTML = `<span class="material-symbols-outlined">${note.pinned ? 'keep' : 'keep_off'}</span>`;
+  pinBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
-    const btn = e.target.closest('button');
-    if (!btn) return;
-    if (btn.dataset.action === 'pin') {
-      const next = !note.pinned;
-      note.pinned = next;
-      await supabase.from('notes').update({ pinned: next }).eq('id', note.id);
-      await router();
-    }
+    const next = !note.pinned;
+    note.pinned = next;
+    await supabase.from('notes').update({ pinned: next }).eq('id', note.id);
+    await router();
   });
-  card.appendChild(actions);
+  card.appendChild(pinBtn);
 
   const body = document.createElement('div');
   body.className = 'body';
@@ -883,10 +878,7 @@ function renderNoteCard(note) {
 
   const meta = document.createElement('div');
   meta.className = 'meta';
-  const badge = note.visibility === 'private'
-    ? '<span class="badge private">🔒 Privada</span>'
-    : '<span class="badge">💞 Compartida</span>';
-  meta.innerHTML = `<span>${fmtDate(note.updated_at || note.created_at)} · ${escapeHtml(note.created_by || '?')}</span>${badge}`;
+  meta.innerHTML = `<span>${fmtDateWithDay(note.updated_at || note.created_at)} · ${escapeHtml(note.created_by || '?')}</span>`;
   body.appendChild(meta);
 
   card.appendChild(body);
@@ -895,43 +887,84 @@ function renderNoteCard(note) {
   return card;
 }
 
+// Date+time helper for note cards (always show day, plus time if today)
+function fmtDateWithDay(iso) {
+  const d = new Date(iso);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) {
+    return d.toLocaleTimeString('es', { hour: 'numeric', minute: '2-digit' });
+  }
+  const sameYear = d.getFullYear() === now.getFullYear();
+  const datePart = d.toLocaleDateString('es', { day: 'numeric', month: 'short', year: sameYear ? undefined : 'numeric' });
+  const timePart = d.toLocaleTimeString('es', { hour: 'numeric', minute: '2-digit' });
+  return `${datePart} · ${timePart}`;
+}
+
 // ============================================================
 // Page: Música
 // ============================================================
+function getMediaCategory(m) {
+  if (m.kind === 'spotify') {
+    if (m.url && m.url.includes('/playlist/')) return 'playlists';
+    return 'musica';
+  }
+  if (m.kind === 'youtube') {
+    // a playlist URL on YouTube is /playlist?list=... (no v=)
+    if (m.url && /playlist\?/i.test(m.url) && !/[?&]v=/.test(m.url)) return 'playlists';
+    return 'videos';
+  }
+  return 'musica';
+}
+
 function renderMusica(root) {
   const featured = state.media.filter(m => m.featured);
+  const buckets = { musica: [], playlists: [], videos: [] };
+  for (const m of state.media) buckets[getMediaCategory(m)].push(m);
+
   root.innerHTML = `
     <div class="page-head">
       <div>
-        <h1>🎵 Música</h1>
-        <div class="sub">Playlists de Spotify y videos de YouTube</div>
+        <h1>Música</h1>
+        <div class="sub">Canciones, playlists y videos</div>
       </div>
-      <div class="view-toggle" id="media-view-toggle">
-        <button data-v="cards" class="${state.view.musica === 'cards' ? 'active' : ''}">Tarjetas</button>
-        <button data-v="list" class="${state.view.musica === 'list' ? 'active' : ''}">Lista</button>
+      <div class="actions">
+        <button class="btn primary" id="new-media-btn">+ Nuevo</button>
       </div>
     </div>
     ${featured.length ? `
       <div class="featured-label">⭐ Destacadas</div>
       <div class="featured-strip" id="featured-media-strip"></div>
     ` : ''}
-    <div class="${state.view.musica === 'cards' ? 'grid-cards' : 'grid-list'}" id="media-grid"></div>
+    <div class="media-section" data-cat="musica">
+      <div class="section-head"><h2>🎵 Música <span class="count">${buckets.musica.length}</span></h2></div>
+      <div class="grid-cards" data-grid="musica"></div>
+    </div>
+    <div class="media-section" data-cat="playlists">
+      <div class="section-head"><h2>🎧 Playlists <span class="count">${buckets.playlists.length}</span></h2></div>
+      <div class="grid-cards" data-grid="playlists"></div>
+    </div>
+    <div class="media-section" data-cat="videos">
+      <div class="section-head"><h2>▶️ Videos <span class="count">${buckets.videos.length}</span></h2></div>
+      <div class="grid-cards" data-grid="videos"></div>
+    </div>
   `;
-  $('#media-view-toggle').addEventListener('click', e => {
-    const b = e.target.closest('button[data-v]');
-    if (!b) return;
-    state.view.musica = b.dataset.v;
-    renderMusica(root);
-  });
+
+  $('#new-media-btn').addEventListener('click', () => openMediaEditor(null));
 
   if (featured.length) {
     const strip = $('#featured-media-strip');
     featured.forEach(m => strip.appendChild(renderMediaCard(m)));
   }
 
-  const grid = $('#media-grid');
-  grid.appendChild(renderNewCtaTile('Nueva música', () => openMediaEditor(null)));
-  state.media.forEach(m => grid.appendChild(renderMediaCard(m)));
+  for (const cat of ['musica', 'playlists', 'videos']) {
+    const grid = $(`[data-grid="${cat}"]`);
+    if (!buckets[cat].length) {
+      grid.innerHTML = `<div class="empty">Sin ${cat === 'musica' ? 'canciones' : cat}.</div>`;
+      continue;
+    }
+    buckets[cat].forEach(m => grid.appendChild(renderMediaCard(m)));
+  }
 }
 
 function renderMediaCard(m) {
@@ -1071,35 +1104,72 @@ function renderFotos(root) {
   // Render each named album as its own titled section, then loose photos.
   const albumKeys = Array.from(byAlbum.keys()).filter(k => k).sort();
   for (const key of albumKeys) {
-    const photos = byAlbum.get(key);
-    const section = document.createElement('div');
-    section.className = 'album-section';
-    section.innerHTML = `
-      <div class="album-title-row">
-        <h2>📁 ${escapeHtml(key)}</h2>
-        <span class="count">${photos.length} foto${photos.length === 1 ? '' : 's'}</span>
-      </div>
-      <div class="photo-grid"></div>
-    `;
-    const sg = section.querySelector('.photo-grid');
-    photos.forEach((p, i) => sg.appendChild(renderPhoto(p, photos, i)));
-    container.appendChild(section);
+    container.appendChild(renderAlbumSection(key, byAlbum.get(key)));
   }
   const loose = byAlbum.get('') || [];
   if (loose.length) {
-    const section = document.createElement('div');
-    section.className = 'album-section';
-    section.innerHTML = `
-      <div class="album-title-row">
-        <h2>Sin álbum</h2>
-        <span class="count">${loose.length} foto${loose.length === 1 ? '' : 's'}</span>
-      </div>
-      <div class="photo-grid"></div>
-    `;
-    const sg = section.querySelector('.photo-grid');
-    loose.forEach((p, i) => sg.appendChild(renderPhoto(p, loose, i)));
-    container.appendChild(section);
+    container.appendChild(renderAlbumSection('', loose));
   }
+}
+
+function renderAlbumSection(name, photos) {
+  const section = document.createElement('div');
+  section.className = 'album-section';
+  const titleText = name ? `📁 ${escapeHtml(name)}` : 'Sin álbum';
+  section.innerHTML = `
+    <div class="album-title-row">
+      <h2>${titleText}</h2>
+      <span class="count">${photos.length} foto${photos.length === 1 ? '' : 's'}</span>
+      <button class="album-menu-btn" type="button" title="Opciones del álbum">
+        <span class="material-symbols-outlined">more_horiz</span>
+      </button>
+      <div class="album-menu-popover">
+        ${name
+          ? `<button data-action="rename"><span class="material-symbols-outlined">edit</span>Renombrar álbum</button>`
+          : `<button data-action="assign"><span class="material-symbols-outlined">drive_file_move</span>Mover todas a un álbum…</button>`}
+      </div>
+    </div>
+    <div class="photo-grid"></div>
+  `;
+  const sg = section.querySelector('.photo-grid');
+  photos.forEach((p, i) => sg.appendChild(renderPhoto(p, photos, i)));
+
+  // Ellipsis menu interactions
+  const menuBtn = section.querySelector('.album-menu-btn');
+  const menu = section.querySelector('.album-menu-popover');
+  menuBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.querySelectorAll('.album-menu-popover.open').forEach(el => el !== menu && el.classList.remove('open'));
+    menu.classList.toggle('open');
+  });
+  document.addEventListener('click', () => menu.classList.remove('open'));
+
+  menu.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    e.stopPropagation();
+    menu.classList.remove('open');
+    if (btn.dataset.action === 'rename') {
+      const next = prompt(`Nuevo nombre para el álbum "${name}":`, name);
+      if (!next || next === name) return;
+      const ids = photos.map(p => p.id);
+      const { error } = await supabase.from('photos').update({ album: next.trim() }).in('id', ids);
+      if (error) { alert('Error: ' + error.message); return; }
+      await router();
+    }
+    if (btn.dataset.action === 'assign') {
+      const existing = Array.from(new Set(state.photos.map(p => p.album || '').filter(Boolean))).sort();
+      const hint = existing.length ? `\n\nÁlbumes existentes: ${existing.join(', ')}` : '';
+      const albumName = prompt(`Mover las ${photos.length} fotos sin álbum a un álbum:${hint}`, '');
+      if (!albumName || !albumName.trim()) return;
+      const ids = photos.map(p => p.id);
+      const { error } = await supabase.from('photos').update({ album: albumName.trim() }).in('id', ids);
+      if (error) { alert('Error: ' + error.message); return; }
+      await router();
+    }
+  });
+
+  return section;
 }
 
 function renderAlbumTile(name, photos) {
@@ -1858,11 +1928,11 @@ const noteDraft = {
   links: [], images: [], tags: [], pinned: false,
 };
 
-function openNoteEditor(note, defaultVis = 'public') {
+function openNoteEditor(note) {
   noteDraft.id = note?.id || null;
   noteDraft.title = note?.title || '';
   noteDraft.content = note?.content || '';
-  noteDraft.visibility = note?.visibility || defaultVis;
+  noteDraft.visibility = 'public'; // all notes are shared now
   noteDraft.links = Array.isArray(note?.links) ? [...note.links] : [];
   noteDraft.images = Array.isArray(note?.images) ? [...note.images] : [];
   noteDraft.tags = Array.isArray(note?.tags) ? [...note.tags] : [];
@@ -1870,8 +1940,6 @@ function openNoteEditor(note, defaultVis = 'public') {
 
   $('#note-title-input').value = noteDraft.title;
   $('#note-plain').value = noteDraft.content;
-  setNoteVisibility(noteDraft.visibility);
-  setNotePin(noteDraft.pinned);
   renderNoteLinkChips();
   renderNoteImagePreviews();
   renderNoteTags();
@@ -1968,12 +2036,6 @@ function addNoteTag(raw) {
   renderNoteTagSuggestions($('#note-tag-input').value);
 }
 
-$('#note-visibility').addEventListener('click', (e) => {
-  const b = e.target.closest('button[data-vis]');
-  if (b) setNoteVisibility(b.dataset.vis);
-});
-$('#note-pin-toggle').addEventListener('click', () => setNotePin(!noteDraft.pinned));
-
 $('#note-tag-input').addEventListener('input', (e) => renderNoteTagSuggestions(e.target.value));
 $('#note-tag-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' || e.key === ',') {
@@ -2023,6 +2085,12 @@ $('#note-image-input').addEventListener('change', async () => {
 $('#note-save').addEventListener('click', async () => {
   const title = $('#note-title-input').value.trim();
   if (!title) { setStatus($('#note-status'), 'El título es obligatorio', true); $('#note-title-input').focus(); return; }
+  // If the user typed a tag without pressing Enter, save it too
+  const pendingTag = $('#note-tag-input').value.trim();
+  if (pendingTag) {
+    addNoteTag(pendingTag);
+    $('#note-tag-input').value = '';
+  }
   const payload = {
     title,
     content: $('#note-plain').value,
@@ -2227,10 +2295,33 @@ const uploadList = $('#upload-list');
 function openPhotoUpload() {
   $('#photo-caption').value = '';
   $('#photo-album').value = '';
-  // Populate album datalist
-  const list = $('#photo-album-list');
+
+  const select = $('#photo-album-select');
   const albums = Array.from(new Set(state.photos.map(p => p.album || '').filter(Boolean))).sort();
-  list.innerHTML = albums.map(a => `<option value="${escapeHtml(a)}">`).join('');
+  select.innerHTML = `<option value="__new__">+ Nuevo álbum</option>` +
+    albums.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
+
+  // When selecting an existing album, hide the free text input
+  function syncAlbumInput() {
+    const v = select.value;
+    if (v === '__new__') {
+      $('#photo-album').style.display = '';
+      $('#photo-album').placeholder = 'Nombre del álbum nuevo';
+      $('#photo-album').value = '';
+    } else {
+      $('#photo-album').style.display = 'none';
+      $('#photo-album').value = v;
+    }
+  }
+  select.onchange = syncAlbumInput;
+  // Default: pick the most recent album if any (otherwise force new)
+  if (albums.length) {
+    select.value = albums[0];
+  } else {
+    select.value = '__new__';
+  }
+  syncAlbumInput();
+
   uploadList.innerHTML = '';
   $('#photo-status').textContent = '';
   $('#photo-input').value = '';
@@ -2261,7 +2352,10 @@ async function uploadOne(file) {
     bar.style.width = '70%';
     if (upErr) throw upErr;
     const caption = $('#photo-caption').value;
-    const album = $('#photo-album').value.trim();
+    const select = $('#photo-album-select');
+    const album = (select && select.value !== '__new__')
+      ? select.value
+      : $('#photo-album').value.trim();
     const { error: insErr } = await supabase.from('photos').insert({
       storage_path: path,
       caption,
@@ -2281,6 +2375,12 @@ async function uploadOne(file) {
 async function handleFiles(fileList) {
   const files = Array.from(fileList || []).filter(f => f.type.startsWith('image/'));
   if (!files.length) return;
+  // Album required validation
+  const album = $('#photo-album').value.trim() || $('#photo-album-select').value;
+  if (!album || album === '__new__') {
+    setStatus($('#photo-status'), 'Elige o crea un álbum antes de subir', true);
+    return;
+  }
   setStatus($('#photo-status'), `Subiendo ${files.length}…`);
   for (const file of files) await uploadOne(file);
   setStatus($('#photo-status'), `Listo. Puedes seguir añadiendo o cerrar el diálogo.`);
@@ -2621,6 +2721,8 @@ function setupChatWidget() {
       if (error) throw error;
       input.value = '';
       await reloadChats();
+      // Auto-prune: keep only the latest 5 non-featured messages
+      await pruneOldChats();
     } catch (e) {
       console.error(e);
     } finally {
@@ -2645,6 +2747,21 @@ async function reloadChats() {
     state.chats = data || [];
     renderChatBody();
   } catch {}
+}
+
+async function pruneOldChats() {
+  // Keep only the latest 5 non-featured messages — older non-featured are deleted
+  const nonFeatured = state.chats
+    .filter(m => !m.featured)
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  if (nonFeatured.length <= 5) return;
+  const toDelete = nonFeatured.slice(0, nonFeatured.length - 5);
+  try {
+    const ids = toDelete.map(m => m.id);
+    await supabase.from('chats').delete().in('id', ids);
+    state.chats = state.chats.filter(m => !ids.includes(m.id));
+    renderChatBody();
+  } catch (e) { console.warn('prune failed', e); }
 }
 
 async function markIncomingChatsRead() {
@@ -2679,10 +2796,6 @@ function renderChatBody() {
   }
   body.innerHTML = '';
 
-  // Determine the index of MY last message (for the delete button)
-  const myMessages = state.chats.filter(m => m.author === state.currentUser);
-  const lastMineId = myMessages.length ? myMessages[myMessages.length - 1].id : null;
-
   for (const m of msgs) {
     const div = document.createElement('div');
     div.className = `chat-bubble ${m.author === state.currentUser ? 'mine' : 'theirs'}${m.featured ? ' featured' : ''}`;
@@ -2693,12 +2806,10 @@ function renderChatBody() {
       && Array.isArray(m.read_by)
       && m.read_by.some(u => u !== state.currentUser);
 
-    // Actions: star (everyone), delete (only own + only LAST message)
-    const isLastMine = m.id === lastMineId && m.author === state.currentUser;
+    // Actions: star toggle (destacar protege del auto-borrado)
     const actions = `
       <div class="bubble-actions">
-        <button class="chat-star" data-id="${m.id}" title="${m.featured ? 'Quitar destacado' : 'Destacar'}">${m.featured ? '⭐' : '☆'}</button>
-        ${isLastMine ? `<button class="chat-del" data-id="${m.id}" title="Eliminar último mensaje">🗑</button>` : ''}
+        <button class="chat-star" data-id="${m.id}" title="${m.featured ? 'Quitar destacado' : 'Destacar — se queda guardado'}">${m.featured ? '⭐' : '☆'}</button>
       </div>
     `;
 
@@ -2719,7 +2830,6 @@ function renderChatBody() {
 
 async function onChatBodyClick(e) {
   const star = e.target.closest('button.chat-star');
-  const del = e.target.closest('button.chat-del');
   if (star) {
     const id = star.dataset.id;
     const m = state.chats.find(x => x.id === id);
@@ -2727,14 +2837,6 @@ async function onChatBodyClick(e) {
     const next = !m.featured;
     m.featured = next;
     await supabase.from('chats').update({ featured: next }).eq('id', id);
-    renderChatBody();
-    return;
-  }
-  if (del) {
-    const id = del.dataset.id;
-    if (!confirm('¿Eliminar tu último mensaje?')) return;
-    await supabase.from('chats').delete().eq('id', id);
-    state.chats = state.chats.filter(x => x.id !== id);
     renderChatBody();
   }
 }
@@ -2769,12 +2871,11 @@ function renderNotifList() {
   const tagItem = (item, kind, icon, route, label) => ({ ...item, _kind: kind, _icon: icon, _route: route, _label: label });
 
   const all = [
-    ...state.notes.map(n => tagItem(n, 'note', n.visibility === 'private' ? '🔒' : '📝',
-      n.visibility === 'private' ? '#/notas/privadas' : '#/notas/publicas', n.title)),
+    // Private notes never appear in notifications
+    ...state.notes.filter(n => n.visibility !== 'private').map(n => tagItem(n, 'note', '📝', '#/notas', n.title)),
     ...state.media.map(m => tagItem(m, 'media', m.kind === 'spotify' ? '🎵' : '▶️', '#/musica', m.title)),
     ...state.photos.map(p => tagItem(p, 'photo', '📸', '#/fotos', p.caption || 'Foto sin título')),
     ...state.movies.map(m => tagItem(m, 'movie', '🎬', '#/pelis', m.title)),
-    ...state.places.map(p => tagItem(p, 'place', '📍', '#/lugares', p.name)),
   ];
 
   const unread = all.filter(it => isUnread(it));

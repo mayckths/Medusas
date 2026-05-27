@@ -93,19 +93,7 @@ body {
   background: radial-gradient(circle, #2f6fde 0%, transparent 60%);
   animation: drift-d 80s ease-in-out infinite alternate;
 }
-.cosmos .planet {
-  position: absolute;
-  width: 540px; height: 540px;
-  top: -90px; right: -180px;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 30% 30%, rgba(220, 200, 255, 0.95), rgba(150, 100, 255, 0.6) 30%, rgba(40, 20, 80, 0.95) 70%, #0a0518 95%);
-  box-shadow: -30px -30px 120px rgba(180, 140, 255, 0.25), inset -10px -10px 80px rgba(0,0,0,0.6);
-  animation: planet-drift 30s ease-in-out infinite alternate;
-}
-@media (max-width: 600px) {
-  .cosmos .planet { width: 360px; height: 360px; top: 50px; right: -180px; }
-}
+/* (planet removed) */
 @keyframes drift-a { from { transform: translate3d(0,0,0); } to { transform: translate3d(-60px, 40px, 0); } }
 @keyframes drift-b { from { transform: translate3d(0,0,0); } to { transform: translate3d(80px, -50px, 0); } }
 @keyframes drift-c { from { transform: translate3d(0,0,0); } to { transform: translate3d(40px, 40px, 0); } }
@@ -150,9 +138,6 @@ body {
 .auth-hero-img.visible { opacity: 1; }
 .auth-hero-fallback {
   position: absolute; inset: 0;
-  display: grid; place-items: center;
-  font-size: 4rem; letter-spacing: -0.05em;
-  color: rgba(255, 255, 255, 0.4);
   background: linear-gradient(135deg, #2a1d4a, #1e3a5f);
 }
 .auth-hero-fallback.hidden { display: none; }
@@ -251,8 +236,14 @@ aside.sidebar {
   display: flex; flex-direction: column;
 }
 .brand { padding: 0 0.5rem 0.75rem; }
-.brand .logo { font-size: 2rem; letter-spacing: -0.05em; line-height: 1; }
+.brand .logo { display: flex; gap: 4px; align-items: center; }
+.brand .logo img { width: 32px; height: 32px; }
 .brand .tag { color: var(--text-dim); font-size: 0.78rem; margin-top: 0.25rem; font-style: italic; }
+
+.auth-hero-fallback {
+  display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+}
+.auth-hero-fallback img { width: 80px; height: 80px; }
 
 nav.menu { display: flex; flex-direction: column; gap: 2px; }
 nav.menu a {
@@ -275,6 +266,45 @@ nav.menu .section-label {
 }
 
 main.content { flex: 1; min-width: 0; padding: 1.5rem clamp(1rem, 4vw, 2.5rem) 4rem; }
+@media (max-width: 760px) {
+  main.content { padding-left: 16px; padding-right: 16px; }
+}
+
+/* Material Symbols base size for inline icons */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  font-size: 20px; line-height: 1; vertical-align: middle;
+}
+nav.menu a .m-icon { font-size: 20px; width: 22px; text-align: center; }
+
+/* Icon-only buttons (used after note textarea, etc.) */
+.icon-btn {
+  background: var(--surface-alt); border: 1px solid var(--border);
+  color: var(--text-dim); border-radius: 8px;
+  width: 38px; height: 38px;
+  display: inline-grid; place-items: center; cursor: pointer;
+}
+.icon-btn:hover { background: var(--border); color: var(--text); }
+.icon-btn .material-symbols-outlined { font-size: 20px; }
+
+.note-icon-row {
+  display: flex; gap: 0.4rem; align-items: center;
+  margin: 0.4rem 0 0.5rem;
+}
+.note-icon-row .status { margin-left: auto; }
+
+/* Pin icon overlay on note cards */
+.card.note-card .pin-card-btn {
+  position: absolute; top: 8px; right: 8px;
+  background: var(--surface-alt); border: 1px solid var(--border); border-radius: 6px;
+  width: 30px; height: 30px; cursor: pointer; color: var(--text-dim);
+  display: grid; place-items: center; padding: 0;
+  opacity: 0; transition: opacity 0.12s ease;
+}
+.card.note-card:hover .pin-card-btn, .card.note-card.pinned .pin-card-btn { opacity: 1; }
+.card.note-card .pin-card-btn:hover { color: var(--text); background: var(--border); }
+.card.note-card.pinned .pin-card-btn { background: var(--accent); color: white; border-color: transparent; opacity: 1; }
+.card.note-card .pin-card-btn .material-symbols-outlined { font-size: 18px; }
 .page-head {
   display: flex; align-items: baseline; justify-content: space-between;
   flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;
@@ -863,38 +893,23 @@ dialog.lightbox .lightbox-note .note-author { color: #aaa; font-style: normal; m
 }
 .settings-card .opts button.active { background: var(--accent); color: white; border-color: transparent; }
 
-/* ======== Config sidebar menu ======== */
-.config-layout {
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  gap: 1.2rem;
-  align-items: start;
-}
-@media (max-width: 760px) { .config-layout { grid-template-columns: 1fr; } }
-
+/* ======== Config horizontal tabs ======== */
+.config-layout { display: block; }
 .config-tabs {
-  display: flex; flex-direction: column; gap: 2px;
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 0.5rem; box-shadow: var(--shadow);
-  position: sticky; top: 1rem;
-}
-@media (max-width: 760px) {
-  .config-tabs {
-    flex-direction: row; flex-wrap: wrap; position: static; padding: 0.35rem;
-  }
+  display: flex; gap: 0.25rem; flex-wrap: wrap; margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
 }
 .config-tabs button {
-  background: transparent; border: 0; padding: 0.55rem 0.75rem; cursor: pointer;
-  color: var(--text-dim); font-size: 0.9rem; border-radius: 8px;
-  text-align: left;
-  display: flex; align-items: center; gap: 0.45rem;
+  background: transparent; border: 0; padding: 0.55rem 0.9rem; cursor: pointer;
+  color: var(--text-dim); font-size: 0.9rem; border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  display: inline-flex; align-items: center; gap: 0.4rem;
 }
-.config-tabs button:hover { color: var(--text); background: var(--surface-alt); }
-.config-tabs button.active {
-  color: var(--text); background: var(--surface-alt); font-weight: 600;
-}
+.config-tabs button:hover { color: var(--text); }
+.config-tabs button.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
 @media (max-width: 760px) {
-  .config-tabs button { padding: 0.4rem 0.65rem; font-size: 0.82rem; }
+  .config-tabs { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 2px; }
+  .config-tabs button { flex-shrink: 0; padding: 0.5rem 0.75rem; font-size: 0.85rem; }
 }
 
 /* ======== Notifications bell ======== */
@@ -1100,7 +1115,15 @@ dialog.lightbox .lightbox-note .note-author { color: #aaa; font-style: normal; m
 .watched-row label.watched-check.checked { background: var(--accent); color: white; border-color: transparent; }
 
 /* ======== Notes layout fixes ======== */
-.card.note-card { padding-bottom: 2.2rem; min-height: 130px; }
+.card.note-card {
+  padding-bottom: 2.2rem;
+  aspect-ratio: 1 / 1;
+  min-height: 220px; max-height: 240px;
+  overflow: hidden;
+}
+.card.note-card .body { overflow: hidden; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.card.note-card .preview { -webkit-line-clamp: 3; flex: 1; }
+.card.note-card .gallery img { width: 44px; height: 44px; }
 .card.note-card .meta {
   position: absolute; bottom: 8px; left: 12px; right: 12px;
   align-items: center;
@@ -1133,11 +1156,47 @@ dialog.lightbox .lightbox-note .note-author { color: #aaa; font-style: normal; m
 .album-section { margin-bottom: 1.4rem; }
 .album-section .album-title-row {
   display: flex; align-items: baseline; gap: 0.45rem; margin-bottom: 0.5rem;
+  position: relative;
 }
 .album-section .album-title-row h2 {
   margin: 0; font-size: 1.05rem; letter-spacing: -0.01em;
 }
 .album-section .album-title-row .count { color: var(--text-dim); font-size: 0.78rem; }
+.album-section .album-menu-btn {
+  margin-left: auto;
+  background: var(--surface-alt); border: 1px solid var(--border); border-radius: 6px;
+  width: 28px; height: 28px; cursor: pointer; color: var(--text-dim);
+  display: grid; place-items: center; padding: 0;
+}
+.album-section .album-menu-btn:hover { color: var(--text); background: var(--border); }
+.album-section .album-menu-popover {
+  position: absolute; top: calc(100% + 4px); right: 0;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  min-width: 180px; padding: 0.3rem;
+  display: none; flex-direction: column; gap: 0.1rem; z-index: 20;
+}
+.album-section .album-menu-popover.open { display: flex; }
+.album-section .album-menu-popover button {
+  background: transparent; border: 0; cursor: pointer; padding: 0.45rem 0.6rem;
+  border-radius: 6px; text-align: left; font-size: 0.85rem; color: var(--text);
+  display: flex; align-items: center; gap: 0.45rem;
+}
+.album-section .album-menu-popover button:hover { background: var(--surface-alt); }
+.album-section .album-menu-popover button.danger { color: var(--danger); }
+
+.album-picker {
+  display: flex; gap: 0.4rem; align-items: center;
+}
+.album-picker select {
+  padding: 0.5rem 0.6rem; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface-alt); color: var(--text);
+  font-size: 0.9rem; outline: none;
+  flex: 0 0 auto;
+}
+.album-picker input {
+  flex: 1; min-width: 0;
+}
 
 /* Places address search shown on the page itself */
 .places-search-row {
