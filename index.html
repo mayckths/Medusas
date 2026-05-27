@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Medusas — Notes</title>
+    <title>Medusas — Notas</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -56,10 +56,96 @@
         background: var(--surface); color: var(--text); box-shadow: var(--shadow);
       }
 
-      .editor {
-        background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-        padding: 1rem; margin-bottom: 2rem; box-shadow: var(--shadow);
+      /* Notes display */
+      .notes[data-view="cards"] {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0.85rem;
       }
+      .notes[data-view="list"] { display: flex; flex-direction: column; gap: 0.6rem; }
+      .note {
+        background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+        padding: 0.9rem 1rem; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 0.5rem;
+        cursor: pointer; transition: transform 0.08s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+      }
+      .note:hover { border-color: var(--accent); box-shadow: 0 2px 4px rgba(0,0,0,0.05), 0 8px 20px rgba(0,0,0,0.08); }
+      .note:active { transform: translateY(1px); }
+      .notes[data-view="list"] .note { flex-direction: row; align-items: flex-start; gap: 1rem; }
+      .notes[data-view="list"] .note .body { flex: 1; min-width: 0; }
+      .note h3 { margin: 0; font-size: 1.02rem; letter-spacing: -0.01em; word-wrap: break-word; }
+      .note .preview {
+        color: var(--text-dim); font-size: 0.88rem;
+        display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+        overflow: hidden; word-wrap: break-word;
+      }
+      .notes[data-view="list"] .note .preview { -webkit-line-clamp: 2; }
+      .note .preview a { color: var(--accent); }
+      .note .meta { display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; color: var(--text-dim); }
+      .note .gallery { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+      .note .gallery img { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }
+      .note .links { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+      .note .links a {
+        font-size: 0.75rem; color: var(--accent); text-decoration: none;
+        background: var(--surface-alt); padding: 0.15rem 0.5rem; border-radius: 999px;
+        border: 1px solid var(--border); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .note .actions { display: flex; gap: 0.25rem; }
+      .note .actions button {
+        background: transparent; border: 0; color: var(--text-dim); cursor: pointer;
+        font-size: 0.78rem; padding: 0.2rem 0.4rem; border-radius: 5px;
+      }
+      .note .actions button:hover { background: var(--surface-alt); color: var(--text); }
+      .note .actions button.del:hover { color: var(--danger); }
+
+      /* "Nueva nota" CTA tile */
+      .note.new-cta {
+        background: var(--surface-alt);
+        border: 1.5px dashed var(--border);
+        box-shadow: none;
+        align-items: center; justify-content: center;
+        min-height: 140px;
+        color: var(--text-dim);
+        text-align: center;
+        gap: 0.35rem;
+      }
+      .note.new-cta:hover {
+        border-color: var(--accent); border-style: solid; color: var(--accent);
+        background: var(--surface);
+      }
+      .note.new-cta .plus {
+        width: 36px; height: 36px; border-radius: 999px;
+        background: var(--surface); border: 1.5px dashed var(--border);
+        display: grid; place-items: center; font-size: 1.3rem; line-height: 1;
+        color: inherit;
+      }
+      .note.new-cta:hover .plus { border-style: solid; border-color: currentColor; }
+      .note.new-cta .label { font-size: 0.95rem; font-weight: 600; color: inherit; }
+      .notes[data-view="list"] .note.new-cta { min-height: 0; flex-direction: row; justify-content: flex-start; padding: 0.75rem 1rem; }
+      .notes[data-view="list"] .note.new-cta .plus { width: 28px; height: 28px; font-size: 1.05rem; }
+
+      /* Empty (no notes other than CTA) */
+      .empty-hint {
+        text-align: center; color: var(--text-dim); padding: 1.5rem 1rem 0; font-size: 0.85rem;
+      }
+
+      /* Dialog / editor */
+      dialog.editor-dialog {
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: var(--surface); color: var(--text);
+        padding: 0; max-width: 640px; width: calc(100% - 2rem);
+        box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+      }
+      dialog.editor-dialog::backdrop { background: rgba(0,0,0,0.45); }
+      .editor { padding: 1rem 1.1rem 1rem; }
+      .editor .editor-head {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 0.5rem;
+      }
+      .editor .editor-head h2 { margin: 0; font-size: 1.05rem; letter-spacing: -0.01em; }
+      .editor .close-x {
+        background: transparent; border: 0; color: var(--text-dim); cursor: pointer;
+        font-size: 1.2rem; line-height: 1; padding: 0.2rem 0.4rem; border-radius: 6px;
+      }
+      .editor .close-x:hover { background: var(--surface-alt); color: var(--text); }
+
       .editor input.title {
         width: 100%; border: 0; background: transparent; color: var(--text);
         font-size: 1.15rem; font-weight: 600; padding: 0.25rem 0 0.5rem; outline: none;
@@ -81,7 +167,8 @@
         font-size: 0.8rem; color: var(--text-dim); cursor: pointer;
       }
       .content-area {
-        min-height: 90px; padding: 0.5rem 0; outline: none;
+        min-height: 120px; max-height: 50vh; overflow-y: auto;
+        padding: 0.5rem 0; outline: none;
         font-size: 0.95rem; color: var(--text);
       }
       .content-area:empty:before {
@@ -89,7 +176,7 @@
       }
       .content-area a { color: var(--accent); }
       textarea.content-plain {
-        width: 100%; min-height: 90px; resize: vertical;
+        width: 100%; min-height: 120px; max-height: 50vh; resize: vertical;
         border: 0; background: transparent; color: var(--text);
         font-family: inherit; font-size: 0.95rem; padding: 0.5rem 0; outline: none;
       }
@@ -117,7 +204,7 @@
 
       .editor-actions {
         display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem;
-        padding-top: 0.5rem; border-top: 1px solid var(--border);
+        padding-top: 0.5rem; border-top: 1px solid var(--border); flex-wrap: wrap;
       }
       .editor-actions .left { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
       .editor-actions .right { margin-left: auto; display: flex; gap: 0.5rem; }
@@ -129,51 +216,13 @@
       button.btn.primary { background: var(--accent); color: white; border-color: transparent; }
       button.btn.primary:hover { background: var(--accent-hover); }
       button.btn.ghost { background: transparent; }
-      button.btn.danger { color: var(--danger); border-color: transparent; background: transparent; }
+      button.btn.danger {
+        color: var(--danger); border-color: transparent; background: transparent; margin-right: auto;
+      }
+      button.btn.danger:hover { background: rgba(192, 57, 43, 0.08); }
 
       .status { font-size: 0.8rem; color: var(--text-dim); }
       .status.error { color: var(--danger); }
-
-      /* Notes display */
-      .notes[data-view="cards"] {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0.85rem;
-      }
-      .notes[data-view="list"] { display: flex; flex-direction: column; gap: 0.6rem; }
-      .note {
-        background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-        padding: 0.9rem 1rem; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 0.5rem;
-      }
-      .notes[data-view="list"] .note { flex-direction: row; align-items: flex-start; gap: 1rem; }
-      .notes[data-view="list"] .note .body { flex: 1; }
-      .note h3 { margin: 0; font-size: 1.02rem; letter-spacing: -0.01em; }
-      .note .preview {
-        color: var(--text-dim); font-size: 0.88rem;
-        display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
-        overflow: hidden;
-      }
-      .notes[data-view="list"] .note .preview { -webkit-line-clamp: 2; }
-      .note .preview a { color: var(--accent); }
-      .note .meta { display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; color: var(--text-dim); }
-      .note .gallery { display: flex; gap: 0.3rem; flex-wrap: wrap; }
-      .note .gallery img { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }
-      .note .links { display: flex; gap: 0.35rem; flex-wrap: wrap; }
-      .note .links a {
-        font-size: 0.75rem; color: var(--accent); text-decoration: none;
-        background: var(--surface-alt); padding: 0.15rem 0.5rem; border-radius: 999px;
-        border: 1px solid var(--border); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-      }
-      .note .actions { display: flex; gap: 0.25rem; }
-      .note .actions button {
-        background: transparent; border: 0; color: var(--text-dim); cursor: pointer;
-        font-size: 0.78rem; padding: 0.2rem 0.4rem; border-radius: 5px;
-      }
-      .note .actions button:hover { background: var(--surface-alt); color: var(--text); }
-      .note .actions button.del:hover { color: var(--danger); }
-
-      .empty {
-        text-align: center; color: var(--text-dim); padding: 3rem 1rem;
-        border: 1px dashed var(--border); border-radius: var(--radius);
-      }
 
       .footer { margin-top: 3rem; color: var(--text-dim); font-size: 0.75rem; text-align: center; }
       .footer code { background: var(--surface-alt); padding: 0.1rem 0.35rem; border-radius: 4px; }
@@ -184,56 +233,65 @@
       <header class="app">
         <div>
           <h1>Medusas</h1>
-          <div class="sub">Personal notes — text, images, links</div>
+          <div class="sub">Notas personales — texto, imágenes y enlaces</div>
         </div>
-        <div class="view-toggle" role="tablist" aria-label="View mode">
-          <button id="view-cards" class="active" aria-pressed="true">Cards</button>
-          <button id="view-list" aria-pressed="false">List</button>
+        <div class="view-toggle" role="tablist" aria-label="Modo de vista">
+          <button id="view-cards" class="active" aria-pressed="true">Tarjetas</button>
+          <button id="view-list" aria-pressed="false">Lista</button>
         </div>
       </header>
 
-      <section class="editor" id="editor">
-        <input type="text" class="title" id="title" placeholder="Title…" maxlength="200" />
+      <section class="notes" id="notes" data-view="cards"></section>
+      <div class="empty-hint" id="empty-hint" hidden>Aún no tienes notas. Crea la primera con el botón de arriba.</div>
+
+      <p class="footer">
+        Datos en Supabase · tabla <code>notes</code> · bucket <code>notes-images</code>
+      </p>
+    </div>
+
+    <dialog class="editor-dialog" id="editor-dialog" aria-labelledby="editor-title">
+      <div class="editor">
+        <div class="editor-head">
+          <h2 id="editor-title">Nueva nota</h2>
+          <button class="close-x" type="button" id="close-x" aria-label="Cerrar">✕</button>
+        </div>
+
+        <input type="text" class="title" id="title" placeholder="Título…" maxlength="200" />
 
         <div class="toolbar" id="toolbar">
-          <button type="button" data-cmd="bold" title="Bold (⌘B)"><b>B</b></button>
-          <button type="button" data-cmd="italic" title="Italic (⌘I)"><i>I</i></button>
-          <button type="button" data-cmd="insertUnorderedList" title="Bulleted list">•</button>
-          <button type="button" data-cmd="insertOrderedList" title="Numbered list">1.</button>
-          <button type="button" data-cmd="createLink" title="Insert link">🔗</button>
+          <button type="button" data-cmd="bold" title="Negrita (⌘B)"><b>B</b></button>
+          <button type="button" data-cmd="italic" title="Cursiva (⌘I)"><i>I</i></button>
+          <button type="button" data-cmd="insertUnorderedList" title="Lista con viñetas">•</button>
+          <button type="button" data-cmd="insertOrderedList" title="Lista numerada">1.</button>
+          <button type="button" data-cmd="createLink" title="Insertar enlace">🔗</button>
           <div class="divider"></div>
           <label class="toggle">
             <input type="checkbox" id="rich-toggle" />
-            Rich text
+            Texto enriquecido
           </label>
         </div>
 
-        <div class="content-area" id="content-rich" contenteditable="true" data-placeholder="Write something…" hidden></div>
-        <textarea class="content-plain" id="content-plain" placeholder="Write something…"></textarea>
+        <div class="content-area" id="content-rich" contenteditable="true" data-placeholder="Escribe algo…" hidden></div>
+        <textarea class="content-plain" id="content-plain" placeholder="Escribe algo…"></textarea>
 
         <div class="chips" id="links-chips"></div>
         <div class="images-preview" id="images-preview"></div>
 
         <div class="editor-actions">
           <div class="left">
-            <button class="btn" type="button" id="add-link-btn">+ Link</button>
-            <button class="btn" type="button" id="add-image-btn">+ Image</button>
+            <button class="btn" type="button" id="add-link-btn">+ Enlace</button>
+            <button class="btn" type="button" id="add-image-btn">+ Imagen</button>
             <input type="file" id="image-input" accept="image/*" multiple hidden />
             <span class="status" id="status"></span>
           </div>
+          <button class="btn danger" type="button" id="delete-btn" hidden>Eliminar</button>
           <div class="right">
-            <button class="btn ghost" type="button" id="cancel-btn" hidden>Cancel</button>
-            <button class="btn primary" type="button" id="save-btn">Save note</button>
+            <button class="btn ghost" type="button" id="cancel-btn">Cancelar</button>
+            <button class="btn primary" type="button" id="save-btn">Guardar nota</button>
           </div>
         </div>
-      </section>
-
-      <section class="notes" id="notes" data-view="cards"></section>
-
-      <p class="footer">
-        Backed by Supabase · <code>notes</code> table · <code>notes-images</code> bucket
-      </p>
-    </div>
+      </div>
+    </dialog>
 
     <script type="module">
       import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
@@ -249,12 +307,13 @@
         view: 'cards',
         editingId: null,
         notes: [],
-        // Draft state mirrors the editor:
         draft: { title: '', content: '', isRich: false, links: [], images: [] },
       };
 
       // ---------- DOM ----------
       const $ = (sel) => document.querySelector(sel);
+      const dialog = $('#editor-dialog');
+      const editorTitle = $('#editor-title');
       const titleEl = $('#title');
       const richEl = $('#content-rich');
       const plainEl = $('#content-plain');
@@ -266,7 +325,10 @@
       const statusEl = $('#status');
       const saveBtn = $('#save-btn');
       const cancelBtn = $('#cancel-btn');
+      const deleteBtn = $('#delete-btn');
+      const closeXBtn = $('#close-x');
       const notesEl = $('#notes');
+      const emptyHint = $('#empty-hint');
 
       // ---------- Helpers ----------
       function setStatus(msg, isError = false) {
@@ -284,8 +346,8 @@
         const now = new Date();
         const sameDay = d.toDateString() === now.toDateString();
         return sameDay
-          ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-          : d.toLocaleDateString([], { month: 'short', day: 'numeric', year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric' });
+          ? d.toLocaleTimeString('es', { hour: 'numeric', minute: '2-digit' })
+          : d.toLocaleDateString('es', { month: 'short', day: 'numeric', year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric' });
       }
 
       function escapeHtml(s) {
@@ -297,14 +359,12 @@
         state.draft.isRich = isRich;
         richToggle.checked = isRich;
         if (isRich) {
-          // copy plain text into rich
           if (richEl.innerHTML.trim() === '' && plainEl.value.trim() !== '') {
             richEl.innerText = plainEl.value;
           }
           richEl.hidden = false;
           plainEl.hidden = true;
         } else {
-          // copy rich text (as plain) into plain
           if (plainEl.value.trim() === '' && richEl.innerText.trim() !== '') {
             plainEl.value = richEl.innerText;
           }
@@ -325,7 +385,7 @@
         };
       }
 
-      function clearEditor() {
+      function resetDraft() {
         titleEl.value = '';
         richEl.innerHTML = '';
         plainEl.value = '';
@@ -334,11 +394,20 @@
         renderChips();
         renderImagesPreview();
         state.editingId = null;
-        cancelBtn.hidden = true;
-        saveBtn.textContent = 'Save note';
+        statusEl.textContent = '';
       }
 
-      function loadIntoEditor(note) {
+      function openEditorForNew() {
+        resetDraft();
+        editorTitle.textContent = 'Nueva nota';
+        saveBtn.textContent = 'Guardar nota';
+        deleteBtn.hidden = true;
+        dialog.showModal();
+        setTimeout(() => titleEl.focus(), 0);
+      }
+
+      function openEditorForNote(note) {
+        resetDraft();
         state.editingId = note.id;
         titleEl.value = note.title;
         state.draft.isRich = !!note.content_is_rich;
@@ -352,10 +421,16 @@
         state.draft.images = Array.isArray(note.images) ? [...note.images] : [];
         renderChips();
         renderImagesPreview();
-        cancelBtn.hidden = false;
-        saveBtn.textContent = 'Update note';
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        titleEl.focus();
+        editorTitle.textContent = 'Editar nota';
+        saveBtn.textContent = 'Actualizar nota';
+        deleteBtn.hidden = false;
+        dialog.showModal();
+        setTimeout(() => titleEl.focus(), 0);
+      }
+
+      function closeEditor() {
+        if (dialog.open) dialog.close();
+        resetDraft();
       }
 
       function renderChips() {
@@ -363,7 +438,7 @@
         for (const [i, link] of state.draft.links.entries()) {
           const chip = document.createElement('span');
           chip.className = 'chip';
-          chip.innerHTML = `🔗 <a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.label || link.url)}</a> <button type="button" aria-label="Remove">×</button>`;
+          chip.innerHTML = `🔗 <a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.label || link.url)}</a> <button type="button" aria-label="Quitar">×</button>`;
           chip.querySelector('button').addEventListener('click', () => {
             state.draft.links.splice(i, 1);
             renderChips();
@@ -377,9 +452,8 @@
         for (const [i, path] of state.draft.images.entries()) {
           const thumb = document.createElement('div');
           thumb.className = 'thumb';
-          thumb.innerHTML = `<img src="${escapeHtml(publicImageUrl(path))}" alt="" /><button class="remove" type="button" aria-label="Remove">×</button>`;
+          thumb.innerHTML = `<img src="${escapeHtml(publicImageUrl(path))}" alt="" /><button class="remove" type="button" aria-label="Quitar">×</button>`;
           thumb.querySelector('button.remove').addEventListener('click', async () => {
-            // Best-effort: remove file from storage; remove from draft regardless
             try { await supabase.storage.from(BUCKET).remove([path]); } catch {}
             state.draft.images.splice(i, 1);
             renderImagesPreview();
@@ -392,13 +466,11 @@
       toolbar.addEventListener('click', (e) => {
         const btn = e.target.closest('button[data-cmd]');
         if (!btn) return;
-        if (!state.draft.isRich) {
-          setRichMode(true);
-        }
+        if (!state.draft.isRich) setRichMode(true);
         richEl.focus();
         const cmd = btn.dataset.cmd;
         if (cmd === 'createLink') {
-          const url = prompt('Link URL:');
+          const url = prompt('URL del enlace:');
           if (url) document.execCommand('createLink', false, url);
         } else {
           document.execCommand(cmd, false, null);
@@ -407,13 +479,13 @@
 
       richToggle.addEventListener('change', () => setRichMode(richToggle.checked));
 
-      // ---------- Links / Images ----------
+      // ---------- Links / Images in editor ----------
       $('#add-link-btn').addEventListener('click', () => {
-        const url = prompt('Link URL:');
+        const url = prompt('URL del enlace:');
         if (!url) return;
         let normalized = url.trim();
         if (!/^https?:\/\//i.test(normalized)) normalized = 'https://' + normalized;
-        const label = prompt('Label (optional):', '') || '';
+        const label = prompt('Etiqueta (opcional):', '') || '';
         state.draft.links.push({ url: normalized, label });
         renderChips();
       });
@@ -424,7 +496,7 @@
         const files = Array.from(imageInput.files || []);
         imageInput.value = '';
         if (!files.length) return;
-        setStatus('Uploading…');
+        setStatus('Subiendo…');
         try {
           for (const file of files) {
             const ext = (file.name.split('.').pop() || 'png').toLowerCase();
@@ -436,43 +508,66 @@
             state.draft.images.push(path);
           }
           renderImagesPreview();
-          setStatus('Uploaded');
+          setStatus('Subida completa');
         } catch (e) {
           console.error(e);
-          setStatus(`Upload failed: ${e.message || e}`, true);
+          setStatus(`Error al subir: ${e.message || e}`, true);
         }
       });
 
-      // ---------- Save / Cancel ----------
+      // ---------- Save / Cancel / Delete (in dialog) ----------
       saveBtn.addEventListener('click', async () => {
         const draft = readEditor();
         if (!draft.title) {
-          setStatus('Title is required', true);
+          setStatus('El título es obligatorio', true);
           titleEl.focus();
           return;
         }
-        setStatus('Saving…');
+        setStatus('Guardando…');
         try {
           if (state.editingId) {
-            const { error } = await supabase
-              .from('notes')
-              .update(draft)
-              .eq('id', state.editingId);
+            const { error } = await supabase.from('notes').update(draft).eq('id', state.editingId);
             if (error) throw error;
           } else {
             const { error } = await supabase.from('notes').insert(draft);
             if (error) throw error;
           }
-          clearEditor();
           await loadNotes();
-          setStatus('Saved');
+          closeEditor();
         } catch (e) {
           console.error(e);
-          setStatus(`Save failed: ${e.message || e}`, true);
+          setStatus(`Error al guardar: ${e.message || e}`, true);
         }
       });
 
-      cancelBtn.addEventListener('click', () => clearEditor());
+      cancelBtn.addEventListener('click', () => closeEditor());
+      closeXBtn.addEventListener('click', () => closeEditor());
+
+      // Close on backdrop click (clicking outside the editor content)
+      dialog.addEventListener('click', (e) => {
+        if (e.target === dialog) closeEditor();
+      });
+      // Make sure escape-close also resets state
+      dialog.addEventListener('close', () => resetDraft());
+
+      deleteBtn.addEventListener('click', async () => {
+        if (!state.editingId) return;
+        const note = state.notes.find(n => n.id === state.editingId);
+        if (!note) return;
+        if (!confirm(`¿Eliminar "${note.title}"? Esta acción no se puede deshacer.`)) return;
+        setStatus('Eliminando…');
+        try {
+          if (Array.isArray(note.images) && note.images.length) {
+            try { await supabase.storage.from(BUCKET).remove(note.images); } catch {}
+          }
+          const { error } = await supabase.from('notes').delete().eq('id', note.id);
+          if (error) throw error;
+          await loadNotes();
+          closeEditor();
+        } catch (e) {
+          setStatus(`Error al eliminar: ${e.message || e}`, true);
+        }
+      });
 
       // ---------- View toggle ----------
       function setView(view) {
@@ -493,7 +588,10 @@
           .select('*')
           .order('created_at', { ascending: false });
         if (error) {
-          setStatus(`Load failed: ${error.message}`, true);
+          // Render CTA only so user can still try to add
+          state.notes = [];
+          renderNotes();
+          setStatus(`Error al cargar: ${error.message}`, true);
           return;
         }
         state.notes = data || [];
@@ -502,21 +600,36 @@
 
       function renderNotes() {
         notesEl.innerHTML = '';
-        if (state.notes.length === 0) {
-          const empty = document.createElement('div');
-          empty.className = 'empty';
-          empty.textContent = 'No notes yet — write your first one above.';
-          notesEl.appendChild(empty);
-          return;
-        }
+        notesEl.appendChild(renderNewCtaTile());
         for (const note of state.notes) {
           notesEl.appendChild(renderNoteCard(note));
         }
+        emptyHint.hidden = state.notes.length !== 0;
+      }
+
+      function renderNewCtaTile() {
+        const tile = document.createElement('article');
+        tile.className = 'note new-cta';
+        tile.setAttribute('role', 'button');
+        tile.setAttribute('tabindex', '0');
+        tile.setAttribute('aria-label', 'Crear nueva nota');
+        tile.innerHTML = `<div class="plus" aria-hidden="true">＋</div><div class="label">Nueva nota</div>`;
+        tile.addEventListener('click', () => openEditorForNew());
+        tile.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openEditorForNew();
+          }
+        });
+        return tile;
       }
 
       function renderNoteCard(note) {
         const card = document.createElement('article');
         card.className = 'note';
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('aria-label', `Abrir nota: ${note.title}`);
 
         const body = document.createElement('div');
         body.className = 'body';
@@ -555,6 +668,8 @@
             a.target = '_blank';
             a.rel = 'noopener noreferrer';
             a.textContent = link.label || link.url;
+            // Clicking a link inside the card shouldn't open the editor
+            a.addEventListener('click', (e) => e.stopPropagation());
             lk.appendChild(a);
           }
           body.appendChild(lk);
@@ -563,39 +678,20 @@
         const meta = document.createElement('div');
         meta.className = 'meta';
         meta.innerHTML = `<span>${fmtDate(note.updated_at || note.created_at)}</span>`;
-        const actions = document.createElement('div');
-        actions.className = 'actions';
-        const editBtn = document.createElement('button');
-        editBtn.textContent = 'Edit';
-        editBtn.addEventListener('click', () => loadIntoEditor(note));
-        const delBtn = document.createElement('button');
-        delBtn.className = 'del';
-        delBtn.textContent = 'Delete';
-        delBtn.addEventListener('click', () => deleteNote(note));
-        actions.appendChild(editBtn);
-        actions.appendChild(delBtn);
-        meta.appendChild(actions);
         body.appendChild(meta);
 
         card.appendChild(body);
-        return card;
-      }
 
-      async function deleteNote(note) {
-        if (!confirm(`Delete "${note.title}"? This cannot be undone.`)) return;
-        setStatus('Deleting…');
-        try {
-          if (Array.isArray(note.images) && note.images.length) {
-            try { await supabase.storage.from(BUCKET).remove(note.images); } catch {}
+        // Open editor when clicking anywhere on the card (except links — handled above)
+        card.addEventListener('click', () => openEditorForNote(note));
+        card.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openEditorForNote(note);
           }
-          const { error } = await supabase.from('notes').delete().eq('id', note.id);
-          if (error) throw error;
-          if (state.editingId === note.id) clearEditor();
-          await loadNotes();
-          setStatus('Deleted');
-        } catch (e) {
-          setStatus(`Delete failed: ${e.message || e}`, true);
-        }
+        });
+
+        return card;
       }
 
       // ---------- Boot ----------
