@@ -13,7 +13,15 @@
   <body>
     <!-- ==================== LOGIN ==================== -->
     <div class="auth-overlay" id="auth-overlay" hidden>
-      <div class="auth-card-v2">
+      <div class="cosmos">
+        <div class="stars stars-1"></div>
+        <div class="stars stars-2"></div>
+        <div class="stars stars-3"></div>
+        <div class="nebula nebula-a"></div>
+        <div class="nebula nebula-b"></div>
+        <div class="planet"></div>
+      </div>
+      <div class="auth-card-v2 glass">
         <div class="auth-hero" id="auth-hero">
           <img class="auth-hero-img" id="auth-hero-img" alt="" />
           <div class="auth-hero-fallback" id="auth-hero-fallback">🪼🪼</div>
@@ -41,11 +49,11 @@
           </a>
           <div class="section-label">Notas</div>
           <a href="#/notas/publicas" data-route="#/notas/publicas">
-            <span class="icon">🌐</span><span>Públicas</span>
+            <span class="icon">💞</span><span>Compartidas</span>
             <span class="badge-unread" data-unread="notas-publicas" hidden></span>
           </a>
           <a href="#/notas/privadas" data-route="#/notas/privadas">
-            <span class="icon">🔒</span><span>Compartidas</span>
+            <span class="icon">🔒</span><span>Privadas</span>
             <span class="badge-unread" data-unread="notas-privadas" hidden></span>
           </a>
           <div class="section-label">Media</div>
@@ -73,6 +81,30 @@
       </aside>
 
       <main class="content" id="content"></main>
+
+      <nav class="mobile-nav" id="mobile-nav">
+        <a href="#/inicio" data-route="#/inicio" class="m-item">
+          <span class="m-icon">🏠</span><span class="m-label">Inicio</span>
+        </a>
+        <a href="#/notas/publicas" data-route="#/notas/publicas" class="m-item">
+          <span class="m-icon">📝</span><span class="m-label">Notas</span>
+        </a>
+        <a href="#/musica" data-route="#/musica" class="m-item">
+          <span class="m-icon">🎵</span><span class="m-label">Música</span>
+        </a>
+        <a href="#/fotos" data-route="#/fotos" class="m-item">
+          <span class="m-icon">📸</span><span class="m-label">Fotos</span>
+        </a>
+        <a href="#/pelis" data-route="#/pelis" class="m-item">
+          <span class="m-icon">🎬</span><span class="m-label">Pelis</span>
+        </a>
+        <a href="#/lugares" data-route="#/lugares" class="m-item">
+          <span class="m-icon">📍</span><span class="m-label">Lugares</span>
+        </a>
+        <a href="#/configuracion" data-route="#/configuracion" class="m-item">
+          <span class="m-icon">⚙️</span><span class="m-label">Ajustes</span>
+        </a>
+      </nav>
     </div>
 
     <!-- ==================== Note editor ==================== -->
@@ -98,8 +130,8 @@
 
         <div class="modal-toolbar">
           <span class="visibility-pill" id="note-visibility">
-            <button data-vis="public">🌐 Pública</button>
-            <button data-vis="private">🔒 Compartida</button>
+            <button data-vis="public">💞 Compartida</button>
+            <button data-vis="private">🔒 Privada</button>
           </span>
           <button class="btn pin-toggle" id="note-pin-toggle" type="button" title="Anclar al inicio">📌 Anclar</button>
         </div>
@@ -218,13 +250,11 @@
       <button class="lb-close" id="lb-close" aria-label="Cerrar">✕</button>
       <button class="lb-pin" id="lb-pin" aria-label="Anclar">📌</button>
       <button class="lb-feature" id="lb-feature" aria-label="Destacar">⭐</button>
-      <button class="lb-note" id="lb-note" aria-label="Nota">💬</button>
       <button class="lb-delete" id="lb-delete" aria-label="Eliminar">🗑</button>
       <div class="lb-stage" id="lb-stage">
         <img id="lightbox-img" src="" alt="" />
       </div>
       <div class="lightbox-cap" id="lightbox-cap" hidden></div>
-      <div class="lightbox-note" id="lightbox-note" hidden></div>
     </dialog>
 
     <!-- ==================== Place editor ==================== -->
@@ -288,7 +318,8 @@
         <div class="movie-image-wrap">
           <div class="movie-image-preview" id="movie-image-preview"></div>
           <div class="movie-image-actions">
-            <label class="btn">📁 Subir imagen<input type="file" accept="image/*" id="movie-image-input" hidden /></label>
+            <button class="btn primary" type="button" id="movie-image-pick">Subir imagen</button>
+            <input type="file" accept="image/*" id="movie-image-input" hidden />
             <button class="btn ghost" id="movie-image-clear" type="button">Quitar</button>
           </div>
         </div>
@@ -297,19 +328,19 @@
           <div>
             <label>Puntaje</label>
             <div class="stars" id="movie-stars">
-              <button data-v="0">☆</button>
-              <button data-v="1">★</button>
-              <button data-v="2">★</button>
-              <button data-v="3">★</button>
-              <button data-v="4">★</button>
-              <button data-v="5">★</button>
+              <button data-v="1" type="button">★</button>
+              <button data-v="2" type="button">★</button>
+              <button data-v="3" type="button">★</button>
+              <button data-v="4" type="button">★</button>
+              <button data-v="5" type="button">★</button>
+              <button class="clear-stars" id="movie-stars-clear" type="button">Limpiar</button>
             </div>
           </div>
           <div>
             <label for="movie-platform">Plataforma (opcional)</label>
-            <input type="text" id="movie-platform" placeholder="Netflix, HBO, Filmin…" list="movie-platform-list" maxlength="100" />
+            <input type="text" id="movie-platform" placeholder="Netflix, HBO, Mubi…" list="movie-platform-list" maxlength="100" />
             <datalist id="movie-platform-list">
-              <option value="Netflix"><option value="HBO Max"><option value="Disney+"><option value="Prime Video"><option value="Filmin"><option value="Apple TV+"><option value="Movistar"><option value="Cine"></option>
+              <option value="Netflix"><option value="HBO Max"><option value="Disney+"><option value="Prime Video"><option value="Apple TV+"><option value="Mubi"><option value="Xuper"><option value="En cartelera"></option>
             </datalist>
           </div>
         </div>

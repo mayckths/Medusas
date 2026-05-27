@@ -361,6 +361,35 @@ async function loadAll() {
   state.movies = movies || [];
   state.chats = chats || [];
   updateSidebarBadges();
+  // Background: backfill missing Spotify/YouTube thumbnails
+  backfillMediaThumbnails();
+}
+
+let backfillRan = false;
+async function backfillMediaThumbnails() {
+  if (backfillRan) return;
+  backfillRan = true;
+  const missing = state.media.filter(m => !m.thumbnail_url);
+  if (!missing.length) return;
+  for (const m of missing) {
+    const parsed = parseMediaUrl(m.url);
+    if (!parsed) continue;
+    let thumb = parsed.thumbnailUrl;
+    if (!thumb) {
+      try {
+        const oe = await fetchOembedTitle(parsed);
+        if (oe?.thumbnail) thumb = oe.thumbnail;
+      } catch {}
+    }
+    if (thumb) {
+      m.thumbnail_url = thumb;
+      try { await supabase.from('media').update({ thumbnail_url: thumb }).eq('id', m.id); } catch {}
+    }
+  }
+  // Re-render current view to show the new thumbnails
+  if (state.route === '#/musica' || state.route === '#/inicio') {
+    router();
+  }
 }
 
 async function loadSettings() {
@@ -401,6 +430,7 @@ function updateSidebarBadges() {
 // ============================================================
 function syncMenu() {
   $$('#menu a').forEach(a => a.classList.toggle('active', a.dataset.route === state.route));
+  $$('#mobile-nav a').forEach(a => a.classList.toggle('active', a.dataset.route === state.route));
 }
 
 async function router() {
@@ -691,9 +721,9 @@ function wirePwMenu(root, cfg) {
 // Page: Notas
 // ============================================================
 function renderNotas(root, visibility) {
-  const label = visibility === 'public' ? 'Notas públicas' : 'Notas compartidas';
-  const icon = visibility === 'public' ? '🌐' : '🔒';
-  const sub = visibility === 'public' ? 'Para los dos, ligeritas' : 'Notas íntimas para los dos';
+  const label = visibility === 'public' ? 'Notas compartidas' : 'Notas privadas';
+  const icon = visibility === 'public' ? '💞' : '🔒';
+  const sub = visibility === 'public' ? 'Las que vemos los dos' : 'Solo tuyas';
   const filterTag = state.filterTag.notas;
   let filtered = state.notes.filter(n => n.visibility === visibility);
   if (filterTag) filtered = filtered.filter(n => Array.isArray(n.tags) && n.tags.includes(filterTag));
@@ -854,8 +884,8 @@ function renderNoteCard(note) {
   const meta = document.createElement('div');
   meta.className = 'meta';
   const badge = note.visibility === 'private'
-    ? '<span class="badge private">🔒 Compartida</span>'
-    : '<span class="badge">🌐 Pública</span>';
+    ? '<span class="badge private">🔒 Privada</span>'
+    : '<span class="badge">💞 Compartida</span>';
   meta.innerHTML = `<span>${fmtDate(note.updated_at || note.created_at)} · ${escapeHtml(note.created_by || '?')}</span>${badge}`;
   body.appendChild(meta);
 
@@ -1404,10 +1434,12 @@ function renderConfig(root) {
         <div class="sub">Solo para ti — los cambios se guardan al instante</div>
       </div>
     </div>
-    <div class="config-tabs" id="config-tabs">
-      ${tabs.map(t => `<button data-tab="${t.id}" class="${configActiveTab === t.id ? 'active' : ''}">${t.label}</button>`).join('')}
+    <div class="config-layout">
+      <div class="config-tabs" id="config-tabs">
+        ${tabs.map(t => `<button data-tab="${t.id}" class="${configActiveTab === t.id ? 'active' : ''}">${t.label}</button>`).join('')}
+      </div>
+      <div class="settings-grid" id="config-body"></div>
     </div>
-    <div class="settings-grid" id="config-body"></div>
   `;
 
   $('#config-tabs').addEventListener('click', (e) => {
@@ -1483,12 +1515,16 @@ function renderConfigDashboard(body) {
   body.innerHTML = `
     <div class="settings-card">
       <h3>Orden del dashboard</h3>
-      <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Arrastra para cambiar el orden de las secciones del inicio.</div>
+      <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Usa las flechas para reorganizar, o arrastra en escritorio.</div>
       <div class="reorder-list" id="cfg-reorder">
-        ${order.map(s => `
+        ${order.map((s, i) => `
           <div class="reorder-item" draggable="true" data-sec="${s}">
-            <span class="grip">⋮⋮</span>
+            <span class="drag-handle" title="Arrastrar">⋮⋮</span>
             <span class="label">${SECTION_LABELS[s] || s}</span>
+            <span class="move-btns">
+              <button data-dir="up" ${i === 0 ? 'disabled' : ''} title="Subir">↑</button>
+              <button data-dir="down" ${i === order.length - 1 ? 'disabled' : ''} title="Bajar">↓</button>
+            </span>
           </div>
         `).join('')}
       </div>
@@ -1601,7 +1637,8 @@ function renderConfigLogin(body) {
         <div class="asset-info">
           <div class="asset-label">Mi avatar</div>
           <div class="asset-sub">Pequeña imagen circular (idealmente cuadrada)</div>
-          <label class="btn">📁 Cambiar<input type="file" accept="image/*" id="cfg-avatar-input" hidden /></label>
+          <label class="btn primary" for="cfg-avatar-input">Cambiar</label>
+          <input type="file" accept="image/*" id="cfg-avatar-input" hidden />
           <button class="btn ghost" id="cfg-avatar-clear" type="button">Quitar</button>
         </div>
       </div>
@@ -1611,7 +1648,8 @@ function renderConfigLogin(body) {
         <div class="asset-info">
           <div class="asset-label">Mi foto del login</div>
           <div class="asset-sub">Se ve cuando te seleccionan a ti</div>
-          <label class="btn">📁 Cambiar<input type="file" accept="image/*" id="cfg-bg-input" hidden /></label>
+          <label class="btn primary" for="cfg-bg-input">Cambiar</label>
+          <input type="file" accept="image/*" id="cfg-bg-input" hidden />
           <button class="btn ghost" id="cfg-bg-clear" type="button">Quitar</button>
         </div>
       </div>
@@ -1621,7 +1659,8 @@ function renderConfigLogin(body) {
         <div class="asset-info">
           <div class="asset-label">Foto por defecto</div>
           <div class="asset-sub">Cuando nadie está seleccionado (idealmente una foto de los dos)</div>
-          <label class="btn">📁 Cambiar<input type="file" accept="image/*" id="cfg-default-bg-input" hidden /></label>
+          <label class="btn primary" for="cfg-default-bg-input">Cambiar</label>
+          <input type="file" accept="image/*" id="cfg-default-bg-input" hidden />
           <button class="btn ghost" id="cfg-default-bg-clear" type="button">Quitar</button>
         </div>
       </div>
@@ -1754,6 +1793,7 @@ function setupReorder() {
   if (!list) return;
   let dragSrc = null;
 
+  // Drag-and-drop (desktop)
   list.addEventListener('dragstart', (e) => {
     const item = e.target.closest('.reorder-item');
     if (!item) return;
@@ -1776,16 +1816,37 @@ function setupReorder() {
     e.preventDefault();
     const target = e.target.closest('.reorder-item');
     if (!target || !dragSrc || target === dragSrc) return;
-    // Insert dragSrc before target if it's earlier in DOM order, else after
     const items = Array.from($$('.reorder-item', list));
     const srcIdx = items.indexOf(dragSrc);
     const tgtIdx = items.indexOf(target);
     if (srcIdx < tgtIdx) target.after(dragSrc); else target.before(dragSrc);
+    await persistOrder();
+  });
+
+  // Arrow buttons (touch / explicit reorder)
+  list.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.move-btns button[data-dir]');
+    if (!btn) return;
+    const item = btn.closest('.reorder-item');
+    if (!item) return;
+    if (btn.dataset.dir === 'up' && item.previousElementSibling) {
+      item.previousElementSibling.before(item);
+    } else if (btn.dataset.dir === 'down' && item.nextElementSibling) {
+      item.nextElementSibling.after(item);
+    } else {
+      return;
+    }
+    await persistOrder();
+    // Re-render the dashboard config tab to update disabled state on buttons
+    renderConfigDashboard($('#config-body'));
+  });
+
+  async function persistOrder() {
     const newOrder = $$('.reorder-item', list).map(el => el.dataset.sec);
     setStatus($('#cfg-order-status'), 'Guardando…');
     await saveSetting('dashboard_order', { order: newOrder });
     setStatus($('#cfg-order-status'), 'Orden actualizado ✓');
-  });
+  }
 }
 
 // ============================================================
@@ -2265,18 +2326,8 @@ function renderLightbox() {
   if (p.caption) { $('#lightbox-cap').textContent = p.caption; $('#lightbox-cap').hidden = false; }
   else $('#lightbox-cap').hidden = true;
 
-  const noteEl = $('#lightbox-note');
-  if (p.note) {
-    noteEl.innerHTML = `${escapeHtml(p.note)} <span class="note-author">${p.note_by ? '— ' + escapeHtml(p.note_by) : ''}</span>`;
-    noteEl.hidden = false;
-  } else {
-    noteEl.hidden = true;
-    noteEl.textContent = '';
-  }
-
   $('#lb-pin').classList.toggle('is-on', !!p.pinned);
   $('#lb-feature').classList.toggle('is-on', !!p.featured);
-  $('#lb-note').classList.toggle('is-on', !!p.note);
 
   if (isUnread(p)) markSeen('photos', p);
 }
@@ -2307,19 +2358,7 @@ $('#lb-feature').addEventListener('click', async (e) => {
   await supabase.from('photos').update({ featured: p.featured }).eq('id', p.id);
   renderLightbox();
 });
-$('#lb-note').addEventListener('click', async (e) => {
-  e.stopPropagation();
-  const p = lightboxState.list[lightboxState.index];
-  if (!p) return;
-  const current = p.note || '';
-  const next = prompt('Escribe una nota para esta foto (se firmará con tu nombre):', current);
-  if (next === null) return; // cancelled
-  const trimmed = next.trim();
-  const noteBy = trimmed ? state.currentUser : '';
-  p.note = trimmed; p.note_by = noteBy;
-  await supabase.from('photos').update({ note: trimmed, note_by: noteBy }).eq('id', p.id);
-  renderLightbox();
-});
+// (foto notes feature retired)
 $('#lb-delete').addEventListener('click', async (e) => {
   e.stopPropagation();
   const p = lightboxState.list[lightboxState.index];
@@ -2537,12 +2576,37 @@ $$('dialog.modal').forEach(dlg => {
 // Instantáneos chat widget (dashboard)
 // ============================================================
 let chatPollTimer = null;
+let chatFilter = 'all'; // 'all' | 'featured'
+
 function setupChatWidget() {
   const root = $('#chat-widget');
   if (!root) return;
   if (chatPollTimer) { clearInterval(chatPollTimer); chatPollTimer = null; }
 
+  // Inject filter buttons into the head (after the dot + title)
+  const head = $('.chat-head', root);
+  if (head && !$('.chat-filter', head)) {
+    const filter = document.createElement('div');
+    filter.className = 'chat-filter';
+    filter.innerHTML = `
+      <button data-f="all" class="${chatFilter === 'all' ? 'active' : ''}">Todos</button>
+      <button data-f="featured" class="${chatFilter === 'featured' ? 'active' : ''}">⭐</button>
+    `;
+    head.appendChild(filter);
+    filter.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-f]');
+      if (!b) return;
+      chatFilter = b.dataset.f;
+      $$('button', filter).forEach(x => x.classList.toggle('active', x.dataset.f === chatFilter));
+      renderChatBody();
+    });
+  }
+
   renderChatBody();
+  markIncomingChatsRead();
+
+  // Single delegated listener for star / delete buttons inside bubbles
+  $('#chat-body').addEventListener('click', onChatBodyClick);
 
   const send = async () => {
     const input = $('#chat-input-field');
@@ -2551,7 +2615,9 @@ function setupChatWidget() {
     const btn = $('#chat-send');
     btn.disabled = true;
     try {
-      const { error } = await supabase.from('chats').insert({ author: state.currentUser, body });
+      const { error } = await supabase.from('chats').insert({
+        author: state.currentUser, body, read_by: [state.currentUser],
+      });
       if (error) throw error;
       input.value = '';
       await reloadChats();
@@ -2567,8 +2633,10 @@ function setupChatWidget() {
     if (e.key === 'Enter') { e.preventDefault(); send(); }
   });
 
-  // Light polling so the other person's messages show up (every 8s while on dashboard)
-  chatPollTimer = setInterval(reloadChats, 8000);
+  chatPollTimer = setInterval(async () => {
+    await reloadChats();
+    markIncomingChatsRead();
+  }, 8000);
 }
 
 async function reloadChats() {
@@ -2579,22 +2647,96 @@ async function reloadChats() {
   } catch {}
 }
 
+async function markIncomingChatsRead() {
+  // Mark any message from the OTHER user as read (only those not authored by me)
+  const me = state.currentUser;
+  const toMark = state.chats.filter(m => m.author !== me && !(m.read_by || []).includes(me));
+  if (!toMark.length) return;
+  for (const m of toMark) {
+    const next = [...(m.read_by || []), me];
+    m.read_by = next;
+    try { await supabase.from('chats').update({ read_by: next }).eq('id', m.id); } catch {}
+  }
+}
+
+// Detect URLs and convert to <a>
+function linkify(text) {
+  const escaped = escapeHtml(text);
+  return escaped.replace(/(https?:\/\/[^\s<]+)/g, (url) => {
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+  });
+}
+
 function renderChatBody() {
   const body = $('#chat-body');
   if (!body) return;
-  if (!state.chats.length) {
-    body.innerHTML = `<div class="chat-empty">No hay mensajitos todavía.<br/>Escribe el primero ✨</div>`;
+  let msgs = state.chats;
+  if (chatFilter === 'featured') msgs = msgs.filter(m => m.featured);
+
+  if (!msgs.length) {
+    body.innerHTML = `<div class="chat-empty">${chatFilter === 'featured' ? 'No hay mensajes destacados todavía.' : 'No hay mensajitos todavía.<br/>Escribe el primero ✨'}</div>`;
     return;
   }
   body.innerHTML = '';
-  for (const m of state.chats) {
+
+  // Determine the index of MY last message (for the delete button)
+  const myMessages = state.chats.filter(m => m.author === state.currentUser);
+  const lastMineId = myMessages.length ? myMessages[myMessages.length - 1].id : null;
+
+  for (const m of msgs) {
     const div = document.createElement('div');
-    div.className = `chat-bubble ${m.author === state.currentUser ? 'mine' : 'theirs'}`;
-    div.innerHTML = `${escapeHtml(m.body)}<div class="bubble-meta">${escapeHtml(m.author)} · ${fmtDate(m.created_at)}</div>`;
+    div.className = `chat-bubble ${m.author === state.currentUser ? 'mine' : 'theirs'}${m.featured ? ' featured' : ''}`;
+    const bodyText = `<div class="bubble-text">${linkify(m.body)}</div>`;
+
+    // Read mark: only show on MY messages that the other user has read
+    const otherUserRead = m.author === state.currentUser
+      && Array.isArray(m.read_by)
+      && m.read_by.some(u => u !== state.currentUser);
+
+    // Actions: star (everyone), delete (only own + only LAST message)
+    const isLastMine = m.id === lastMineId && m.author === state.currentUser;
+    const actions = `
+      <div class="bubble-actions">
+        <button class="chat-star" data-id="${m.id}" title="${m.featured ? 'Quitar destacado' : 'Destacar'}">${m.featured ? '⭐' : '☆'}</button>
+        ${isLastMine ? `<button class="chat-del" data-id="${m.id}" title="Eliminar último mensaje">🗑</button>` : ''}
+      </div>
+    `;
+
+    div.innerHTML = `
+      ${bodyText}
+      <div class="bubble-meta">
+        ${actions}
+        <span>${escapeHtml(m.author)} · ${fmtDate(m.created_at)}</span>
+        ${otherUserRead ? '<span class="read-mark" title="Leído">✓✓</span>' : ''}
+      </div>
+    `;
     body.appendChild(div);
   }
+
   // Scroll to bottom
   requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
+}
+
+async function onChatBodyClick(e) {
+  const star = e.target.closest('button.chat-star');
+  const del = e.target.closest('button.chat-del');
+  if (star) {
+    const id = star.dataset.id;
+    const m = state.chats.find(x => x.id === id);
+    if (!m) return;
+    const next = !m.featured;
+    m.featured = next;
+    await supabase.from('chats').update({ featured: next }).eq('id', id);
+    renderChatBody();
+    return;
+  }
+  if (del) {
+    const id = del.dataset.id;
+    if (!confirm('¿Eliminar tu último mensaje?')) return;
+    await supabase.from('chats').delete().eq('id', id);
+    state.chats = state.chats.filter(x => x.id !== id);
+    renderChatBody();
+  }
 }
 
 // ============================================================
@@ -2786,10 +2928,9 @@ const movieDraft = { id: null, score: null, watched_by: [], pinned: false, image
 
 function setMovieStars(score) {
   movieDraft.score = score;
-  $$('#movie-stars button').forEach((b, i) => {
-    // index 0 is the "clear" button (data-v="0")
-    if (i === 0) return;
-    b.classList.toggle('on', i <= (score || 0));
+  $$('#movie-stars button[data-v]').forEach(b => {
+    const v = Number(b.dataset.v);
+    b.classList.toggle('on', v <= (score || 0));
   });
 }
 
@@ -2859,17 +3000,6 @@ async function openMovieEditor(m) {
   $('#movie-save').textContent = m ? 'Actualizar' : 'Guardar';
   $('#movie-delete').hidden = !m;
 
-  // Opportunistically ask the creator "¿la has visto ya?" only when creating a NEW movie
-  if (!m) {
-    setTimeout(() => {
-      const answer = confirm(`¿Ya viste "${$('#movie-title-input').value || 'esta peli'}"?\n\nOK = sí, ya la vi\nCancelar = todavía no`);
-      if (answer && !movieDraft.watched_by.includes(state.currentUser)) {
-        movieDraft.watched_by.push(state.currentUser);
-        renderWatchedCheckboxes(userNames);
-      }
-    }, 300);
-  }
-
   dlgMovie.showModal();
   setTimeout(() => $('#movie-title-input').focus(), 0);
   if (m && isUnread(m)) markSeen('movies', m);
@@ -2878,10 +3008,16 @@ async function openMovieEditor(m) {
 $('#movie-stars').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-v]');
   if (!b) return;
-  setMovieStars(Number(b.dataset.v));
+  const v = Number(b.dataset.v);
+  // Clicking the same star clears (toggle)
+  if (movieDraft.score === v) setMovieStars(null);
+  else setMovieStars(v);
 });
+$('#movie-stars-clear').addEventListener('click', () => setMovieStars(null));
 
 $('#movie-pin-toggle').addEventListener('click', () => setMoviePin(!movieDraft.pinned));
+
+$('#movie-image-pick').addEventListener('click', () => $('#movie-image-input').click());
 
 $('#movie-image-input').addEventListener('change', async (e) => {
   if (!e.target.files?.length) return;
