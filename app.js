@@ -1211,6 +1211,7 @@ function renderAlbumSection(name, photos) {
       <div class="album-menu-popover">
         ${name ? `
           <button data-action="rename"><span class="material-symbols-outlined">edit</span>Renombrar álbum</button>
+          <button data-action="merge"><span class="material-symbols-outlined">drive_file_move</span>Mover a otro álbum…</button>
           <button data-action="delete" class="danger"><span class="material-symbols-outlined">delete</span>Borrar álbum</button>
         ` : `
           <button data-action="assign"><span class="material-symbols-outlined">drive_file_move</span>Mover todas a un álbum…</button>
@@ -1253,6 +1254,23 @@ function renderAlbumSection(name, photos) {
       if (!albumName || !albumName.trim()) return;
       const ids = photos.map(p => p.id);
       const { error } = await supabase.from('photos').update({ album: albumName.trim() }).in('id', ids);
+      if (error) { alert('Error: ' + error.message); return; }
+      await router();
+    }
+    if (btn.dataset.action === 'merge') {
+      // Move/merge: all photos from THIS album go to a destination album.
+      // If destination already exists → merge. If new → like a rename to a new album.
+      const otherAlbums = Array.from(new Set(state.photos.map(p => p.album || '').filter(Boolean)))
+        .filter(a => a !== name).sort();
+      const hint = otherAlbums.length
+        ? `\n\nÁlbumes existentes: ${otherAlbums.join(', ')}\n(Si eliges uno existente, los dos álbumes se fusionan)`
+        : '\n\nNo hay otros álbumes todavía. Escribe un nombre nuevo.';
+      const dest = prompt(`Mover las ${photos.length} foto${photos.length === 1 ? '' : 's'} de "${name}" a otro álbum:${hint}`, '');
+      if (!dest || !dest.trim()) return;
+      const destName = dest.trim();
+      if (destName === name) return; // no-op
+      const ids = photos.map(p => p.id);
+      const { error } = await supabase.from('photos').update({ album: destName }).in('id', ids);
       if (error) { alert('Error: ' + error.message); return; }
       await router();
     }
