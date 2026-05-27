@@ -6,7 +6,10 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 const SUPABASE_URL = 'https://vmdsibzivcugjidtkhzt.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_ndJSJcAcexIbz9yn1zRoLw_iyeerQXy';
 const BUCKET = 'notes-images';
+const APP_ASSETS_BUCKET = 'app-assets';
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const publicAssetUrl = (path) => supabase.storage.from(APP_ASSETS_BUCKET).getPublicUrl(path).data.publicUrl;
 
 const TAG_SUGGESTIONS_NOTES = ['Viajes', 'Cuentas', 'Familia', 'Restaurantes', 'Citas', 'Recordar', 'Random'];
 const TAG_SUGGESTIONS_PLACES = ['Restaurantes', 'Museos', 'Viajes', 'Cafés', 'Bares', 'Naturaleza'];
@@ -173,11 +176,21 @@ async function loadUsersForLogin() {
   try {
     const { data, error } = await supabase.rpc('list_users');
     if (error) throw error;
-    return (data || []).map(u => u.name);
+    return data || [];
   } catch (e) {
     console.error(e);
-    return ['Jaime', 'Mayck'];
+    return [{ name: 'Jaime', avatar_path: null, background_path: null },
+            { name: 'Mayck', avatar_path: null, background_path: null }];
   }
+}
+
+async function loadDefaultLoginBg() {
+  try {
+    const { data } = await supabase.from('app_settings').select('value').eq('key', 'default_background_path').maybeSingle();
+    if (!data) return '';
+    const v = data.value;
+    return typeof v === 'string' ? v : (v?.path || '');
+  } catch { return ''; }
 }
 
 async function tryLogin(name, password) {
@@ -211,30 +224,76 @@ function hideLogin() {
 
 async function initAuthUI() {
   const picker = $('#user-picker');
-  const names = await loadUsersForLogin();
+  const heroImg = $('#auth-hero-img');
+  const heroFb = $('#auth-hero-fallback');
+  const users = await loadUsersForLogin();
+  const defaultBg = await loadDefaultLoginBg();
+
+  // Stash for the config page that lets users upload their own assets
+  state._userAssets = Object.fromEntries(users.map(u => [u.name, { avatar: u.avatar_path, bg: u.background_path }]));
+  state._defaultBg = defaultBg;
+
   picker.innerHTML = '';
-  let selected = names[0];
-  const make = (name) => {
-    const b = document.createElement('button');
-    b.textContent = name;
-    if (name === selected) b.classList.add('active');
-    b.addEventListener('click', () => {
-      selected = name;
-      $$('button', picker).forEach(x => x.classList.toggle('active', x.textContent === name));
+  let selected = null;
+
+  function setHero(bgPath) {
+    if (bgPath) {
+      heroImg.src = publicAssetUrl(bgPath);
+      heroImg.classList.add('visible');
+      heroFb.classList.add('hidden');
+    } else {
+      heroImg.classList.remove('visible');
+      heroImg.removeAttribute('src');
+      heroFb.classList.remove('hidden');
+    }
+  }
+  setHero(defaultBg);
+
+  for (const u of users) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'user-btn';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar';
+    if (u.avatar_path) {
+      const img = document.createElement('img');
+      img.src = publicAssetUrl(u.avatar_path);
+      img.alt = u.name;
+      avatar.appendChild(img);
+    } else {
+      const fb = document.createElement('span');
+      fb.className = 'avatar-fallback';
+      // Different default emoji per user position to suggest variety
+      fb.textContent = '🪼';
+      avatar.appendChild(fb);
+    }
+
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = u.name;
+
+    btn.appendChild(avatar);
+    btn.appendChild(name);
+    btn.addEventListener('click', () => {
+      selected = u.name;
+      $$('.user-btn', picker).forEach(x => x.classList.remove('is-active'));
+      btn.classList.add('is-active');
+      setHero(u.background_path || defaultBg);
+      // Focus the password field for convenience
+      setTimeout(() => $('#auth-password').focus(), 0);
     });
-    picker.appendChild(b);
-  };
-  names.forEach(make);
+    picker.appendChild(btn);
+  }
 
   const submit = async () => {
+    if (!selected) { setStatus($('#auth-status'), 'Selecciona quién eres', true); return; }
     const pwd = $('#auth-password').value;
-    console.log('[auth] submit clicked', { selected, hasPwd: !!pwd });
     if (!pwd) { setStatus($('#auth-status'), 'Escribe la clave', true); return; }
     setStatus($('#auth-status'), 'Verificando…');
     try {
       const ok = await tryLogin(selected, pwd);
       if (!ok) {
-        console.warn('[auth] verify returned false for', selected);
         setStatus($('#auth-status'), `Clave incorrecta para ${selected}`, true);
         return;
       }
@@ -1235,6 +1294,43 @@ function renderConfig(root) {
       </div>
 
       <div class="settings-card">
+        <h3>Imágenes del login</h3>
+        <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Tu avatar y la foto que aparece cuando te seleccionan. Y la foto de fondo por defecto (cuando nadie está seleccionado).</div>
+
+        <div class="asset-row">
+          <div class="asset-preview" id="cfg-avatar-preview"></div>
+          <div class="asset-info">
+            <div class="asset-label">Mi avatar</div>
+            <div class="asset-sub">Pequeña imagen circular (idealmente cuadrada)</div>
+            <label class="btn">📁 Cambiar<input type="file" accept="image/*" id="cfg-avatar-input" hidden /></label>
+            <button class="btn ghost" id="cfg-avatar-clear" type="button">Quitar</button>
+          </div>
+        </div>
+
+        <div class="asset-row">
+          <div class="asset-preview wide" id="cfg-bg-preview"></div>
+          <div class="asset-info">
+            <div class="asset-label">Mi foto del login</div>
+            <div class="asset-sub">Se ve cuando te seleccionan a ti</div>
+            <label class="btn">📁 Cambiar<input type="file" accept="image/*" id="cfg-bg-input" hidden /></label>
+            <button class="btn ghost" id="cfg-bg-clear" type="button">Quitar</button>
+          </div>
+        </div>
+
+        <div class="asset-row">
+          <div class="asset-preview wide" id="cfg-default-bg-preview"></div>
+          <div class="asset-info">
+            <div class="asset-label">Foto por defecto</div>
+            <div class="asset-sub">Cuando nadie está seleccionado (idealmente una foto de los dos)</div>
+            <label class="btn">📁 Cambiar<input type="file" accept="image/*" id="cfg-default-bg-input" hidden /></label>
+            <button class="btn ghost" id="cfg-default-bg-clear" type="button">Quitar</button>
+          </div>
+        </div>
+
+        <span class="status" id="cfg-assets-status"></span>
+      </div>
+
+      <div class="settings-card">
         <h3>Widget de fotos en el inicio</h3>
         <div class="sub" style="color:var(--text-dim);font-size:.82rem;">También puedes cambiarlo desde el icono ⋯ del widget.</div>
         <div class="opts" id="cfg-widget-mode">
@@ -1289,6 +1385,124 @@ function renderConfig(root) {
   });
 
   setupReorder();
+  setupAssetUploaders();
+}
+
+async function uploadAssetFile(file, prefix) {
+  const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+  const path = `${prefix}/${crypto.randomUUID()}.${ext}`;
+  const { error } = await supabase.storage.from(APP_ASSETS_BUCKET).upload(path, file, {
+    cacheControl: '3600', upsert: false, contentType: file.type,
+  });
+  if (error) throw error;
+  return path;
+}
+
+async function refreshUserAssetsLocal() {
+  // Re-fetch users so we have updated avatar/bg paths for the next login render
+  const users = await loadUsersForLogin();
+  state._userAssets = Object.fromEntries(users.map(u => [u.name, { avatar: u.avatar_path, bg: u.background_path }]));
+  state._defaultBg = await loadDefaultLoginBg();
+}
+
+function renderAssetPreview(el, path, isWide) {
+  el.innerHTML = '';
+  if (path) {
+    const img = document.createElement('img');
+    img.src = publicAssetUrl(path);
+    img.alt = '';
+    el.appendChild(img);
+  } else {
+    el.innerHTML = `<span class="asset-empty">${isWide ? '🖼' : '🪼'}</span>`;
+  }
+}
+
+function setupAssetUploaders() {
+  const me = state.currentUser;
+  const assets = state._userAssets?.[me] || {};
+  const defaultBg = state._defaultBg || '';
+  const statusEl = $('#cfg-assets-status');
+
+  renderAssetPreview($('#cfg-avatar-preview'), assets.avatar, false);
+  renderAssetPreview($('#cfg-bg-preview'), assets.bg, true);
+  renderAssetPreview($('#cfg-default-bg-preview'), defaultBg, true);
+
+  async function pickAndUpload(input, prefix, save) {
+    if (!input.files?.length) return;
+    const file = input.files[0];
+    input.value = '';
+    setStatus(statusEl, 'Subiendo…');
+    try {
+      const path = await uploadAssetFile(file, prefix);
+      await save(path);
+      await refreshUserAssetsLocal();
+      setStatus(statusEl, 'Guardado ✓');
+      setupAssetUploaders(); // refresh previews
+    } catch (e) {
+      console.error(e);
+      setStatus(statusEl, `Error: ${e.message || e}`, true);
+    }
+  }
+
+  $('#cfg-avatar-input').addEventListener('change', (e) => pickAndUpload(e.target, `avatars/${me}`, async (path) => {
+    const { error } = await supabase.rpc('set_user_assets', { p_name: me, p_avatar_path: path, p_background_path: null });
+    if (error) throw error;
+    state._userAssets[me].avatar = path;
+  }));
+
+  $('#cfg-bg-input').addEventListener('change', (e) => pickAndUpload(e.target, `backgrounds/${me}`, async (path) => {
+    const { error } = await supabase.rpc('set_user_assets', { p_name: me, p_avatar_path: null, p_background_path: path });
+    if (error) throw error;
+    state._userAssets[me].bg = path;
+  }));
+
+  $('#cfg-default-bg-input').addEventListener('change', (e) => pickAndUpload(e.target, 'default-bg', async (path) => {
+    await saveSetting('default_background_path', path);
+    state._defaultBg = path;
+  }));
+
+  // "Quitar" buttons reset the path in DB and remove storage file (best-effort)
+  $('#cfg-avatar-clear').addEventListener('click', async () => {
+    const current = state._userAssets[me]?.avatar;
+    if (!current) return;
+    if (!confirm('¿Quitar tu avatar?')) return;
+    setStatus(statusEl, 'Quitando…');
+    try {
+      const { error } = await supabase.rpc('set_user_assets', { p_name: me, p_avatar_path: '', p_background_path: null });
+      if (error) throw error;
+      try { await supabase.storage.from(APP_ASSETS_BUCKET).remove([current]); } catch {}
+      state._userAssets[me].avatar = null;
+      setStatus(statusEl, 'Quitado');
+      setupAssetUploaders();
+    } catch (e) { setStatus(statusEl, `Error: ${e.message || e}`, true); }
+  });
+  $('#cfg-bg-clear').addEventListener('click', async () => {
+    const current = state._userAssets[me]?.bg;
+    if (!current) return;
+    if (!confirm('¿Quitar tu imagen del login?')) return;
+    setStatus(statusEl, 'Quitando…');
+    try {
+      const { error } = await supabase.rpc('set_user_assets', { p_name: me, p_avatar_path: null, p_background_path: '' });
+      if (error) throw error;
+      try { await supabase.storage.from(APP_ASSETS_BUCKET).remove([current]); } catch {}
+      state._userAssets[me].bg = null;
+      setStatus(statusEl, 'Quitada');
+      setupAssetUploaders();
+    } catch (e) { setStatus(statusEl, `Error: ${e.message || e}`, true); }
+  });
+  $('#cfg-default-bg-clear').addEventListener('click', async () => {
+    if (!state._defaultBg) return;
+    if (!confirm('¿Quitar la foto por defecto?')) return;
+    setStatus(statusEl, 'Quitando…');
+    try {
+      const old = state._defaultBg;
+      await saveSetting('default_background_path', '');
+      try { await supabase.storage.from(APP_ASSETS_BUCKET).remove([old]); } catch {}
+      state._defaultBg = '';
+      setStatus(statusEl, 'Quitada');
+      setupAssetUploaders();
+    } catch (e) { setStatus(statusEl, `Error: ${e.message || e}`, true); }
+  });
 }
 
 function setupReorder() {

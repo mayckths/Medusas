@@ -13,19 +13,17 @@
   <body>
     <!-- ==================== LOGIN ==================== -->
     <div class="auth-overlay" id="auth-overlay" hidden>
-      <div class="auth-card">
-        <div class="auth-logo">🪼🪼</div>
-        <div class="auth-tag">Nuestro lugar seguro</div>
-        <div class="auth-form">
-          <div class="user-picker" id="user-picker">
-            <!-- buttons added dynamically -->
-          </div>
-          <div class="auth-field">
-            <input type="password" id="auth-password" placeholder="Clave" autocomplete="current-password" inputmode="numeric" maxlength="64" />
-          </div>
-          <button class="btn primary block" id="auth-submit">Entrar</button>
-          <div class="status" id="auth-status"></div>
+      <div class="auth-card-v2">
+        <div class="auth-hero" id="auth-hero">
+          <img class="auth-hero-img" id="auth-hero-img" alt="" />
+          <div class="auth-hero-fallback" id="auth-hero-fallback">🪼🪼</div>
         </div>
+        <div class="auth-pickers" id="user-picker"></div>
+        <div class="auth-field-v2">
+          <input type="password" id="auth-password" placeholder="Clave" autocomplete="current-password" inputmode="numeric" maxlength="64" />
+        </div>
+        <button class="auth-submit-link" id="auth-submit">Entrar</button>
+        <div class="status auth-status-v2" id="auth-status"></div>
       </div>
     </div>
 

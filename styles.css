@@ -38,34 +38,127 @@ body {
   font-size: 15px; line-height: 1.45; min-height: 100vh;
 }
 
-/* ======== Auth ======== */
+/* ======== Auth (v2 — based on couple mockup) ======== */
 .auth-overlay {
-  position: fixed; inset: 0; background: var(--bg);
+  position: fixed; inset: 0;
+  background: #0c0c10;
   display: grid; place-items: center; padding: 1rem; z-index: 50;
 }
-.auth-card {
-  width: 100%; max-width: 340px;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
-  padding: 1.5rem; box-shadow: 0 20px 50px rgba(0,0,0,0.08); text-align: center;
+.auth-card-v2 {
+  width: 100%; max-width: 480px;
+  padding: 0.5rem 0;
+  display: flex; flex-direction: column;
+  align-items: center;
 }
-.auth-logo { font-size: 2.5rem; line-height: 1; }
-.auth-tag { color: var(--text-dim); font-size: 0.85rem; font-style: italic; margin-top: 0.25rem; }
-.auth-form { margin-top: 1.25rem; display: flex; flex-direction: column; gap: 0.6rem; }
-.user-picker { display: flex; gap: 0.5rem; justify-content: center; }
-.user-picker button {
-  flex: 1; padding: 0.55rem; border-radius: 10px; cursor: pointer;
-  border: 1px solid var(--border); background: var(--surface-alt); color: var(--text);
-  font-size: 0.9rem;
+.auth-hero {
+  width: 100%; aspect-ratio: 5 / 4;
+  background: #1a1a20;
+  border-radius: 22px;
+  overflow: hidden;
+  position: relative;
+  margin-bottom: 1.2rem;
+  box-shadow: 0 30px 60px rgba(0,0,0,0.5);
 }
-.user-picker button:hover { background: var(--border); }
-.user-picker button.active { background: var(--accent); color: white; border-color: transparent; }
-.auth-field input {
-  width: 100%; padding: 0.65rem 0.75rem; border-radius: 10px;
-  border: 1px solid var(--border); background: var(--surface-alt); color: var(--text);
-  font-size: 1.1rem; letter-spacing: 0.4em; text-align: center; outline: none;
+.auth-hero-img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover; display: block;
+  opacity: 0; transition: opacity 0.5s ease;
 }
-.auth-field input:focus { border-color: var(--accent); background: var(--surface); }
-.btn.block { width: 100%; justify-content: center; }
+.auth-hero-img.visible { opacity: 1; }
+.auth-hero-fallback {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  font-size: 4rem; letter-spacing: -0.05em;
+  color: rgba(255, 255, 255, 0.4);
+  background: linear-gradient(135deg, #2a1d4a, #1e3a5f);
+}
+.auth-hero-fallback.hidden { display: none; }
+
+.auth-pickers {
+  display: flex; gap: 2.5rem;
+  margin-top: -3.4rem;
+  margin-bottom: 1.4rem;
+  position: relative; z-index: 2;
+  justify-content: center;
+}
+.auth-pickers .user-btn {
+  background: transparent; border: 0; padding: 0; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+}
+.auth-pickers .avatar {
+  width: 84px; height: 84px;
+  border-radius: 999px;
+  background: #1a1a20;
+  display: grid; place-items: center;
+  overflow: hidden;
+  border: 3px solid transparent;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+}
+.auth-pickers .avatar img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.auth-pickers .avatar .avatar-fallback {
+  font-size: 2.2rem; line-height: 1;
+}
+.auth-pickers .user-btn.is-active .avatar {
+  border-color: white;
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.18), 0 8px 24px rgba(0,0,0,0.4);
+  transform: scale(1.05);
+}
+.auth-pickers .user-btn:hover:not(.is-active) .avatar {
+  border-color: rgba(255,255,255,0.35);
+}
+.auth-pickers .user-btn .name {
+  color: white; font-size: 0.95rem; font-weight: 600; letter-spacing: 0.01em;
+}
+.auth-pickers .user-btn:not(.is-active) .name { color: rgba(255,255,255,0.7); }
+
+.auth-field-v2 { width: 100%; margin-bottom: 0.75rem; }
+.auth-field-v2 input {
+  width: 100%;
+  padding: 1rem 1.25rem;
+  border: 0;
+  background: rgba(255,255,255,0.08);
+  color: white;
+  font-size: 1.15rem;
+  letter-spacing: 0.55em;
+  text-align: center;
+  outline: none;
+  border-radius: 999px;
+  text-transform: uppercase;
+}
+.auth-field-v2 input::placeholder {
+  color: rgba(255,255,255,0.55);
+  letter-spacing: 0.5em;
+  font-weight: 600;
+}
+.auth-field-v2 input:focus {
+  background: rgba(255,255,255,0.12);
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.18);
+}
+
+.auth-submit-link {
+  background: transparent; border: 0; cursor: pointer;
+  color: rgba(255,255,255,0.7); font-size: 0.92rem;
+  padding: 0.5rem 1.25rem; border-radius: 999px;
+  margin-top: 0.4rem;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.auth-submit-link:hover { color: white; background: rgba(255,255,255,0.08); }
+.auth-submit-link:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.auth-status-v2 {
+  margin-top: 0.6rem; color: rgba(255,255,255,0.6);
+}
+.auth-status-v2.error { color: #ff8a80; }
+
+@media (max-width: 540px) {
+  .auth-hero { aspect-ratio: 4 / 5; border-radius: 18px; }
+  .auth-pickers { gap: 1.8rem; margin-top: -2.8rem; }
+  .auth-pickers .avatar { width: 72px; height: 72px; }
+}
 
 /* ======== Layout ======== */
 .app-shell { display: flex; min-height: 100vh; }
@@ -652,6 +745,29 @@ dialog.lightbox .lightbox-note .note-author { color: #aaa; font-style: normal; m
   border: 1px solid var(--border); background: var(--surface-alt); color: var(--text); cursor: pointer; font-size: 0.85rem;
 }
 .settings-card .opts button.active { background: var(--accent); color: white; border-color: transparent; }
+
+.asset-row {
+  display: flex; gap: 0.85rem; align-items: center;
+  padding: 0.7rem 0; border-bottom: 1px solid var(--border);
+}
+.asset-row:last-of-type { border-bottom: 0; }
+.asset-preview {
+  width: 64px; height: 64px; flex-shrink: 0;
+  border-radius: 999px; overflow: hidden;
+  background: var(--surface-alt); border: 1px solid var(--border);
+  display: grid; place-items: center;
+}
+.asset-preview.wide { width: 110px; height: 64px; border-radius: 10px; }
+.asset-preview img { width: 100%; height: 100%; object-fit: cover; }
+.asset-preview .asset-empty { color: var(--text-dim); font-size: 1.4rem; }
+.asset-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.2rem; }
+.asset-info .asset-label { font-size: 0.9rem; font-weight: 600; }
+.asset-info .asset-sub { font-size: 0.78rem; color: var(--text-dim); }
+.asset-info .btn { margin-top: 0.3rem; align-self: flex-start; }
+.asset-info > label.btn + .btn { margin-left: 0.4rem; align-self: flex-start; }
+.asset-info > label.btn { display: inline-flex; }
+.asset-info { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
+.asset-info .asset-label, .asset-info .asset-sub { flex-basis: 100%; }
 
 .settings-card .reorder-list { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.5rem; }
 .settings-card .reorder-item {
