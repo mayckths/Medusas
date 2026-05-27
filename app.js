@@ -600,6 +600,9 @@ function renderInicio(root) {
             <span class="material-symbols-outlined">notifications</span>${totalUnread ? `<span class="notif-count">${totalUnread}</span>` : ''}
           </button>
         </div>
+        <a class="notif-bell settings-shortcut" href="#/configuracion" title="Configuración" aria-label="Configuración">
+          <span class="material-symbols-outlined">settings</span>
+        </a>
       </div>
     </div>
 
