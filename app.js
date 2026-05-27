@@ -1152,8 +1152,19 @@ function renderMediaCard(m) {
 // ============================================================
 // Page: Fotos
 // ============================================================
-const ALBUM_PREVIEW_COUNT = 6;
 const SIN_ALBUM_KEY = '_sin_album_';
+const ALBUM_TILE_PX = 160 + 8; // tile width + gap
+
+// How many photos fit in one row of the album strip (based on viewport / sidebar).
+function computeAlbumPreviewCount() {
+  const w = window.innerWidth;
+  const sidebarVisible = w > 760;
+  const sidebar = sidebarVisible ? 240 : 0;
+  // page padding (main.content) + a little safety margin
+  const sidePadding = sidebarVisible ? 80 : 32;
+  const content = Math.max(320, w - sidebar - sidePadding);
+  return Math.max(2, Math.floor(content / ALBUM_TILE_PX));
+}
 
 function albumSlugFor(name) {
   return name ? encodeURIComponent(name) : SIN_ALBUM_KEY;
@@ -1220,12 +1231,24 @@ function renderAlbumDetail(root, slug) {
   const albumName = albumNameFromSlug(slug);
   const photos = state.photos.filter(p => (p.album || '') === albumName);
   const displayName = albumName || 'Sin álbum';
+  const isUnnamed = !albumName;
 
   root.innerHTML = `
     <div class="page-head">
-      <div>
+      <div class="album-detail-head" style="position:relative;">
         <a class="back-link" href="#/fotos"><span class="material-symbols-outlined">arrow_back</span> Fotos</a>
-        <h1>${albumName ? '<span class="material-symbols-outlined" style="font-size:1em;vertical-align:-3px;">folder</span> ' : ''}${escapeHtml(displayName)}</h1>
+        <h1 style="display:flex;align-items:center;gap:.45rem;">
+          ${albumName ? '<span class="material-symbols-outlined" style="font-size:1em;">folder</span>' : ''}
+          ${escapeHtml(displayName)}
+          <button class="album-menu-btn" type="button" title="Opciones del álbum">
+            <span class="material-symbols-outlined">more_horiz</span>
+          </button>
+          <div class="album-menu-popover">
+            <button data-action="rename"><span class="material-symbols-outlined">edit</span>${isUnnamed ? 'Asignar nombre…' : 'Renombrar álbum'}</button>
+            <button data-action="move"><span class="material-symbols-outlined">drive_file_move</span>Mover a otro álbum…</button>
+            <button data-action="delete" class="danger"><span class="material-symbols-outlined">delete</span>${isUnnamed ? 'Borrar estas fotos' : 'Borrar álbum'}</button>
+          </div>
+        </h1>
         <div class="sub">${photos.length} foto${photos.length === 1 ? '' : 's'}</div>
       </div>
       <div class="actions">
@@ -1241,6 +1264,8 @@ function renderAlbumDetail(root, slug) {
     $('#view-all-btn').addEventListener('click', () => openLightbox(photos, 0));
   }
 
+  wireAlbumMenu($('.album-detail-head'), albumName, photos);
+
   const grid = $('#photo-grid');
   if (!photos.length) {
     grid.innerHTML = '<div class="empty">Este álbum está vacío.</div>';
@@ -1253,15 +1278,24 @@ function renderAlbumSection(name, photos) {
   const isUnnamed = !name;
   const displayName = isUnnamed ? 'Sin álbum' : name;
   const slug = albumSlugFor(name);
-  const visible = photos.slice(0, ALBUM_PREVIEW_COUNT);
-  const more = Math.max(0, photos.length - ALBUM_PREVIEW_COUNT);
+
+  // Fit as many photos as we can into a single row of the strip.
+  // If there are extras, the last tile is a "+N" link to the album page.
+  const fits = computeAlbumPreviewCount();
+  let visible, more;
+  if (photos.length > fits) {
+    visible = photos.slice(0, fits - 1);
+    more = photos.length - visible.length;
+  } else {
+    visible = photos;
+    more = 0;
+  }
 
   const section = document.createElement('div');
   section.className = 'album-section';
   section.innerHTML = `
     <div class="album-title-row">
       <h2>${isUnnamed ? '' : '<span class="material-symbols-outlined" style="font-size:1.1em;">folder</span> '}${escapeHtml(displayName)} <span class="count">${photos.length}</span></h2>
-      <a class="album-link" href="#/fotos/album/${slug}">Ver todas →</a>
       <button class="album-menu-btn" type="button" title="Opciones del álbum">
         <span class="material-symbols-outlined">more_horiz</span>
       </button>
@@ -1283,9 +1317,16 @@ function renderAlbumSection(name, photos) {
     strip.appendChild(moreEl);
   }
 
-  // Ellipsis menu
-  const menuBtn = section.querySelector('.album-menu-btn');
-  const menu = section.querySelector('.album-menu-popover');
+  wireAlbumMenu(section, name, photos);
+  return section;
+}
+
+// Wires the ellipsis menu of an album (used in both renderAlbumSection and renderAlbumDetail).
+function wireAlbumMenu(rootEl, name, photos) {
+  const menuBtn = rootEl.querySelector('.album-menu-btn');
+  const menu = rootEl.querySelector('.album-menu-popover');
+  if (!menuBtn || !menu) return;
+  const isUnnamed = !name;
   menuBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     document.querySelectorAll('.album-menu-popover.open').forEach(el => el !== menu && el.classList.remove('open'));
@@ -1298,20 +1339,14 @@ function renderAlbumSection(name, photos) {
     if (!btn) return;
     e.stopPropagation();
     menu.classList.remove('open');
-    if (btn.dataset.action === 'rename') {
-      openAlbumEditModal('rename', name, photos);
-    }
-    if (btn.dataset.action === 'move') {
-      openAlbumEditModal('move', name, photos);
-    }
+    if (btn.dataset.action === 'rename') openAlbumEditModal('rename', name, photos);
+    if (btn.dataset.action === 'move') openAlbumEditModal('move', name, photos);
     if (btn.dataset.action === 'delete') {
       const ok = confirm(`¿Borrar ${isUnnamed ? `las ${photos.length} fotos sin álbum` : `el álbum "${name}" y sus ${photos.length} foto${photos.length === 1 ? '' : 's'}`}?\n\nEsta acción no se puede deshacer.`);
       if (!ok) return;
       await deletePhotosBatch(photos);
     }
   });
-
-  return section;
 }
 
 // ============================================================
@@ -1342,19 +1377,30 @@ function openAlbumEditModal(mode, sourceName, photos) {
     existingWrap.hidden = true;
     saveBtn.textContent = isUnnamed ? 'Asignar' : 'Renombrar';
   } else {
-    // move
-    title.textContent = isUnnamed
-      ? 'Mover fotos sin álbum'
-      : `Mover "${sourceName}" a otro álbum`;
-    sub.textContent = `${photos.length} foto${photos.length === 1 ? '' : 's'}. Si eliges un álbum existente, se fusionan.`;
+    // move (could be 'move' for whole album, or 'move-single' for one photo)
+    const isSingle = mode === 'move-single';
+    title.textContent = isSingle
+      ? 'Mover esta foto a otro álbum'
+      : (isUnnamed ? 'Mover fotos sin álbum' : `Mover "${sourceName}" a otro álbum`);
+    if (isSingle) {
+      sub.textContent = `Actualmente: ${sourceName || 'Sin álbum'}`;
+    } else {
+      sub.textContent = `${photos.length} foto${photos.length === 1 ? '' : 's'}. Si eliges un álbum existente, se fusionan.`;
+    }
     label.textContent = 'Álbum destino';
     input.value = '';
     saveBtn.textContent = 'Mover';
     const others = Array.from(new Set(state.photos.map(p => p.album || '').filter(Boolean)))
       .filter(a => a !== sourceName).sort();
-    if (others.length) {
+    // For move-single, also offer "Sin álbum" as a destination option
+    const options = isSingle && sourceName
+      ? ['', ...others]
+      : others;
+    if (options.length) {
       existingWrap.hidden = false;
-      list.innerHTML = others.map(a => `<button type="button" data-album="${escapeHtml(a)}"><span class="material-symbols-outlined">folder</span>${escapeHtml(a)}</button>`).join('');
+      list.innerHTML = options.map(a => `<button type="button" data-album="${escapeHtml(a)}">
+        <span class="material-symbols-outlined">${a ? 'folder' : 'folder_off'}</span>${escapeHtml(a || 'Sin álbum')}
+      </button>`).join('');
     } else {
       existingWrap.hidden = true;
       list.innerHTML = '';
@@ -1374,8 +1420,12 @@ $('#album-edit-list').addEventListener('click', (e) => {
 
 $('#album-edit-save').addEventListener('click', async () => {
   const newName = $('#album-edit-input').value.trim();
-  if (!newName) { setStatus($('#album-edit-status'), 'Escribe un nombre', true); return; }
-  const { source, photos } = albumEditState;
+  const { source, photos, mode } = albumEditState;
+  // Rename requires a non-empty name. Move modes allow empty (= "Sin álbum").
+  if (mode === 'rename' && !newName) {
+    setStatus($('#album-edit-status'), 'Escribe un nombre', true);
+    return;
+  }
   if (newName === source) { dlgAlbumEdit.close(); return; }
   const ids = photos.map(p => p.id);
   setStatus($('#album-edit-status'), 'Guardando…');
@@ -1385,7 +1435,13 @@ $('#album-edit-save').addEventListener('click', async () => {
     // Mutate local state so the close+rerender is instant
     for (const p of photos) p.album = newName;
     dlgAlbumEdit.close();
-    rerenderCurrentPage();
+    // If lightbox is open and we just moved its current photo, re-render lightbox too
+    if (dlgLightbox.open) {
+      lightboxState.dirty = true;
+      renderLightbox();
+    } else {
+      rerenderCurrentPage();
+    }
   } catch (e) { setStatus($('#album-edit-status'), `Error: ${e.message || e}`, true); }
 });
 
@@ -2814,6 +2870,13 @@ $('#lb-feature').addEventListener('click', async (e) => {
   lightboxState.dirty = true;
   await supabase.from('photos').update({ featured: p.featured }).eq('id', p.id);
   renderLightbox();
+});
+$('#lb-move').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const p = lightboxState.list[lightboxState.index];
+  if (!p) return;
+  // Open the album edit modal in move mode for THIS single photo
+  openAlbumEditModal('move-single', p.album || '', [p]);
 });
 // (foto notes feature retired)
 $('#lb-delete').addEventListener('click', async (e) => {

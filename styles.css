@@ -914,11 +914,11 @@ dialog.lightbox .lightbox-cap {
   color: white; text-align: center; font-size: 0.9rem;
 }
 
-.lb-nav, .lb-close, .lb-pin, .lb-feature, .lb-delete {
+.lb-nav, .lb-close, .lb-pin, .lb-feature, .lb-move, .lb-delete {
   position: absolute; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.18);
   color: white; cursor: pointer; border-radius: 999px; z-index: 2;
 }
-.lb-nav:hover, .lb-close:hover, .lb-pin:hover, .lb-feature:hover, .lb-delete:hover { background: rgba(0,0,0,0.75); }
+.lb-nav:hover, .lb-close:hover, .lb-pin:hover, .lb-feature:hover, .lb-move:hover, .lb-delete:hover { background: rgba(0,0,0,0.75); }
 .lb-nav { top: 50%; transform: translateY(-50%); width: 48px; height: 48px; font-size: 1.6rem; line-height: 1; }
 .lb-nav.prev { left: 0.6rem; }
 .lb-nav.next { right: 0.6rem; }
@@ -927,15 +927,17 @@ dialog.lightbox .lightbox-cap {
 .lb-pin.is-on { background: var(--accent); border-color: transparent; }
 .lb-feature { top: 0.6rem; right: 7.4rem; width: 38px; height: 38px; font-size: 0.95rem; }
 .lb-feature.is-on { background: var(--warn); border-color: transparent; }
+.lb-move { top: 0.6rem; right: 10.8rem; width: 38px; height: 38px; font-size: 0.95rem; }
 .lb-delete { top: 0.6rem; left: 0.6rem; width: 38px; height: 38px; font-size: 0.95rem; }
 .lb-delete:hover { background: var(--danger); }
 
 @media (max-width: 760px) {
   .lb-stage { inset: 4rem 0.6rem 5rem 0.6rem; }
   .lb-nav { width: 40px; height: 40px; }
-  .lb-pin, .lb-feature, .lb-close, .lb-delete { width: 34px; height: 34px; }
+  .lb-pin, .lb-feature, .lb-move, .lb-close, .lb-delete { width: 34px; height: 34px; }
   .lb-pin { right: 3.4rem; }
   .lb-feature { right: 6.4rem; }
+  .lb-move { right: 9.4rem; }
 }
 
 /* Filled toggle for Material Symbols (pin/star active state) */
