@@ -1305,8 +1305,6 @@ dialog.lightbox .lightbox-cap {
 .tag-color-row .btn { margin-left: auto; }
 
 .asset-row {
-
-.asset-row {
   display: flex; gap: 1rem; align-items: center;
 }
 .asset-preview {
