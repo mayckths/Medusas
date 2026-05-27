@@ -108,7 +108,7 @@
       <div class="modal-inner">
         <div class="modal-head">
           <h2 id="dlg-note-title">Nueva nota</h2>
-          <button class="close-x" data-close>✕</button>
+          <button class="close-x" data-close><span class="material-symbols-outlined">close</span></button>
         </div>
 
         <input type="text" class="title" id="note-title-input" placeholder="Título…" maxlength="200" />
@@ -148,7 +148,7 @@
       <div class="modal-inner">
         <div class="modal-head">
           <h2 id="dlg-media-title">Nueva música</h2>
-          <button class="close-x" data-close>✕</button>
+          <button class="close-x" data-close><span class="material-symbols-outlined">close</span></button>
         </div>
 
         <div class="field">
@@ -167,8 +167,8 @@
         <div class="embed-preview" id="media-preview" hidden></div>
 
         <div class="modal-toolbar">
-          <button class="btn pin-toggle" id="media-pin-toggle" type="button">📌 Anclar</button>
-          <button class="btn pin-toggle" id="media-feature-toggle" type="button">⭐ Destacar</button>
+          <button class="btn pin-toggle" id="media-pin-toggle" type="button"><span class="material-symbols-outlined">keep</span> Anclar</button>
+          <button class="btn pin-toggle" id="media-feature-toggle" type="button"><span class="material-symbols-outlined">star</span> Destacar</button>
         </div>
 
         <div class="modal-actions">
@@ -186,7 +186,7 @@
 
     <!-- ==================== Theater mode (music play) ==================== -->
     <dialog class="theater" id="dlg-theater">
-      <button class="theater-close" id="theater-close" aria-label="Cerrar">✕</button>
+      <button class="theater-close" id="theater-close" aria-label="Cerrar"><span class="material-symbols-outlined">close</span></button>
       <button class="theater-edit" id="theater-edit">Editar</button>
       <div class="theater-stage" id="theater-stage"></div>
       <div class="theater-title" id="theater-title"></div>
@@ -197,12 +197,12 @@
       <div class="modal-inner">
         <div class="modal-head">
           <h2>Subir fotos</h2>
-          <button class="close-x" data-close>✕</button>
+          <button class="close-x" data-close><span class="material-symbols-outlined">close</span></button>
         </div>
 
         <div class="dropzone" id="photo-dropzone">
           <div class="dz-inner">
-            <div class="dz-icon">📥</div>
+            <div class="dz-icon"><span class="material-symbols-outlined" style="font-size:2rem;">cloud_upload</span></div>
             <div class="dz-text">Arrastra fotos aquí o <button type="button" class="link-btn" id="photo-pick-btn">selecciónalas</button></div>
             <div class="dz-sub">PNG · JPG · GIF · WebP · SVG · hasta 5MB</div>
           </div>
@@ -238,12 +238,12 @@
 
     <!-- ==================== Lightbox ==================== -->
     <dialog class="lightbox" id="dlg-lightbox">
-      <button class="lb-nav prev" id="lb-prev" aria-label="Anterior">‹</button>
-      <button class="lb-nav next" id="lb-next" aria-label="Siguiente">›</button>
-      <button class="lb-close" id="lb-close" aria-label="Cerrar">✕</button>
-      <button class="lb-pin" id="lb-pin" aria-label="Anclar">📌</button>
-      <button class="lb-feature" id="lb-feature" aria-label="Destacar">⭐</button>
-      <button class="lb-delete" id="lb-delete" aria-label="Eliminar">🗑</button>
+      <button class="lb-nav prev" id="lb-prev" aria-label="Anterior"><span class="material-symbols-outlined">chevron_left</span></button>
+      <button class="lb-nav next" id="lb-next" aria-label="Siguiente"><span class="material-symbols-outlined">chevron_right</span></button>
+      <button class="lb-close" id="lb-close" aria-label="Cerrar"><span class="material-symbols-outlined">close</span></button>
+      <button class="lb-pin" id="lb-pin" aria-label="Anclar"><span class="material-symbols-outlined">keep</span></button>
+      <button class="lb-feature" id="lb-feature" aria-label="Destacar"><span class="material-symbols-outlined">star</span></button>
+      <button class="lb-delete" id="lb-delete" aria-label="Eliminar"><span class="material-symbols-outlined">delete</span></button>
       <div class="lb-stage" id="lb-stage">
         <img id="lightbox-img" src="" alt="" />
       </div>
@@ -255,7 +255,7 @@
       <div class="modal-inner">
         <div class="modal-head">
           <h2 id="dlg-place-title">Nuevo lugar</h2>
-          <button class="close-x" data-close>✕</button>
+          <button class="close-x" data-close><span class="material-symbols-outlined">close</span></button>
         </div>
 
         <div class="field">
@@ -303,7 +303,7 @@
       <div class="modal-inner">
         <div class="modal-head">
           <h2 id="dlg-movie-title">Nueva peli</h2>
-          <button class="close-x" data-close>✕</button>
+          <button class="close-x" data-close><span class="material-symbols-outlined">close</span></button>
         </div>
 
         <input type="text" class="title" id="movie-title-input" placeholder="Título de la peli…" maxlength="200" />
@@ -349,7 +349,7 @@
         </div>
 
         <div class="modal-toolbar">
-          <button class="btn pin-toggle" id="movie-pin-toggle" type="button">📌 Anclar</button>
+          <button class="btn pin-toggle" id="movie-pin-toggle" type="button"><span class="material-symbols-outlined">keep</span> Anclar</button>
         </div>
 
         <div class="modal-actions">

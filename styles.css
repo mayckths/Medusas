@@ -274,8 +274,40 @@ main.content { flex: 1; min-width: 0; padding: 1.5rem clamp(1rem, 4vw, 2.5rem) 4
 .material-symbols-outlined {
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   font-size: 20px; line-height: 1; vertical-align: middle;
+  user-select: none;
 }
 nav.menu a .m-icon { font-size: 20px; width: 22px; text-align: center; }
+
+/* Make sure icons inside compact buttons render at the right size */
+.close-x .material-symbols-outlined { font-size: 18px; }
+.card-actions button .material-symbols-outlined { font-size: 16px; }
+.album-menu-btn .material-symbols-outlined { font-size: 18px; }
+.album-menu-popover button .material-symbols-outlined { font-size: 18px; }
+.pw-menu-btn .material-symbols-outlined { font-size: 18px; }
+.pw-menu .pw-opt .material-symbols-outlined { font-size: 18px; }
+.theater-close .material-symbols-outlined { font-size: 18px; }
+.notif-bell .material-symbols-outlined { font-size: 20px; }
+.notif-popover .icon .material-symbols-outlined { font-size: 18px; }
+.lb-nav .material-symbols-outlined { font-size: 2rem; }
+.lb-close .material-symbols-outlined,
+.lb-pin .material-symbols-outlined,
+.lb-feature .material-symbols-outlined,
+.lb-delete .material-symbols-outlined { font-size: 20px; }
+.media-card .play-overlay .play .material-symbols-outlined { font-size: 26px; }
+.card.new-cta .plus .material-symbols-outlined { font-size: 22px; }
+.config-tabs button .material-symbols-outlined { font-size: 18px; }
+.bubble-actions .material-symbols-outlined { font-size: 16px; }
+.chat-filter .material-symbols-outlined { font-size: 14px; }
+.move-btns button .material-symbols-outlined { font-size: 16px; }
+.drag-handle .material-symbols-outlined { font-size: 18px; }
+.media-card .meta .material-symbols-outlined { font-size: 13px; }
+.movie-card .watch-badge .material-symbols-outlined { font-size: 13px; }
+.btn .material-symbols-outlined { font-size: 18px; }
+.asset-empty .material-symbols-outlined { font-size: 22px; }
+
+/* Section heads with leading icon */
+.section-head h2 .material-symbols-outlined { font-size: 1.1em; vertical-align: -3px; }
+.featured-label .material-symbols-outlined { font-size: 16px; color: #f9b233; }
 
 /* Icon-only buttons (used after note textarea, etc.) */
 .icon-btn {

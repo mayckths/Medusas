@@ -635,13 +635,13 @@ function setupPhotoWidget() {
   const albums = Array.from(new Set(state.photos.map(p => p.album || '').filter(Boolean))).sort();
 
   const menuHtml = `
-    <button class="pw-menu-btn" id="pw-menu-btn" title="Opciones" aria-label="Opciones">⋯</button>
+    <button class="pw-menu-btn" id="pw-menu-btn" title="Opciones" aria-label="Opciones"><span class="material-symbols-outlined">more_horiz</span></button>
     <div class="pw-menu" id="pw-menu">
       <div class="pw-section">Qué mostrar</div>
-      <button class="pw-opt ${cfg.mode === 'featured' ? 'active' : ''}" data-mode="featured">⭐ Solo destacadas</button>
-      <button class="pw-opt ${cfg.mode === 'all' ? 'active' : ''}" data-mode="all">📸 Todas las fotos</button>
+      <button class="pw-opt ${cfg.mode === 'featured' ? 'active' : ''}" data-mode="featured"><span class="material-symbols-outlined">star</span> Solo destacadas</button>
+      <button class="pw-opt ${cfg.mode === 'all' ? 'active' : ''}" data-mode="all"><span class="material-symbols-outlined">photo_library</span> Todas las fotos</button>
       ${albums.length ? `<div class="pw-section">Álbumes</div>${albums.map(a => `
-        <button class="pw-opt ${cfg.mode === 'album:'+a ? 'active' : ''}" data-mode="album:${escapeHtml(a)}">📁 ${escapeHtml(a)}</button>
+        <button class="pw-opt ${cfg.mode === 'album:'+a ? 'active' : ''}" data-mode="album:${escapeHtml(a)}"><span class="material-symbols-outlined">folder</span> ${escapeHtml(a)}</button>
       `).join('')}` : ''}
       <div class="pw-section">Intervalo</div>
       <div class="pw-row">
@@ -652,17 +652,23 @@ function setupPhotoWidget() {
     </div>`;
 
   if (!pool.length) {
-    root.innerHTML = `<div class="pw-empty">Aún no hay fotos para mostrar. Agrega algunas en 📸.</div>${menuHtml}`;
+    root.innerHTML = `<div class="pw-empty">Aún no hay fotos para mostrar. Agrégalas en la sección de fotos.</div>${menuHtml}`;
     wirePwMenu(root, cfg);
     return;
   }
+
+  const modeLabel = cfg.mode === 'featured'
+    ? '<span class="material-symbols-outlined" style="font-size:13px;vertical-align:-2px;">star</span> destacadas'
+    : (cfg.mode && cfg.mode.startsWith('album:')
+        ? `<span class="material-symbols-outlined" style="font-size:13px;vertical-align:-2px;">folder</span> ${escapeHtml(cfg.mode.slice(6))}`
+        : 'todas');
 
   root.innerHTML = `
     <div class="pw-stage" id="pw-stage">
       ${pool.map((p, i) =>
         `<img src="${escapeHtml(publicImageUrl(p.storage_path))}" alt="${escapeHtml(p.caption || '')}" class="${i === 0 ? 'active' : ''}" loading="lazy" />`
       ).join('')}
-      <div class="pw-dots">${cfg.mode === 'featured' ? '⭐ destacadas' : (cfg.mode && cfg.mode.startsWith('album:') ? '📁 ' + cfg.mode.slice(6) : 'todas')} · ${pool.length}</div>
+      <div class="pw-dots">${modeLabel} · ${pool.length}</div>
       ${pool[0].caption ? `<div class="pw-cap" id="pw-cap">${escapeHtml(pool[0].caption)}</div>` : '<div class="pw-cap" id="pw-cap" hidden></div>'}
     </div>
     ${menuHtml}
@@ -789,7 +795,7 @@ function renderNewCtaTile(label, onOpen) {
   tile.setAttribute('role', 'button');
   tile.setAttribute('tabindex', '0');
   tile.setAttribute('aria-label', label);
-  tile.innerHTML = `<div class="plus" aria-hidden="true">＋</div><div class="label">${escapeHtml(label)}</div>`;
+  tile.innerHTML = `<div class="plus" aria-hidden="true"><span class="material-symbols-outlined">add</span></div><div class="label">${escapeHtml(label)}</div>`;
   tile.addEventListener('click', onOpen);
   tile.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } });
   return tile;
@@ -933,19 +939,19 @@ function renderMusica(root) {
       </div>
     </div>
     ${featured.length ? `
-      <div class="featured-label">⭐ Destacadas</div>
+      <div class="featured-label"><span class="material-symbols-outlined">star</span> Destacadas</div>
       <div class="featured-strip" id="featured-media-strip"></div>
     ` : ''}
     <div class="media-section" data-cat="musica">
-      <div class="section-head"><h2>🎵 Música <span class="count">${buckets.musica.length}</span></h2></div>
+      <div class="section-head"><h2><span class="material-symbols-outlined">music_note</span> Música <span class="count">${buckets.musica.length}</span></h2></div>
       <div class="grid-cards" data-grid="musica"></div>
     </div>
     <div class="media-section" data-cat="playlists">
-      <div class="section-head"><h2>🎧 Playlists <span class="count">${buckets.playlists.length}</span></h2></div>
+      <div class="section-head"><h2><span class="material-symbols-outlined">queue_music</span> Playlists <span class="count">${buckets.playlists.length}</span></h2></div>
       <div class="grid-cards" data-grid="playlists"></div>
     </div>
     <div class="media-section" data-cat="videos">
-      <div class="section-head"><h2>▶️ Videos <span class="count">${buckets.videos.length}</span></h2></div>
+      <div class="section-head"><h2><span class="material-symbols-outlined">play_circle</span> Videos <span class="count">${buckets.videos.length}</span></h2></div>
       <div class="grid-cards" data-grid="videos"></div>
     </div>
   `;
@@ -984,8 +990,8 @@ function renderMediaCard(m) {
   const actions = document.createElement('div');
   actions.className = 'card-actions';
   actions.innerHTML = `
-    <button title="Editar" data-action="edit">✎</button>
-    <button title="${m.pinned ? 'Desanclar' : 'Anclar'}" class="${m.pinned ? 'is-on' : ''}" data-action="pin">📌</button>
+    <button title="Editar" data-action="edit"><span class="material-symbols-outlined">edit</span></button>
+    <button title="${m.pinned ? 'Desanclar' : 'Anclar'}" class="${m.pinned ? 'is-on' : ''}" data-action="pin"><span class="material-symbols-outlined">keep</span></button>
   `;
   actions.addEventListener('click', async (e) => {
     e.stopPropagation();
@@ -1011,12 +1017,12 @@ function renderMediaCard(m) {
   } else {
     const ph = document.createElement('div');
     ph.className = 'placeholder';
-    ph.textContent = m.kind === 'spotify' ? '🎵' : '▶️';
+    ph.innerHTML = `<span class="material-symbols-outlined" style="font-size:3rem;">${m.kind === 'spotify' ? 'music_note' : 'play_circle'}</span>`;
     thumbWrap.appendChild(ph);
   }
   const overlay = document.createElement('div');
   overlay.className = 'play-overlay';
-  overlay.innerHTML = '<div class="play">▶</div>';
+  overlay.innerHTML = '<div class="play"><span class="material-symbols-outlined">play_arrow</span></div>';
   thumbWrap.appendChild(overlay);
   card.appendChild(thumbWrap);
 
@@ -1033,8 +1039,9 @@ function renderMediaCard(m) {
   }
   const meta = document.createElement('div');
   meta.className = 'meta';
-  const kindLabel = m.kind === 'spotify' ? '🟢 Spotify' : '▶️ YouTube';
-  meta.innerHTML = `<span>${fmtDate(m.created_at)} · ${escapeHtml(m.created_by || '?')}${m.featured ? ' · ⭐' : ''}</span><span class="badge">${kindLabel}</span>`;
+  const kindLabel = m.kind === 'spotify' ? 'Spotify' : 'YouTube';
+  const featuredMark = m.featured ? '<span class="material-symbols-outlined" style="font-size:14px;vertical-align:-2px;color:#f9b233;">star</span>' : '';
+  meta.innerHTML = `<span>${fmtDate(m.created_at)} · ${escapeHtml(m.created_by || '?')} ${featuredMark}</span><span class="badge">${kindLabel}</span>`;
   body.appendChild(meta);
   card.appendChild(body);
 
@@ -1070,7 +1077,7 @@ function renderFotos(root) {
       </div>
     </div>
     ${featured.length ? `
-      <div class="featured-label">⭐ Destacadas</div>
+      <div class="featured-label"><span class="material-symbols-outlined">star</span> Destacadas</div>
       <div class="featured-strip" id="featured-strip"></div>
     ` : ''}
     <div class="photo-grid" id="photo-grid"></div>
@@ -1115,7 +1122,9 @@ function renderFotos(root) {
 function renderAlbumSection(name, photos) {
   const section = document.createElement('div');
   section.className = 'album-section';
-  const titleText = name ? `📁 ${escapeHtml(name)}` : 'Sin álbum';
+  const titleText = name
+    ? `<span class="material-symbols-outlined" style="font-size:1.15em;vertical-align:-3px;">folder</span> ${escapeHtml(name)}`
+    : 'Sin álbum';
   section.innerHTML = `
     <div class="album-title-row">
       <h2>${titleText}</h2>
@@ -1206,8 +1215,8 @@ function renderPhoto(p, list, index) {
 
   const indicator = document.createElement('div');
   indicator.className = 'photo-indicator';
-  if (p.pinned) indicator.innerHTML += `<span title="Anclada">📌</span>`;
-  if (p.featured) indicator.innerHTML += `<span title="Destacada">⭐</span>`;
+  if (p.pinned) indicator.innerHTML += `<span title="Anclada"><span class="material-symbols-outlined" style="font-size:14px;">keep</span></span>`;
+  if (p.featured) indicator.innerHTML += `<span title="Destacada"><span class="material-symbols-outlined" style="font-size:14px;">star</span></span>`;
   if (indicator.children.length) tile.appendChild(indicator);
 
   if (isUnread(p)) {
@@ -1479,22 +1488,22 @@ function renderPlaceCard(p) {
 // Page: Configuración
 // ============================================================
 const SECTION_LABELS = {
-  notes: '📝 Notas recientes',
-  media: '🎵 Música reciente',
-  photos: '📸 Fotos recientes',
-  movies: '🎬 Pelis recientes',
-  places: '📍 Lugares recientes',
+  notes: 'Notas recientes',
+  media: 'Música reciente',
+  photos: 'Fotos recientes',
+  movies: 'Pelis recientes',
+  places: 'Lugares recientes',
 };
 
 let configActiveTab = 'clave';
 
 function renderConfig(root) {
   const tabs = [
-    { id: 'clave', label: '🔑 Contraseña' },
-    { id: 'dashboard', label: '🏠 Dashboard' },
-    { id: 'login', label: '🪼 Login' },
-    { id: 'tags', label: '🏷 Etiquetas' },
-    { id: 'logout', label: '↩︎ Cerrar sesión' },
+    { id: 'clave', icon: 'key', label: 'Contraseña' },
+    { id: 'dashboard', icon: 'home', label: 'Dashboard' },
+    { id: 'login', icon: 'lock_open', label: 'Login' },
+    { id: 'tags', icon: 'sell', label: 'Etiquetas' },
+    { id: 'logout', icon: 'logout', label: 'Cerrar sesión' },
   ];
 
   root.innerHTML = `
@@ -1506,7 +1515,7 @@ function renderConfig(root) {
     </div>
     <div class="config-layout">
       <div class="config-tabs" id="config-tabs">
-        ${tabs.map(t => `<button data-tab="${t.id}" class="${configActiveTab === t.id ? 'active' : ''}">${t.label}</button>`).join('')}
+        ${tabs.map(t => `<button data-tab="${t.id}" class="${configActiveTab === t.id ? 'active' : ''}"><span class="material-symbols-outlined">${t.icon}</span> ${t.label}</button>`).join('')}
       </div>
       <div class="settings-grid" id="config-body"></div>
     </div>
@@ -1571,7 +1580,7 @@ function renderConfigLogout(body) {
       <h3>Cerrar sesión</h3>
       <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Tendrás que volver a meter la clave la próxima vez.</div>
       <div class="row" style="margin-top:.7rem;">
-        <button class="btn primary" id="cfg-logout">↩︎ Cerrar sesión ahora</button>
+        <button class="btn primary" id="cfg-logout"><span class="material-symbols-outlined">logout</span> Cerrar sesión ahora</button>
       </div>
     </div>
   `;
@@ -1589,11 +1598,11 @@ function renderConfigDashboard(body) {
       <div class="reorder-list" id="cfg-reorder">
         ${order.map((s, i) => `
           <div class="reorder-item" draggable="true" data-sec="${s}">
-            <span class="drag-handle" title="Arrastrar">⋮⋮</span>
+            <span class="drag-handle" title="Arrastrar"><span class="material-symbols-outlined">drag_indicator</span></span>
             <span class="label">${SECTION_LABELS[s] || s}</span>
             <span class="move-btns">
-              <button data-dir="up" ${i === 0 ? 'disabled' : ''} title="Subir">↑</button>
-              <button data-dir="down" ${i === order.length - 1 ? 'disabled' : ''} title="Bajar">↓</button>
+              <button data-dir="up" ${i === 0 ? 'disabled' : ''} title="Subir"><span class="material-symbols-outlined">arrow_upward</span></button>
+              <button data-dir="down" ${i === order.length - 1 ? 'disabled' : ''} title="Bajar"><span class="material-symbols-outlined">arrow_downward</span></button>
             </span>
           </div>
         `).join('')}
@@ -1605,8 +1614,8 @@ function renderConfigDashboard(body) {
       <h3>Widget de fotos en el inicio</h3>
       <div class="sub" style="color:var(--text-dim);font-size:.82rem;">También puedes cambiarlo desde el icono ⋯ del widget.</div>
       <div class="opts" id="cfg-widget-mode">
-        <button data-mode="featured" class="${cfg.mode === 'featured' ? 'active' : ''}">⭐ Solo destacadas</button>
-        <button data-mode="all" class="${cfg.mode === 'all' ? 'active' : ''}">Todas las fotos</button>
+        <button data-mode="featured" class="${cfg.mode === 'featured' ? 'active' : ''}"><span class="material-symbols-outlined">star</span> Solo destacadas</button>
+        <button data-mode="all" class="${cfg.mode === 'all' ? 'active' : ''}"><span class="material-symbols-outlined">photo_library</span> Todas las fotos</button>
       </div>
       <div class="row" style="margin-top:.7rem;">
         <label style="font-size:.8rem;color:var(--text-dim);">Intervalo (segundos)</label>
@@ -1766,7 +1775,7 @@ function renderAssetPreview(el, path, isWide) {
     img.alt = '';
     el.appendChild(img);
   } else {
-    el.innerHTML = `<span class="asset-empty">${isWide ? '🖼' : '🪼'}</span>`;
+    el.innerHTML = `<span class="asset-empty"><span class="material-symbols-outlined">${isWide ? 'image' : 'person'}</span></span>`;
   }
 }
 
@@ -2144,13 +2153,13 @@ function setMediaPin(p) {
   mediaDraft.pinned = p;
   const b = $('#media-pin-toggle');
   b.classList.toggle('is-pinned', p);
-  b.textContent = p ? '📌 Anclada' : '📌 Anclar';
+  b.innerHTML = `<span class="material-symbols-outlined">keep</span> ${p ? 'Anclada' : 'Anclar'}`;
 }
 function setMediaFeatured(p) {
   mediaDraft.featured = p;
   const b = $('#media-feature-toggle');
   b.classList.toggle('is-pinned', p);
-  b.textContent = p ? '⭐ Destacada' : '⭐ Destacar';
+  b.innerHTML = `<span class="material-symbols-outlined">star</span> ${p ? 'Destacada' : 'Destacar'}`;
 }
 
 function updateMediaPreview() {
@@ -2690,7 +2699,7 @@ function setupChatWidget() {
     filter.className = 'chat-filter';
     filter.innerHTML = `
       <button data-f="all" class="${chatFilter === 'all' ? 'active' : ''}">Todos</button>
-      <button data-f="featured" class="${chatFilter === 'featured' ? 'active' : ''}">⭐</button>
+      <button data-f="featured" class="${chatFilter === 'featured' ? 'active' : ''}"><span class="material-symbols-outlined">star</span></button>
     `;
     head.appendChild(filter);
     filter.addEventListener('click', (e) => {
@@ -2807,9 +2816,10 @@ function renderChatBody() {
       && m.read_by.some(u => u !== state.currentUser);
 
     // Actions: star toggle (destacar protege del auto-borrado)
+    const starName = m.featured ? 'star' : 'star_border';
     const actions = `
       <div class="bubble-actions">
-        <button class="chat-star" data-id="${m.id}" title="${m.featured ? 'Quitar destacado' : 'Destacar — se queda guardado'}">${m.featured ? '⭐' : '☆'}</button>
+        <button class="chat-star" data-id="${m.id}" title="${m.featured ? 'Quitar destacado' : 'Destacar — se queda guardado'}"><span class="material-symbols-outlined">${starName}</span></button>
       </div>
     `;
 
@@ -2818,7 +2828,7 @@ function renderChatBody() {
       <div class="bubble-meta">
         ${actions}
         <span>${escapeHtml(m.author)} · ${fmtDate(m.created_at)}</span>
-        ${otherUserRead ? '<span class="read-mark" title="Leído">✓✓</span>' : ''}
+        ${otherUserRead ? '<span class="read-mark" title="Leído"><span class="material-symbols-outlined" style="font-size:14px;">done_all</span></span>' : ''}
       </div>
     `;
     body.appendChild(div);
@@ -2870,12 +2880,12 @@ function renderNotifList() {
 
   const tagItem = (item, kind, icon, route, label) => ({ ...item, _kind: kind, _icon: icon, _route: route, _label: label });
 
+  const mi = (n) => `<span class="material-symbols-outlined" style="font-size:18px;">${n}</span>`;
   const all = [
-    // Private notes never appear in notifications
-    ...state.notes.filter(n => n.visibility !== 'private').map(n => tagItem(n, 'note', '📝', '#/notas', n.title)),
-    ...state.media.map(m => tagItem(m, 'media', m.kind === 'spotify' ? '🎵' : '▶️', '#/musica', m.title)),
-    ...state.photos.map(p => tagItem(p, 'photo', '📸', '#/fotos', p.caption || 'Foto sin título')),
-    ...state.movies.map(m => tagItem(m, 'movie', '🎬', '#/pelis', m.title)),
+    ...state.notes.filter(n => n.visibility !== 'private').map(n => tagItem(n, 'note', mi('edit_note'), '#/notas', n.title)),
+    ...state.media.map(m => tagItem(m, 'media', mi(m.kind === 'spotify' ? 'music_note' : 'play_circle'), '#/musica', m.title)),
+    ...state.photos.map(p => tagItem(p, 'photo', mi('photo_library'), '#/fotos', p.caption || 'Foto sin título')),
+    ...state.movies.map(m => tagItem(m, 'movie', mi('movie'), '#/pelis', m.title)),
   ];
 
   const unread = all.filter(it => isUnread(it));
@@ -2949,7 +2959,7 @@ function renderMovieCard(m) {
 
   const actions = document.createElement('div');
   actions.className = 'card-actions';
-  actions.innerHTML = `<button title="${m.pinned ? 'Desanclar' : 'Anclar'}" class="${m.pinned ? 'is-on' : ''}" data-action="pin">📌</button>`;
+  actions.innerHTML = `<button title="${m.pinned ? 'Desanclar' : 'Anclar'}" class="${m.pinned ? 'is-on' : ''}" data-action="pin"><span class="material-symbols-outlined">keep</span></button>`;
   actions.addEventListener('click', async (e) => {
     e.stopPropagation();
     if (!e.target.closest('button[data-action="pin"]')) return;
@@ -2970,7 +2980,7 @@ function renderMovieCard(m) {
   } else {
     const np = document.createElement('div');
     np.className = 'no-poster';
-    np.textContent = '🎬';
+    np.innerHTML = '<span class="material-symbols-outlined" style="font-size:3rem;">movie</span>';
     poster.appendChild(np);
   }
   if (m.platform) {
@@ -2984,9 +2994,10 @@ function renderMovieCard(m) {
   if (watched.length) {
     const wb = document.createElement('div');
     wb.className = 'watch-badge';
+    const check = '<span class="material-symbols-outlined seen" style="font-size:14px;">check</span>';
     wb.innerHTML = watched.length === 2
-      ? '<span class="seen">✓</span> los dos'
-      : `<span class="seen">✓</span> ${escapeHtml(watched[0])}`;
+      ? `${check} los dos`
+      : `${check} ${escapeHtml(watched[0])}`;
     poster.appendChild(wb);
   }
   card.appendChild(poster);
@@ -3039,7 +3050,7 @@ function setMoviePin(p) {
   movieDraft.pinned = p;
   const b = $('#movie-pin-toggle');
   b.classList.toggle('is-pinned', p);
-  b.textContent = p ? '📌 Anclada' : '📌 Anclar';
+  b.innerHTML = `<span class="material-symbols-outlined">keep</span> ${p ? 'Anclada' : 'Anclar'}`;
 }
 
 function renderMovieImage() {
