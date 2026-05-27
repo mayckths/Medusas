@@ -1209,9 +1209,13 @@ function renderAlbumSection(name, photos) {
         <span class="material-symbols-outlined">more_horiz</span>
       </button>
       <div class="album-menu-popover">
-        ${name
-          ? `<button data-action="rename"><span class="material-symbols-outlined">edit</span>Renombrar álbum</button>`
-          : `<button data-action="assign"><span class="material-symbols-outlined">drive_file_move</span>Mover todas a un álbum…</button>`}
+        ${name ? `
+          <button data-action="rename"><span class="material-symbols-outlined">edit</span>Renombrar álbum</button>
+          <button data-action="delete" class="danger"><span class="material-symbols-outlined">delete</span>Borrar álbum</button>
+        ` : `
+          <button data-action="assign"><span class="material-symbols-outlined">drive_file_move</span>Mover todas a un álbum…</button>
+          <button data-action="delete-loose" class="danger"><span class="material-symbols-outlined">delete</span>Borrar todas estas fotos</button>
+        `}
       </div>
     </div>
     <div class="photo-grid"></div>
@@ -1252,9 +1256,35 @@ function renderAlbumSection(name, photos) {
       if (error) { alert('Error: ' + error.message); return; }
       await router();
     }
+    if (btn.dataset.action === 'delete') {
+      const ok = confirm(`¿Borrar el álbum "${name}" y sus ${photos.length} foto${photos.length === 1 ? '' : 's'}?\n\nEsta acción no se puede deshacer.`);
+      if (!ok) return;
+      await deletePhotosBatch(photos);
+    }
+    if (btn.dataset.action === 'delete-loose') {
+      const ok = confirm(`¿Borrar las ${photos.length} foto${photos.length === 1 ? '' : 's'} sin álbum?\n\nEsta acción no se puede deshacer.`);
+      if (!ok) return;
+      await deletePhotosBatch(photos);
+    }
   });
 
   return section;
+}
+
+async function deletePhotosBatch(photos) {
+  if (!photos.length) return;
+  const ids = photos.map(p => p.id);
+  const paths = photos.map(p => p.storage_path).filter(Boolean);
+  try {
+    if (paths.length) {
+      try { await supabase.storage.from(BUCKET).remove(paths); } catch (e) { console.warn('storage cleanup failed', e); }
+    }
+    const { error } = await supabase.from('photos').delete().in('id', ids);
+    if (error) throw error;
+    await router();
+  } catch (e) {
+    alert('Error al borrar: ' + (e.message || e));
+  }
 }
 
 function renderAlbumTile(name, photos) {
