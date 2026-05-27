@@ -1305,28 +1305,33 @@ dialog.lightbox .lightbox-cap {
 .back-link:hover { color: var(--text); }
 .back-link .material-symbols-outlined { font-size: 18px; }
 .album-section .album-title-row .count { color: var(--text-dim); font-size: 0.78rem; }
-.album-section .album-menu-btn {
+.album-menu-btn {
+  background: var(--surface-alt); border: 1px solid var(--border); border-radius: 8px;
+  width: 30px; height: 30px; cursor: pointer; color: var(--text-dim);
+  display: inline-grid; place-items: center; padding: 0;
   margin-left: auto;
-  background: var(--surface-alt); border: 1px solid var(--border); border-radius: 6px;
-  width: 28px; height: 28px; cursor: pointer; color: var(--text-dim);
-  display: grid; place-items: center; padding: 0;
 }
-.album-section .album-menu-btn:hover { color: var(--text); background: var(--border); }
-.album-section .album-menu-popover {
-  position: absolute; top: calc(100% + 4px); right: 0;
-  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-  min-width: 180px; padding: 0.3rem;
-  display: none; flex-direction: column; gap: 0.1rem; z-index: 20;
+.album-menu-btn:hover { color: var(--text); background: var(--border); }
+.album-menu-popover {
+  position: absolute; top: calc(100% + 6px); right: 0;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.4);
+  min-width: 220px; padding: 0.35rem;
+  display: none; flex-direction: column; gap: 0.1rem; z-index: 50;
 }
-.album-section .album-menu-popover.open { display: flex; }
-.album-section .album-menu-popover button {
-  background: transparent; border: 0; cursor: pointer; padding: 0.45rem 0.6rem;
-  border-radius: 6px; text-align: left; font-size: 0.85rem; color: var(--text);
-  display: flex; align-items: center; gap: 0.45rem;
+.album-menu-popover.open { display: flex; }
+.album-menu-popover button {
+  background: transparent; border: 0; cursor: pointer; padding: 0.55rem 0.7rem;
+  border-radius: 8px; text-align: left; font-size: 0.88rem; color: var(--text);
+  display: flex; align-items: center; gap: 0.5rem; font-weight: 400;
 }
-.album-section .album-menu-popover button:hover { background: var(--surface-alt); }
-.album-section .album-menu-popover button.danger { color: var(--danger); }
+.album-menu-popover button:hover { background: var(--surface-alt); }
+.album-menu-popover button.danger { color: var(--danger); }
+.album-menu-popover button .material-symbols-outlined { font-size: 18px; }
+
+/* Album detail page: the menu lives inside the h1, give it positioning context */
+.album-detail-head h1 { position: relative; }
+.album-detail-head h1 .album-menu-btn { font-size: 0.6em; vertical-align: middle; }
 
 .album-picker {
   display: flex; gap: 0.4rem; align-items: center;
