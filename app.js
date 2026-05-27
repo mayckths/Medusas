@@ -435,6 +435,10 @@ async function loadAll() {
   state.chats = chats || [];
   state.postits = postits || [];
   updateSidebarBadges();
+  // Seed the ambient blurred backdrop from a featured photo (or any photo)
+  // so it's already there even on non-dashboard routes
+  const ambient = state.photos.find(p => p.featured) || state.photos[0];
+  if (ambient) setBgPhoto(ambient.storage_path);
   // Background: backfill missing Spotify/YouTube thumbnails
   backfillMediaThumbnails();
 }
@@ -723,6 +727,29 @@ function totalUnreadCount() {
 // ============================================================
 // Rotating photo widget on dashboard
 // ============================================================
+// ----- Ambient blurred backdrop -----
+// Two stacked <img> layers crossfade to avoid jarring transitions.
+let bgPhotoActiveLayer = 0;
+let bgPhotoLastPath = null;
+function setBgPhoto(path) {
+  if (!path || path === bgPhotoLastPath) return;
+  bgPhotoLastPath = path;
+  const layers = [$('#bg-photo-a'), $('#bg-photo-b')];
+  if (!layers[0] || !layers[1]) return;
+  const next = (bgPhotoActiveLayer + 1) % 2;
+  const nextEl = layers[next];
+  const url = publicImageUrl(path);
+  // Preload so the crossfade only happens once the image is ready
+  const probe = new Image();
+  probe.onload = () => {
+    nextEl.src = url;
+    nextEl.classList.add('active');
+    layers[bgPhotoActiveLayer].classList.remove('active');
+    bgPhotoActiveLayer = next;
+  };
+  probe.src = url;
+}
+
 let photoWidgetTimer = null;
 function setupPhotoWidget() {
   const root = $('#photo-widget');
@@ -793,6 +820,9 @@ function setupPhotoWidget() {
 
   wirePwMenu(root, cfg);
 
+  // Sync the ambient blurred backdrop with the first photo
+  setBgPhoto(pool[0].storage_path);
+
   if (pool.length > 1) {
     let i = 0;
     const cap = $('.pw-cap', root);
@@ -806,6 +836,8 @@ function setupPhotoWidget() {
         if (pool[i].caption) { cap.textContent = pool[i].caption; cap.hidden = false; }
         else { cap.hidden = true; }
       }
+      // Crossfade the ambient backdrop to match
+      setBgPhoto(pool[i].storage_path);
     }, cfg.interval_ms || 6000);
   }
 }
