@@ -243,6 +243,32 @@
       </div>
     </dialog>
 
+    <!-- ==================== Album edit (rename / move) ==================== -->
+    <dialog class="modal" id="dlg-album-edit">
+      <div class="modal-inner">
+        <div class="modal-head">
+          <h2 id="album-edit-title">Editar álbum</h2>
+          <button class="close-x" data-close><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div class="sub" id="album-edit-sub" style="color:var(--text-dim);font-size:.82rem;margin-bottom:.6rem;"></div>
+        <div class="field">
+          <label for="album-edit-input" id="album-edit-label">Nombre</label>
+          <input type="text" id="album-edit-input" maxlength="100" />
+        </div>
+        <div class="field" id="album-edit-existing" hidden>
+          <label>O elige uno existente</label>
+          <div class="album-suggestions" id="album-edit-list"></div>
+        </div>
+        <div class="modal-actions">
+          <div class="left"><span class="status" id="album-edit-status"></span></div>
+          <div class="right">
+            <button class="btn ghost" data-close>Cancelar</button>
+            <button class="btn primary" id="album-edit-save">Guardar</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
     <!-- ==================== Lightbox ==================== -->
     <dialog class="lightbox" id="dlg-lightbox">
       <button class="lb-nav prev" id="lb-prev" aria-label="Anterior"><span class="material-symbols-outlined">chevron_left</span></button>

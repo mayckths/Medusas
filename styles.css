@@ -1242,12 +1242,66 @@ dialog.lightbox .lightbox-cap {
 /* Album titles on Photos page */
 .album-section { margin-bottom: 1.4rem; }
 .album-section .album-title-row {
-  display: flex; align-items: baseline; gap: 0.45rem; margin-bottom: 0.5rem;
+  display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.5rem;
   position: relative;
 }
+.album-section .album-link {
+  color: var(--accent); text-decoration: none; font-size: 0.82rem; margin-left: auto;
+}
+.album-section .album-link:hover { text-decoration: underline; }
+
+/* Horizontal strip of photo previews per album */
+.album-strip {
+  display: flex; flex-wrap: nowrap;
+  gap: 0.5rem; overflow-x: auto; padding: 0 0 0.5rem;
+  scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
+}
+.album-strip .photo {
+  flex: 0 0 160px; width: 160px; height: 160px;
+  aspect-ratio: auto;
+  scroll-snap-align: start;
+}
+.album-strip .more-photos {
+  flex: 0 0 160px; width: 160px; height: 160px;
+  border-radius: 8px; background: var(--surface-alt);
+  border: 1px dashed var(--border);
+  display: grid; place-items: center;
+  text-decoration: none;
+  color: var(--text-dim);
+  scroll-snap-align: start;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.album-strip .more-photos:hover {
+  border-color: var(--accent); color: var(--accent); border-style: solid;
+}
+.album-strip .more-photos .more-count { font-size: 1.4rem; font-weight: 600; }
+
+/* Album suggestions inside the edit modal */
+.album-suggestions {
+  display: flex; flex-wrap: wrap; gap: 0.35rem;
+}
+.album-suggestions button {
+  background: var(--surface-alt); border: 1px solid var(--border); color: var(--text);
+  padding: 0.35rem 0.7rem; border-radius: 999px; cursor: pointer; font-size: 0.82rem;
+  display: inline-flex; align-items: center; gap: 0.3rem;
+}
+.album-suggestions button:hover { border-color: var(--accent); }
+.album-suggestions button .material-symbols-outlined { font-size: 14px; }
+
 .album-section .album-title-row h2 {
   margin: 0; font-size: 1.05rem; letter-spacing: -0.01em;
+  display: inline-flex; align-items: center; gap: 0.4rem;
 }
+.album-section .album-title-row h2 .count {
+  color: var(--text-dim); font-size: 0.78rem; font-weight: 400; margin-left: 0.25rem;
+}
+.back-link {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  color: var(--text-dim); text-decoration: none; font-size: 0.85rem;
+  margin-bottom: 0.4rem;
+}
+.back-link:hover { color: var(--text); }
+.back-link .material-symbols-outlined { font-size: 18px; }
 .album-section .album-title-row .count { color: var(--text-dim); font-size: 0.78rem; }
 .album-section .album-menu-btn {
   margin-left: auto;

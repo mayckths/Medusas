@@ -519,12 +519,34 @@ async function router() {
       break;
     case hash === '#/musica': renderMusica(content); break;
     case hash === '#/fotos': renderFotos(content); break;
+    case hash.startsWith('#/fotos/album/'): renderAlbumDetail(content, hash.slice('#/fotos/album/'.length)); break;
     case hash === '#/pelis': renderPelis(content); break;
     case hash === '#/configuracion': renderConfig(content); break;
     default: location.hash = '#/inicio';
   }
 }
 window.addEventListener('hashchange', router);
+
+// Re-render the current page WITHOUT going through router/loadAll.
+// Used when the only change is local state (e.g. after closing the lightbox
+// where pin/feature/delete already mutated state.photos in place).
+function rerenderCurrentPage() {
+  const content = $('#content');
+  if (!content) return;
+  const hash = state.route || (location.hash || '#/inicio');
+  switch (true) {
+    case hash === '#/inicio': renderInicio(content); break;
+    case hash === '#/notas':
+    case hash === '#/notas/publicas':
+    case hash === '#/notas/privadas':
+      renderNotas(content); break;
+    case hash === '#/musica': renderMusica(content); break;
+    case hash === '#/fotos': renderFotos(content); break;
+    case hash.startsWith('#/fotos/album/'): renderAlbumDetail(content, hash.slice('#/fotos/album/'.length)); break;
+    case hash === '#/pelis': renderPelis(content); break;
+    case hash === '#/configuracion': renderConfig(content); break;
+  }
+}
 
 // ============================================================
 // Page: Inicio (dashboard)
@@ -1130,25 +1152,36 @@ function renderMediaCard(m) {
 // ============================================================
 // Page: Fotos
 // ============================================================
+const ALBUM_PREVIEW_COUNT = 6;
+const SIN_ALBUM_KEY = '_sin_album_';
+
+function albumSlugFor(name) {
+  return name ? encodeURIComponent(name) : SIN_ALBUM_KEY;
+}
+function albumNameFromSlug(slug) {
+  if (slug === SIN_ALBUM_KEY) return '';
+  try { return decodeURIComponent(slug); } catch { return slug; }
+}
+
 function renderFotos(root) {
   const featured = state.photos.filter(p => p.featured);
 
-  // Group photos by album: '' (no album) = individual; named = grouped tile
+  // Group photos by album. '' (empty string) is the "Sin álbum" bucket, treated as a regular album.
   const byAlbum = new Map();
   for (const p of state.photos) {
     const key = p.album || '';
     if (!byAlbum.has(key)) byAlbum.set(key, []);
     byAlbum.get(key).push(p);
   }
+  const totalAlbums = byAlbum.size;
 
   root.innerHTML = `
     <div class="page-head">
       <div>
-        <h1>📸 Fotos</h1>
-        <div class="sub">Nuestro álbum · ${state.photos.length} fotos${byAlbum.size > 1 ? ` · ${Array.from(byAlbum.keys()).filter(k => k).length} álbumes` : ''}</div>
+        <h1>Fotos</h1>
+        <div class="sub">${state.photos.length} foto${state.photos.length === 1 ? '' : 's'} · ${totalAlbums} álbum${totalAlbums === 1 ? '' : 'es'}</div>
       </div>
       <div class="actions">
-        ${state.photos.length ? `<button class="btn" id="view-all-btn">Ver todas en presentación</button>` : ''}
         <button class="btn primary" id="upload-btn">+ Subir fotos</button>
       </div>
     </div>
@@ -1156,75 +1189,101 @@ function renderFotos(root) {
       <div class="featured-label"><span class="material-symbols-outlined">star</span> Destacadas</div>
       <div class="featured-strip" id="featured-strip"></div>
     ` : ''}
-    <div class="photo-grid" id="photo-grid"></div>
+    <div id="photo-sections"></div>
   `;
 
   $('#upload-btn').addEventListener('click', openPhotoUpload);
-  if (state.photos.length) {
-    $('#view-all-btn').addEventListener('click', () => openLightbox(state.photos, 0));
-  }
 
   if (featured.length) {
     const strip = $('#featured-strip');
     featured.forEach((p, i) => strip.appendChild(renderPhoto(p, featured, i)));
   }
 
-  const container = $('#photo-grid');
-  // Repurpose the #photo-grid container: convert it into a section host (we'll
-  // append section blocks, each containing its own grid).
-  container.classList.remove('photo-grid');
-  container.classList.add('photo-sections');
-  container.innerHTML = '';
-
+  const container = $('#photo-sections');
   if (!state.photos.length) {
-    const empty = document.createElement('div');
-    empty.className = 'empty';
-    empty.textContent = 'Aún no hay fotos. Sube las primeras con el botón "Subir fotos".';
-    container.appendChild(empty);
+    container.innerHTML = '<div class="empty">Aún no hay fotos. Sube las primeras con el botón "Subir fotos".</div>';
     return;
   }
 
-  // Render each named album as its own titled section, then loose photos.
-  const albumKeys = Array.from(byAlbum.keys()).filter(k => k).sort();
+  // Albums alphabetically. "Sin álbum" (empty key) at the end.
+  const albumKeys = Array.from(byAlbum.keys()).sort((a, b) => {
+    if (a === '' && b !== '') return 1;
+    if (b === '' && a !== '') return -1;
+    return a.localeCompare(b);
+  });
   for (const key of albumKeys) {
     container.appendChild(renderAlbumSection(key, byAlbum.get(key)));
   }
-  const loose = byAlbum.get('') || [];
-  if (loose.length) {
-    container.appendChild(renderAlbumSection('', loose));
+}
+
+function renderAlbumDetail(root, slug) {
+  const albumName = albumNameFromSlug(slug);
+  const photos = state.photos.filter(p => (p.album || '') === albumName);
+  const displayName = albumName || 'Sin álbum';
+
+  root.innerHTML = `
+    <div class="page-head">
+      <div>
+        <a class="back-link" href="#/fotos"><span class="material-symbols-outlined">arrow_back</span> Fotos</a>
+        <h1>${albumName ? '<span class="material-symbols-outlined" style="font-size:1em;vertical-align:-3px;">folder</span> ' : ''}${escapeHtml(displayName)}</h1>
+        <div class="sub">${photos.length} foto${photos.length === 1 ? '' : 's'}</div>
+      </div>
+      <div class="actions">
+        ${photos.length ? `<button class="btn" id="view-all-btn">Ver en presentación</button>` : ''}
+        <button class="btn primary" id="upload-btn">+ Subir fotos</button>
+      </div>
+    </div>
+    <div class="photo-grid" id="photo-grid"></div>
+  `;
+
+  $('#upload-btn').addEventListener('click', openPhotoUpload);
+  if (photos.length) {
+    $('#view-all-btn').addEventListener('click', () => openLightbox(photos, 0));
   }
+
+  const grid = $('#photo-grid');
+  if (!photos.length) {
+    grid.innerHTML = '<div class="empty">Este álbum está vacío.</div>';
+    return;
+  }
+  photos.forEach((p, i) => grid.appendChild(renderPhoto(p, photos, i)));
 }
 
 function renderAlbumSection(name, photos) {
+  const isUnnamed = !name;
+  const displayName = isUnnamed ? 'Sin álbum' : name;
+  const slug = albumSlugFor(name);
+  const visible = photos.slice(0, ALBUM_PREVIEW_COUNT);
+  const more = Math.max(0, photos.length - ALBUM_PREVIEW_COUNT);
+
   const section = document.createElement('div');
   section.className = 'album-section';
-  const titleText = name
-    ? `<span class="material-symbols-outlined" style="font-size:1.15em;vertical-align:-3px;">folder</span> ${escapeHtml(name)}`
-    : 'Sin álbum';
   section.innerHTML = `
     <div class="album-title-row">
-      <h2>${titleText}</h2>
-      <span class="count">${photos.length} foto${photos.length === 1 ? '' : 's'}</span>
+      <h2>${isUnnamed ? '' : '<span class="material-symbols-outlined" style="font-size:1.1em;">folder</span> '}${escapeHtml(displayName)} <span class="count">${photos.length}</span></h2>
+      <a class="album-link" href="#/fotos/album/${slug}">Ver todas →</a>
       <button class="album-menu-btn" type="button" title="Opciones del álbum">
         <span class="material-symbols-outlined">more_horiz</span>
       </button>
       <div class="album-menu-popover">
-        ${name ? `
-          <button data-action="rename"><span class="material-symbols-outlined">edit</span>Renombrar álbum</button>
-          <button data-action="merge"><span class="material-symbols-outlined">drive_file_move</span>Mover a otro álbum…</button>
-          <button data-action="delete" class="danger"><span class="material-symbols-outlined">delete</span>Borrar álbum</button>
-        ` : `
-          <button data-action="assign"><span class="material-symbols-outlined">drive_file_move</span>Mover todas a un álbum…</button>
-          <button data-action="delete-loose" class="danger"><span class="material-symbols-outlined">delete</span>Borrar todas estas fotos</button>
-        `}
+        <button data-action="rename"><span class="material-symbols-outlined">edit</span>${isUnnamed ? 'Asignar nombre…' : 'Renombrar álbum'}</button>
+        <button data-action="move"><span class="material-symbols-outlined">drive_file_move</span>Mover a otro álbum…</button>
+        <button data-action="delete" class="danger"><span class="material-symbols-outlined">delete</span>${isUnnamed ? 'Borrar estas fotos' : 'Borrar álbum'}</button>
       </div>
     </div>
-    <div class="photo-grid"></div>
+    <div class="album-strip"></div>
   `;
-  const sg = section.querySelector('.photo-grid');
-  photos.forEach((p, i) => sg.appendChild(renderPhoto(p, photos, i)));
+  const strip = section.querySelector('.album-strip');
+  visible.forEach((p, i) => strip.appendChild(renderPhoto(p, photos, i)));
+  if (more > 0) {
+    const moreEl = document.createElement('a');
+    moreEl.className = 'more-photos';
+    moreEl.href = `#/fotos/album/${slug}`;
+    moreEl.innerHTML = `<span class="more-count">+${more}</span>`;
+    strip.appendChild(moreEl);
+  }
 
-  // Ellipsis menu interactions
+  // Ellipsis menu
   const menuBtn = section.querySelector('.album-menu-btn');
   const menu = section.querySelector('.album-menu-popover');
   menuBtn.addEventListener('click', (e) => {
@@ -1240,47 +1299,13 @@ function renderAlbumSection(name, photos) {
     e.stopPropagation();
     menu.classList.remove('open');
     if (btn.dataset.action === 'rename') {
-      const next = prompt(`Nuevo nombre para el álbum "${name}":`, name);
-      if (!next || next === name) return;
-      const ids = photos.map(p => p.id);
-      const { error } = await supabase.from('photos').update({ album: next.trim() }).in('id', ids);
-      if (error) { alert('Error: ' + error.message); return; }
-      await router();
+      openAlbumEditModal('rename', name, photos);
     }
-    if (btn.dataset.action === 'assign') {
-      const existing = Array.from(new Set(state.photos.map(p => p.album || '').filter(Boolean))).sort();
-      const hint = existing.length ? `\n\nÁlbumes existentes: ${existing.join(', ')}` : '';
-      const albumName = prompt(`Mover las ${photos.length} fotos sin álbum a un álbum:${hint}`, '');
-      if (!albumName || !albumName.trim()) return;
-      const ids = photos.map(p => p.id);
-      const { error } = await supabase.from('photos').update({ album: albumName.trim() }).in('id', ids);
-      if (error) { alert('Error: ' + error.message); return; }
-      await router();
-    }
-    if (btn.dataset.action === 'merge') {
-      // Move/merge: all photos from THIS album go to a destination album.
-      // If destination already exists → merge. If new → like a rename to a new album.
-      const otherAlbums = Array.from(new Set(state.photos.map(p => p.album || '').filter(Boolean)))
-        .filter(a => a !== name).sort();
-      const hint = otherAlbums.length
-        ? `\n\nÁlbumes existentes: ${otherAlbums.join(', ')}\n(Si eliges uno existente, los dos álbumes se fusionan)`
-        : '\n\nNo hay otros álbumes todavía. Escribe un nombre nuevo.';
-      const dest = prompt(`Mover las ${photos.length} foto${photos.length === 1 ? '' : 's'} de "${name}" a otro álbum:${hint}`, '');
-      if (!dest || !dest.trim()) return;
-      const destName = dest.trim();
-      if (destName === name) return; // no-op
-      const ids = photos.map(p => p.id);
-      const { error } = await supabase.from('photos').update({ album: destName }).in('id', ids);
-      if (error) { alert('Error: ' + error.message); return; }
-      await router();
+    if (btn.dataset.action === 'move') {
+      openAlbumEditModal('move', name, photos);
     }
     if (btn.dataset.action === 'delete') {
-      const ok = confirm(`¿Borrar el álbum "${name}" y sus ${photos.length} foto${photos.length === 1 ? '' : 's'}?\n\nEsta acción no se puede deshacer.`);
-      if (!ok) return;
-      await deletePhotosBatch(photos);
-    }
-    if (btn.dataset.action === 'delete-loose') {
-      const ok = confirm(`¿Borrar las ${photos.length} foto${photos.length === 1 ? '' : 's'} sin álbum?\n\nEsta acción no se puede deshacer.`);
+      const ok = confirm(`¿Borrar ${isUnnamed ? `las ${photos.length} fotos sin álbum` : `el álbum "${name}" y sus ${photos.length} foto${photos.length === 1 ? '' : 's'}`}?\n\nEsta acción no se puede deshacer.`);
       if (!ok) return;
       await deletePhotosBatch(photos);
     }
@@ -1289,17 +1314,106 @@ function renderAlbumSection(name, photos) {
   return section;
 }
 
+// ============================================================
+// Album edit modal (rename / move)
+// ============================================================
+const dlgAlbumEdit = $('#dlg-album-edit');
+const albumEditState = { mode: null, source: null, photos: null };
+
+function openAlbumEditModal(mode, sourceName, photos) {
+  albumEditState.mode = mode; // 'rename' | 'move'
+  albumEditState.source = sourceName || '';
+  albumEditState.photos = photos;
+
+  const isUnnamed = !sourceName;
+  const title = $('#album-edit-title');
+  const sub = $('#album-edit-sub');
+  const label = $('#album-edit-label');
+  const input = $('#album-edit-input');
+  const existingWrap = $('#album-edit-existing');
+  const list = $('#album-edit-list');
+  const saveBtn = $('#album-edit-save');
+
+  if (mode === 'rename') {
+    title.textContent = isUnnamed ? 'Asignar nombre al álbum' : `Renombrar "${sourceName}"`;
+    sub.textContent = `${photos.length} foto${photos.length === 1 ? '' : 's'}`;
+    label.textContent = 'Nombre del álbum';
+    input.value = isUnnamed ? '' : sourceName;
+    existingWrap.hidden = true;
+    saveBtn.textContent = isUnnamed ? 'Asignar' : 'Renombrar';
+  } else {
+    // move
+    title.textContent = isUnnamed
+      ? 'Mover fotos sin álbum'
+      : `Mover "${sourceName}" a otro álbum`;
+    sub.textContent = `${photos.length} foto${photos.length === 1 ? '' : 's'}. Si eliges un álbum existente, se fusionan.`;
+    label.textContent = 'Álbum destino';
+    input.value = '';
+    saveBtn.textContent = 'Mover';
+    const others = Array.from(new Set(state.photos.map(p => p.album || '').filter(Boolean)))
+      .filter(a => a !== sourceName).sort();
+    if (others.length) {
+      existingWrap.hidden = false;
+      list.innerHTML = others.map(a => `<button type="button" data-album="${escapeHtml(a)}"><span class="material-symbols-outlined">folder</span>${escapeHtml(a)}</button>`).join('');
+    } else {
+      existingWrap.hidden = true;
+      list.innerHTML = '';
+    }
+  }
+
+  $('#album-edit-status').textContent = '';
+  dlgAlbumEdit.showModal();
+  setTimeout(() => input.focus(), 0);
+}
+
+$('#album-edit-list').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-album]');
+  if (!b) return;
+  $('#album-edit-input').value = b.dataset.album;
+});
+
+$('#album-edit-save').addEventListener('click', async () => {
+  const newName = $('#album-edit-input').value.trim();
+  if (!newName) { setStatus($('#album-edit-status'), 'Escribe un nombre', true); return; }
+  const { source, photos } = albumEditState;
+  if (newName === source) { dlgAlbumEdit.close(); return; }
+  const ids = photos.map(p => p.id);
+  setStatus($('#album-edit-status'), 'Guardando…');
+  try {
+    const { error } = await supabase.from('photos').update({ album: newName }).in('id', ids);
+    if (error) throw error;
+    // Mutate local state so the close+rerender is instant
+    for (const p of photos) p.album = newName;
+    dlgAlbumEdit.close();
+    rerenderCurrentPage();
+  } catch (e) { setStatus($('#album-edit-status'), `Error: ${e.message || e}`, true); }
+});
+
+// Allow Enter in the input to save
+$('#album-edit-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); $('#album-edit-save').click(); }
+});
+
 async function deletePhotosBatch(photos) {
   if (!photos.length) return;
-  const ids = photos.map(p => p.id);
+  const ids = new Set(photos.map(p => p.id));
   const paths = photos.map(p => p.storage_path).filter(Boolean);
   try {
     if (paths.length) {
       try { await supabase.storage.from(BUCKET).remove(paths); } catch (e) { console.warn('storage cleanup failed', e); }
     }
-    const { error } = await supabase.from('photos').delete().in('id', ids);
+    const { error } = await supabase.from('photos').delete().in('id', Array.from(ids));
     if (error) throw error;
-    await router();
+    // Update local state and re-render synchronously (no extra fetch)
+    state.photos = state.photos.filter(p => !ids.has(p.id));
+    // If we're inside an album detail page that's now empty, bounce to /fotos
+    if (state.route.startsWith('#/fotos/album/')) {
+      const slug = state.route.slice('#/fotos/album/'.length);
+      const albumName = albumNameFromSlug(slug);
+      const remaining = state.photos.filter(p => (p.album || '') === albumName);
+      if (!remaining.length) { location.hash = '#/fotos'; return; }
+    }
+    rerenderCurrentPage();
   } catch (e) {
     alert('Error al borrar: ' + (e.message || e));
   }
@@ -2643,7 +2757,7 @@ dlgPhoto.addEventListener('close', () => router());
 // Lightbox (with prev/next and keyboard nav)
 // ============================================================
 const dlgLightbox = $('#dlg-lightbox');
-const lightboxState = { list: [], index: 0 };
+const lightboxState = { list: [], index: 0, dirty: false };
 
 function openLightbox(list, index) {
   lightboxState.list = list;
@@ -2688,6 +2802,7 @@ $('#lb-pin').addEventListener('click', async (e) => {
   const p = lightboxState.list[lightboxState.index];
   if (!p) return;
   p.pinned = !p.pinned;
+  lightboxState.dirty = true;
   await supabase.from('photos').update({ pinned: p.pinned }).eq('id', p.id);
   renderLightbox();
 });
@@ -2696,6 +2811,7 @@ $('#lb-feature').addEventListener('click', async (e) => {
   const p = lightboxState.list[lightboxState.index];
   if (!p) return;
   p.featured = !p.featured;
+  lightboxState.dirty = true;
   await supabase.from('photos').update({ featured: p.featured }).eq('id', p.id);
   renderLightbox();
 });
@@ -2707,8 +2823,11 @@ $('#lb-delete').addEventListener('click', async (e) => {
   if (!confirm('¿Eliminar esta foto? No se puede deshacer.')) return;
   try { await supabase.storage.from(BUCKET).remove([p.storage_path]); } catch {}
   await supabase.from('photos').delete().eq('id', p.id);
+  // Remove from state caches
+  state.photos = state.photos.filter(x => x.id !== p.id);
   lightboxState.list.splice(lightboxState.index, 1);
-  if (!lightboxState.list.length) { dlgLightbox.close(); await router(); return; }
+  lightboxState.dirty = true;
+  if (!lightboxState.list.length) { dlgLightbox.close(); return; }
   lightboxState.index = Math.min(lightboxState.index, lightboxState.list.length - 1);
   renderLightbox();
 });
@@ -2719,10 +2838,14 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === 'ArrowRight') { e.preventDefault(); lbNav(1); }
 });
 
-dlgLightbox.addEventListener('close', async () => {
-  const scrollY = window.scrollY;
-  await router();
-  requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'instant' }));
+dlgLightbox.addEventListener('close', () => {
+  // Instant close: do NOT re-fetch from network. If anything changed in the
+  // lightbox (pin/feature/delete), state.photos was mutated in place — just
+  // re-render the page synchronously.
+  if (lightboxState.dirty) {
+    lightboxState.dirty = false;
+    rerenderCurrentPage();
+  }
 });
 
 // ============================================================
