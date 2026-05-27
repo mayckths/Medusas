@@ -183,6 +183,7 @@ const state = {
   places: [],
   movies: [],
   chats: [],
+  postits: [],
   settings: {
     photo_widget: { mode: 'featured', interval_ms: 6000 },
   },
@@ -243,6 +244,8 @@ function showLogin() {
 function hideLogin() {
   $('#auth-overlay').hidden = true;
   $('#app-shell').hidden = false;
+  // Wire up the theme toggle now that the sidebar is in the DOM
+  setupThemeToggle();
 }
 
 async function initAuthUI() {
@@ -414,6 +417,7 @@ async function loadAll() {
     { data: places },
     { data: movies },
     { data: chats },
+    { data: postits },
   ] = await Promise.all([
     supabase.from('notes').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('media').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
@@ -421,6 +425,7 @@ async function loadAll() {
     supabase.from('places').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('movies').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('chats').select('*').order('created_at', { ascending: true }).limit(200),
+    supabase.from('postits').select('*').order('created_at', { ascending: false }),
   ]);
   state.notes = notes || [];
   state.media = media || [];
@@ -428,6 +433,7 @@ async function loadAll() {
   state.places = places || [];
   state.movies = movies || [];
   state.chats = chats || [];
+  state.postits = postits || [];
   updateSidebarBadges();
   // Background: backfill missing Spotify/YouTube thumbnails
   backfillMediaThumbnails();
@@ -610,6 +616,8 @@ function renderInicio(root) {
 
   const totalUnread = totalUnreadCount();
 
+  // The left column shows the post-it board + section blocks in the configured order.
+  // The right column is the photo widget + Instantáneos chat.
   root.innerHTML = `
     <div class="page-head">
       <div>
@@ -628,41 +636,48 @@ function renderInicio(root) {
       </div>
     </div>
 
-    <div class="dashboard-grid">
-      <div class="photo-widget" id="photo-widget">
-        <div class="pw-empty">Aún no hay fotos para mostrar aquí.</div>
+    <div class="dashboard-cols">
+      <div class="col-left">
+        <div class="postit-board" id="postit-board">
+          <button class="pb-new" id="pb-new" type="button">+ Nuevo post-it</button>
+          <div class="pb-empty" id="pb-empty" hidden>Toca <strong>+ Nuevo post-it</strong> para empezar el tablero.</div>
+        </div>
+        ${order.map(s => sectionTemplates[s] || '').join('')}
       </div>
 
-      <div class="chat-widget" id="chat-widget">
-        <div class="chat-head">
-          <span class="dot"></span>
-          Instantáneos
+      <div class="col-right">
+        <div class="photo-widget" id="photo-widget">
+          <div class="pw-empty">Aún no hay fotos para mostrar aquí.</div>
         </div>
-        <div class="chat-body" id="chat-body">
-          <div class="chat-empty">Cargando…</div>
-        </div>
-        <div class="chat-input">
-          <input type="text" id="chat-input-field" placeholder="Un mensajito…" maxlength="500" />
-          <button id="chat-send" type="button">Enviar</button>
+        <div class="chat-widget chat-widget-tall" id="chat-widget">
+          <div class="chat-head">
+            <span class="dot"></span>
+            Instantáneos
+          </div>
+          <div class="chat-body" id="chat-body">
+            <div class="chat-empty">Cargando…</div>
+          </div>
+          <div class="chat-input">
+            <input type="text" id="chat-input-field" placeholder="Un mensajito…" maxlength="500" />
+            <button id="chat-send" type="button">Enviar</button>
+          </div>
         </div>
       </div>
     </div>
-
-    ${order.map(s => sectionTemplates[s] || '').join('')}
   `;
 
-  // Recent notes (max 4)
+  // Recent notes (3 cards — wider in the 2/3 column)
   const notesGrid = $('#dash-notes-grid');
   if (notesGrid) {
-    const recentNotes = state.notes.slice(0, 4);
+    const recentNotes = state.notes.slice(0, 3);
     if (recentNotes.length) recentNotes.forEach(n => notesGrid.appendChild(renderNoteCard(n)));
     else notesGrid.innerHTML = '<div class="empty">Aún no hay notas.</div>';
   }
 
-  // Recent media (max 4)
+  // Recent media (3 cards)
   const mediaGrid = $('#dash-media-grid');
   if (mediaGrid) {
-    const recentMedia = state.media.slice(0, 4);
+    const recentMedia = state.media.slice(0, 3);
     if (recentMedia.length) recentMedia.forEach(m => mediaGrid.appendChild(renderMediaCard(m)));
     else mediaGrid.innerHTML = '<div class="empty">Aún no hay música.</div>';
   }
@@ -678,7 +693,7 @@ function renderInicio(root) {
   // Recent movies
   const moviesGrid = $('#dash-movies-grid');
   if (moviesGrid) {
-    const recentMovies = state.movies.slice(0, 4);
+    const recentMovies = state.movies.slice(0, 3);
     if (recentMovies.length) recentMovies.forEach(m => moviesGrid.appendChild(renderMovieCard(m)));
     else moviesGrid.innerHTML = '<div class="empty">Aún no hay pelis.</div>';
   }
@@ -691,6 +706,7 @@ function renderInicio(root) {
     else placesGrid.innerHTML = '<div class="empty">Aún no hay lugares.</div>';
   }
 
+  setupPostitBoard();
   setupPhotoWidget();
   setupChatWidget();
   setupNotifBell();
@@ -3625,6 +3641,204 @@ $('#movie-delete').addEventListener('click', async () => {
     await router();
   } catch (e) { setStatus($('#movie-status'), `Error al eliminar: ${e.message || e}`, true); }
 });
+
+// ============================================================
+// Post-it board (dashboard)
+// ============================================================
+const POSTIT_COLORS = ['cyan', 'yellow', 'green', 'pink'];
+const POSTIT_W = 130;
+const POSTIT_H = 130;
+let postitDragState = null;
+
+function setupPostitBoard() {
+  const board = $('#postit-board');
+  if (!board) return;
+  // Render initial post-its
+  renderPostits();
+
+  // Add post-it button
+  $('#pb-new').addEventListener('click', async () => {
+    const rect = board.getBoundingClientRect();
+    // Pick a random color and a position roughly in the visible area
+    const color = POSTIT_COLORS[Math.floor(Math.random() * POSTIT_COLORS.length)];
+    const x = Math.max(20, Math.floor(Math.random() * (rect.width - POSTIT_W - 40)) + 20);
+    const y = Math.max(20, Math.floor(Math.random() * (rect.height - POSTIT_H - 40)) + 20);
+    const rotation = (Math.random() - 0.5) * 8; // -4° to +4°
+    try {
+      const { data, error } = await supabase.from('postits').insert({
+        author: state.currentUser, body: '', color, x, y, rotation,
+      }).select().single();
+      if (error) throw error;
+      state.postits.unshift(data);
+      renderPostits();
+      // Focus the new one for immediate typing
+      const newEl = board.querySelector(`[data-id="${data.id}"] .pi-body`);
+      if (newEl) newEl.focus();
+    } catch (e) {
+      console.error('postit create', e);
+      alert('No se pudo crear el post-it: ' + (e.message || e));
+    }
+  });
+
+  // Light polling so the other person's post-its show up
+  if (window._postitPoll) clearInterval(window._postitPoll);
+  window._postitPoll = setInterval(async () => {
+    try {
+      const { data } = await supabase.from('postits').select('*').order('created_at', { ascending: false });
+      if (data) {
+        // Only re-render if list changed
+        if (data.length !== state.postits.length ||
+            data.some(p => !state.postits.find(x => x.id === p.id && x.body === p.body && x.color === p.color && x.x === p.x && x.y === p.y))) {
+          // Don't disrupt a postit being edited
+          if (!document.activeElement || !document.activeElement.closest('.postit')) {
+            state.postits = data;
+            renderPostits();
+          }
+        }
+      }
+    } catch {}
+  }, 8000);
+}
+
+function renderPostits() {
+  const board = $('#postit-board');
+  if (!board) return;
+  const empty = $('#pb-empty');
+  // Wipe existing post-its (keep the + button and empty hint)
+  board.querySelectorAll('.postit').forEach(el => el.remove());
+  if (empty) empty.hidden = state.postits.length > 0;
+
+  for (const p of state.postits) {
+    board.appendChild(renderPostitEl(p));
+  }
+}
+
+function renderPostitEl(p) {
+  const el = document.createElement('div');
+  el.className = `postit ${p.color}`;
+  el.dataset.id = p.id;
+  el.style.left = `${p.x}px`;
+  el.style.top = `${p.y}px`;
+  el.style.transform = `rotate(${p.rotation || 0}deg)`;
+
+  el.innerHTML = `
+    <div class="pi-author">${escapeHtml(p.author || '?')}</div>
+    <textarea class="pi-body" placeholder="Escribe algo…" maxlength="200">${escapeHtml(p.body || '')}</textarea>
+    <div class="pi-tools">
+      ${POSTIT_COLORS.map(c => `<button class="pi-color" data-color="${c}" title="Cambiar a ${c}"><span class="pi-swatch ${c}"></span></button>`).join('')}
+      <button class="pi-del" title="Borrar"><span class="material-symbols-outlined" style="font-size:14px;">delete</span></button>
+    </div>
+  `;
+
+  // Drag — only when starting drag on the post-it body (not the textarea/buttons)
+  el.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.pi-body, .pi-tools')) return;
+    startDrag(el, p, e);
+  });
+  el.addEventListener('touchstart', (e) => {
+    if (e.target.closest('.pi-body, .pi-tools')) return;
+    startDrag(el, p, e.touches[0]);
+  }, { passive: true });
+
+  // Body edit — debounced save
+  const body = el.querySelector('.pi-body');
+  let bodyTimer = null;
+  body.addEventListener('input', (e) => {
+    p.body = e.target.value;
+    clearTimeout(bodyTimer);
+    bodyTimer = setTimeout(async () => {
+      try { await supabase.from('postits').update({ body: p.body }).eq('id', p.id); } catch {}
+    }, 600);
+  });
+
+  // Color change
+  el.querySelectorAll('.pi-color').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const newColor = btn.dataset.color;
+      el.classList.remove(...POSTIT_COLORS);
+      el.classList.add(newColor);
+      p.color = newColor;
+      try { await supabase.from('postits').update({ color: newColor }).eq('id', p.id); } catch {}
+    });
+  });
+
+  // Delete
+  el.querySelector('.pi-del').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (!confirm('¿Borrar este post-it?')) return;
+    try {
+      await supabase.from('postits').delete().eq('id', p.id);
+      state.postits = state.postits.filter(x => x.id !== p.id);
+      renderPostits();
+    } catch (err) { console.error(err); }
+  });
+
+  return el;
+}
+
+function startDrag(el, p, evt) {
+  const board = $('#postit-board');
+  const boardRect = board.getBoundingClientRect();
+  const elRect = el.getBoundingClientRect();
+  const offsetX = evt.clientX - elRect.left;
+  const offsetY = evt.clientY - elRect.top;
+
+  el.classList.add('dragging');
+
+  const onMove = (e) => {
+    const pos = e.touches ? e.touches[0] : e;
+    const newX = pos.clientX - boardRect.left - offsetX;
+    const newY = pos.clientY - boardRect.top - offsetY;
+    // Clamp inside the board
+    const clampedX = Math.max(0, Math.min(boardRect.width - POSTIT_W, newX));
+    const clampedY = Math.max(0, Math.min(boardRect.height - POSTIT_H, newY));
+    el.style.left = `${clampedX}px`;
+    el.style.top = `${clampedY}px`;
+    p.x = clampedX;
+    p.y = clampedY;
+  };
+
+  const onEnd = async () => {
+    el.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onEnd);
+    document.removeEventListener('touchmove', onMove);
+    document.removeEventListener('touchend', onEnd);
+    try { await supabase.from('postits').update({ x: p.x, y: p.y }).eq('id', p.id); } catch {}
+  };
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onEnd);
+  document.addEventListener('touchmove', onMove, { passive: false });
+  document.addEventListener('touchend', onEnd);
+}
+
+// ============================================================
+// Light / Dark mode toggle
+// ============================================================
+function setupThemeToggle() {
+  const btn = $('#lightmode-toggle');
+  if (!btn) return;
+  if (btn.dataset.wired) return;
+  btn.dataset.wired = '1';
+  // Reflect current state on initial render
+  syncThemeUI();
+  btn.addEventListener('click', () => {
+    const current = document.documentElement.dataset.theme || 'dark';
+    const next = current === 'light' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('medusas:theme', next); } catch {}
+    syncThemeUI();
+  });
+}
+function syncThemeUI() {
+  const t = document.documentElement.dataset.theme || 'dark';
+  const icon = $('#lightmode-icon');
+  const label = document.querySelector('#lightmode-toggle .lm-label');
+  if (icon) icon.textContent = t === 'light' ? 'light_mode' : 'dark_mode';
+  if (label) label.textContent = t === 'light' ? 'Dark mode' : 'Light mode';
+}
 
 // ============================================================
 // Boot

@@ -13,11 +13,21 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,200..700,0..1,-50..200&display=block" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,200..700,0..1,-50..200&display=block&family=Caveat:wght@400;600;700&display=swap" />
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
 
     <link rel="stylesheet" href="./styles.css" />
+
+    <!-- Apply theme immediately to avoid a flash of dark on light-mode users -->
+    <script>
+      (function() {
+        try {
+          const t = localStorage.getItem('medusas:theme');
+          if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+        } catch {}
+      })();
+    </script>
   </head>
   <body>
     <!-- ==================== LOGIN ==================== -->
@@ -86,6 +96,11 @@
           <a href="#/configuracion" data-route="#/configuracion">
             <span class="material-symbols-outlined m-icon">settings</span><span>Configuración</span>
           </a>
+          <button class="lightmode-row" id="lightmode-toggle" type="button" aria-label="Cambiar tema">
+            <span class="material-symbols-outlined m-icon" id="lightmode-icon">dark_mode</span>
+            <span class="lm-label">Light mode</span>
+            <span class="lm-toggle" aria-hidden="true"></span>
+          </button>
         </nav>
       </aside>
 
