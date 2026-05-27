@@ -682,14 +682,25 @@ button.btn.pin-toggle.is-pinned { background: var(--accent); color: var(--on-acc
 
 /* ======== Light mode toggle in sidebar ======== */
 .lightmode-row {
+  /* Match the shape of regular nav anchors so it doesn't read as a button */
   display: flex; align-items: center; gap: 0.65rem;
   padding: 0.5rem 0.65rem;
   border-radius: 8px;
   cursor: pointer;
+  font: inherit;
   font-size: 0.92rem;
   color: var(--text-dim);
+  /* Reset native <button> chrome */
+  background: transparent;
+  border: 0;
+  outline: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  text-align: left;
 }
 .lightmode-row:hover { background: var(--surface-alt); color: var(--text); }
+.lightmode-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .lightmode-row .lm-label { flex: 1; }
 .lightmode-row .lm-toggle {
   width: 30px; height: 16px;
