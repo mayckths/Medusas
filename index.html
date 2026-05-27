@@ -4,423 +4,131 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>🪼🪼 — nuestro lugar seguro</title>
-    <style>
-      :root {
-        color-scheme: light dark;
-        --bg: #fafaf7;
-        --surface: #ffffff;
-        --surface-alt: #f3f3ee;
-        --surface-2: #ebebe4;
-        --border: #e3e3dc;
-        --text: #1a1a1a;
-        --text-dim: #6a6a64;
-        --accent: #7a4ed8;
-        --accent-2: #2f6fde;
-        --accent-hover: #6840bd;
-        --danger: #c0392b;
-        --radius: 10px;
-        --shadow: 0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.06);
-        --sidebar-w: 240px;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #16161a;
-          --surface: #1f1f24;
-          --surface-alt: #26262c;
-          --surface-2: #2a2a31;
-          --border: #2e2e36;
-          --text: #f0f0ec;
-          --text-dim: #8b8b88;
-          --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.3);
-        }
-      }
-      * { box-sizing: border-box; }
-      html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-        font-size: 15px; line-height: 1.45; min-height: 100vh;
-      }
 
-      /* ---------- Layout ---------- */
-      .app-shell { display: flex; min-height: 100vh; }
-      aside.sidebar {
-        width: var(--sidebar-w); flex-shrink: 0;
-        background: var(--surface); border-right: 1px solid var(--border);
-        padding: 1.25rem 0.75rem; position: sticky; top: 0; height: 100vh; overflow-y: auto;
-      }
-      .brand { padding: 0 0.5rem 1rem; }
-      .brand .logo { font-size: 2rem; letter-spacing: -0.05em; line-height: 1; }
-      .brand .tag { color: var(--text-dim); font-size: 0.78rem; margin-top: 0.25rem; font-style: italic; }
-      nav.menu { display: flex; flex-direction: column; gap: 2px; margin-top: 0.5rem; }
-      nav.menu a {
-        display: flex; align-items: center; gap: 0.65rem;
-        padding: 0.5rem 0.65rem; border-radius: 8px;
-        color: var(--text-dim); text-decoration: none; font-size: 0.92rem;
-      }
-      nav.menu a:hover { background: var(--surface-alt); color: var(--text); }
-      nav.menu a.active {
-        background: var(--surface-alt); color: var(--text); font-weight: 600;
-      }
-      nav.menu .icon { width: 1.2rem; display: inline-block; text-align: center; }
-      nav.menu .section-label {
-        font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
-        color: var(--text-dim); padding: 0.85rem 0.65rem 0.3rem;
-      }
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="anonymous" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
 
-      main.content { flex: 1; min-width: 0; padding: 1.5rem clamp(1rem, 4vw, 2.5rem) 4rem; }
-      .page-head {
-        display: flex; align-items: baseline; justify-content: space-between;
-        flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;
-      }
-      .page-head h1 { margin: 0; font-size: 1.6rem; letter-spacing: -0.02em; }
-      .page-head .sub { color: var(--text-dim); font-size: 0.88rem; }
-
-      @media (max-width: 760px) {
-        .app-shell { flex-direction: column; }
-        aside.sidebar { width: 100%; height: auto; position: relative; padding: 0.75rem; }
-        nav.menu { flex-direction: row; flex-wrap: wrap; }
-        nav.menu .section-label { display: none; }
-        nav.menu a { padding: 0.4rem 0.6rem; font-size: 0.85rem; }
-        .brand { padding: 0 0.5rem 0.5rem; }
-        .brand .logo { font-size: 1.6rem; }
-      }
-
-      /* ---------- Buttons ---------- */
-      button.btn, a.btn {
-        border: 1px solid var(--border); background: var(--surface-alt); color: var(--text);
-        padding: 0.45rem 0.85rem; border-radius: 8px; cursor: pointer; font-size: 0.85rem;
-        text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;
-      }
-      button.btn:hover, a.btn:hover { background: var(--border); }
-      button.btn.primary, a.btn.primary { background: var(--accent); color: white; border-color: transparent; }
-      button.btn.primary:hover, a.btn.primary:hover { background: var(--accent-hover); }
-      button.btn.ghost { background: transparent; }
-      button.btn.danger { color: var(--danger); border-color: transparent; background: transparent; margin-right: auto; }
-      button.btn.danger:hover { background: rgba(192, 57, 43, 0.08); }
-
-      .view-toggle {
-        display: inline-flex; background: var(--surface-alt); border-radius: 999px; padding: 3px;
-        border: 1px solid var(--border);
-      }
-      .view-toggle button {
-        background: transparent; border: 0; padding: 0.35rem 0.9rem; cursor: pointer;
-        color: var(--text-dim); border-radius: 999px; font-size: 0.85rem;
-      }
-      .view-toggle button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
-
-      /* ---------- Cards / lists shared ---------- */
-      .grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0.85rem; }
-      .grid-list { display: flex; flex-direction: column; gap: 0.6rem; }
-      .card {
-        background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-        padding: 0.9rem 1rem; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 0.5rem;
-        transition: transform 0.08s ease, box-shadow 0.15s ease, border-color 0.15s ease;
-      }
-      .card.clickable { cursor: pointer; }
-      .card.clickable:hover { border-color: var(--accent); box-shadow: 0 2px 4px rgba(0,0,0,0.05), 0 8px 20px rgba(0,0,0,0.08); }
-      .card h3 { margin: 0; font-size: 1.02rem; letter-spacing: -0.01em; word-wrap: break-word; }
-      .card .preview {
-        color: var(--text-dim); font-size: 0.88rem;
-        display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
-        overflow: hidden; word-wrap: break-word;
-      }
-      .grid-list .card { flex-direction: row; align-items: flex-start; gap: 1rem; }
-      .grid-list .card .body { flex: 1; min-width: 0; }
-      .grid-list .card .preview { -webkit-line-clamp: 2; }
-      .card .meta { display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; color: var(--text-dim); }
-      .card .gallery { display: flex; gap: 0.3rem; flex-wrap: wrap; }
-      .card .gallery img { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }
-      .card .links { display: flex; gap: 0.35rem; flex-wrap: wrap; }
-      .card .links a {
-        font-size: 0.75rem; color: var(--accent-2); text-decoration: none;
-        background: var(--surface-alt); padding: 0.15rem 0.5rem; border-radius: 999px;
-        border: 1px solid var(--border); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-      }
-      .card .badge {
-        display: inline-flex; align-items: center; gap: 0.25rem;
-        font-size: 0.7rem; padding: 0.1rem 0.5rem; border-radius: 999px;
-        background: var(--surface-alt); border: 1px solid var(--border); color: var(--text-dim);
-      }
-      .card .badge.private { color: var(--accent); }
-
-      /* Add CTA tile */
-      .card.new-cta {
-        background: var(--surface-alt); border: 1.5px dashed var(--border); box-shadow: none;
-        align-items: center; justify-content: center; min-height: 140px;
-        color: var(--text-dim); text-align: center; gap: 0.35rem; cursor: pointer;
-      }
-      .card.new-cta:hover {
-        border-color: var(--accent); border-style: solid; color: var(--accent); background: var(--surface);
-      }
-      .card.new-cta .plus {
-        width: 36px; height: 36px; border-radius: 999px;
-        background: var(--surface); border: 1.5px dashed var(--border);
-        display: grid; place-items: center; font-size: 1.3rem; line-height: 1; color: inherit;
-      }
-      .card.new-cta:hover .plus { border-style: solid; border-color: currentColor; }
-      .card.new-cta .label { font-size: 0.95rem; font-weight: 600; color: inherit; }
-      .grid-list .card.new-cta { min-height: 0; flex-direction: row; justify-content: flex-start; padding: 0.75rem 1rem; }
-      .grid-list .card.new-cta .plus { width: 28px; height: 28px; font-size: 1.05rem; }
-
-      /* ---------- Dashboard ---------- */
-      .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin-bottom: 2rem; }
-      .stat {
-        background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-        padding: 0.9rem 1rem; box-shadow: var(--shadow); text-decoration: none; color: inherit;
-        display: flex; flex-direction: column; gap: 0.2rem; transition: border-color 0.15s ease;
-      }
-      .stat:hover { border-color: var(--accent); }
-      .stat .stat-label { color: var(--text-dim); font-size: 0.78rem; display: flex; align-items: center; gap: 0.35rem; }
-      .stat .stat-value { font-size: 1.7rem; font-weight: 700; letter-spacing: -0.02em; }
-
-      .section-block { margin-bottom: 2rem; }
-      .section-block .section-head {
-        display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 0.65rem;
-      }
-      .section-block .section-head h2 { margin: 0; font-size: 1.05rem; letter-spacing: -0.01em; }
-      .section-block .section-head a {
-        font-size: 0.8rem; color: var(--accent); text-decoration: none;
-      }
-      .section-block .section-head a:hover { text-decoration: underline; }
-
-      /* ---------- Music ---------- */
-      .media-card { display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden; }
-      .media-card .embed-wrap { background: var(--surface-2); border-bottom: 1px solid var(--border); }
-      .media-card .embed-wrap iframe { width: 100%; display: block; border: 0; }
-      .media-card.youtube .embed-wrap iframe { aspect-ratio: 16 / 9; height: auto; }
-      .media-card.spotify .embed-wrap iframe { height: 152px; }
-      .media-card.spotify .embed-wrap iframe.tall { height: 352px; }
-      .media-card .body { padding: 0.75rem 0.9rem 0.85rem; display: flex; flex-direction: column; gap: 0.35rem; }
-
-      /* ---------- Photos ---------- */
-      .photo-grid {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-        gap: 0.5rem;
-      }
-      .photo {
-        position: relative; aspect-ratio: 1 / 1; border-radius: 8px; overflow: hidden;
-        background: var(--surface-alt); border: 1px solid var(--border); cursor: pointer;
-      }
-      .photo img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.2s ease; }
-      .photo:hover img { transform: scale(1.04); }
-      .photo .photo-caption {
-        position: absolute; left: 0; right: 0; bottom: 0;
-        background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
-        color: white; padding: 0.5rem; font-size: 0.78rem;
-        opacity: 0; transition: opacity 0.15s ease;
-      }
-      .photo:hover .photo-caption { opacity: 1; }
-      .photo-cta {
-        display: grid; place-items: center; aspect-ratio: 1 / 1;
-        border: 1.5px dashed var(--border); border-radius: 8px;
-        cursor: pointer; color: var(--text-dim); background: var(--surface-alt);
-      }
-      .photo-cta:hover { border-color: var(--accent); border-style: solid; color: var(--accent); background: var(--surface); }
-      .photo-cta .plus { font-size: 1.4rem; }
-      .photo-cta .label { font-size: 0.8rem; font-weight: 600; margin-top: 0.15rem; }
-
-      /* ---------- Empty state ---------- */
-      .empty {
-        text-align: center; color: var(--text-dim); padding: 2rem 1rem; font-size: 0.9rem;
-        border: 1px dashed var(--border); border-radius: var(--radius); background: var(--surface);
-      }
-
-      /* ---------- Dialog / editor ---------- */
-      dialog.modal {
-        border: 1px solid var(--border); border-radius: var(--radius);
-        background: var(--surface); color: var(--text);
-        padding: 0; max-width: 640px; width: calc(100% - 2rem);
-        box-shadow: 0 10px 40px rgba(0,0,0,0.25);
-      }
-      dialog.modal::backdrop { background: rgba(0,0,0,0.45); }
-      .modal-inner { padding: 1rem 1.1rem 1rem; }
-      .modal-head {
-        display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;
-      }
-      .modal-head h2 { margin: 0; font-size: 1.05rem; letter-spacing: -0.01em; }
-      .close-x {
-        background: transparent; border: 0; color: var(--text-dim); cursor: pointer;
-        font-size: 1.2rem; line-height: 1; padding: 0.2rem 0.4rem; border-radius: 6px;
-      }
-      .close-x:hover { background: var(--surface-alt); color: var(--text); }
-
-      .field { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.6rem; }
-      .field label { font-size: 0.78rem; color: var(--text-dim); }
-      .field input[type=text], .field input[type=url], .field textarea {
-        width: 100%; border: 1px solid var(--border); background: var(--surface-alt); color: var(--text);
-        font-size: 0.95rem; padding: 0.5rem 0.65rem; border-radius: 8px; outline: none;
-        font-family: inherit;
-      }
-      .field input:focus, .field textarea:focus { border-color: var(--accent); background: var(--surface); }
-      .field textarea { min-height: 70px; resize: vertical; }
-
-      .modal-inner input.title {
-        width: 100%; border: 0; background: transparent; color: var(--text);
-        font-size: 1.15rem; font-weight: 600; padding: 0.25rem 0 0.5rem; outline: none;
-      }
-      .modal-inner input.title::placeholder { color: var(--text-dim); }
-      .toolbar {
-        display: flex; gap: 0.25rem; flex-wrap: wrap; align-items: center;
-        padding: 0.35rem 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
-        margin-bottom: 0.5rem;
-      }
-      .toolbar button {
-        background: transparent; border: 0; color: var(--text-dim); cursor: pointer;
-        padding: 0.25rem 0.5rem; border-radius: 6px; font-size: 0.85rem;
-      }
-      .toolbar button:hover { background: var(--surface-alt); color: var(--text); }
-      .toolbar .divider { width: 1px; background: var(--border); align-self: stretch; margin: 0 0.25rem; }
-      .toolbar label.toggle {
-        display: inline-flex; align-items: center; gap: 0.35rem;
-        font-size: 0.8rem; color: var(--text-dim); cursor: pointer;
-      }
-      .toolbar label.toggle.right { margin-left: auto; }
-      .visibility-pill {
-        display: inline-flex; gap: 2px; background: var(--surface-alt); border-radius: 999px; padding: 2px;
-        border: 1px solid var(--border); margin-left: 0.5rem;
-      }
-      .visibility-pill button {
-        background: transparent; border: 0; padding: 0.2rem 0.6rem; border-radius: 999px;
-        color: var(--text-dim); cursor: pointer; font-size: 0.75rem;
-      }
-      .visibility-pill button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
-
-      .content-area {
-        min-height: 120px; max-height: 50vh; overflow-y: auto; padding: 0.5rem 0; outline: none;
-        font-size: 0.95rem; color: var(--text);
-      }
-      .content-area:empty:before {
-        content: attr(data-placeholder); color: var(--text-dim); pointer-events: none;
-      }
-      .content-area a { color: var(--accent-2); }
-      textarea.content-plain {
-        width: 100%; min-height: 120px; max-height: 50vh; resize: vertical;
-        border: 0; background: transparent; color: var(--text);
-        font-family: inherit; font-size: 0.95rem; padding: 0.5rem 0; outline: none;
-      }
-
-      .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.5rem 0; }
-      .chip {
-        display: inline-flex; align-items: center; gap: 0.35rem;
-        background: var(--surface-alt); border: 1px solid var(--border); border-radius: 999px;
-        padding: 0.2rem 0.6rem; font-size: 0.8rem; color: var(--text-dim);
-      }
-      .chip a { color: var(--accent-2); text-decoration: none; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .chip button { background: transparent; border: 0; color: var(--text-dim); cursor: pointer; font-size: 0.9rem; padding: 0 0.1rem; }
-      .chip button:hover { color: var(--danger); }
-      .images-preview { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0; }
-      .images-preview .thumb {
-        position: relative; width: 80px; height: 80px; border-radius: 8px; overflow: hidden;
-        border: 1px solid var(--border); background: var(--surface-alt);
-      }
-      .images-preview .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-      .images-preview .thumb button.remove {
-        position: absolute; top: 2px; right: 2px;
-        background: rgba(0,0,0,0.6); color: white; border: 0; border-radius: 999px;
-        width: 20px; height: 20px; font-size: 0.7rem; cursor: pointer; line-height: 1;
-      }
-
-      .modal-actions {
-        display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem;
-        padding-top: 0.5rem; border-top: 1px solid var(--border); flex-wrap: wrap;
-      }
-      .modal-actions .left { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
-      .modal-actions .right { margin-left: auto; display: flex; gap: 0.5rem; }
-      .status { font-size: 0.8rem; color: var(--text-dim); }
-      .status.error { color: var(--danger); }
-
-      .embed-preview { margin-top: 0.5rem; }
-      .embed-preview iframe { width: 100%; border: 0; border-radius: 8px; background: var(--surface-alt); }
-      .embed-preview.youtube iframe { aspect-ratio: 16 / 9; height: auto; }
-      .embed-preview.spotify iframe { height: 152px; }
-
-      /* Lightbox for photos */
-      dialog.lightbox { padding: 0; background: transparent; border: 0; max-width: 92vw; max-height: 92vh; }
-      dialog.lightbox::backdrop { background: rgba(0,0,0,0.75); }
-      dialog.lightbox img { display: block; max-width: 92vw; max-height: 92vh; border-radius: 10px; }
-      dialog.lightbox .lightbox-cap {
-        position: absolute; left: 0; right: 0; bottom: 0; padding: 0.6rem;
-        background: linear-gradient(to top, rgba(0,0,0,0.75), transparent);
-        color: white; font-size: 0.85rem; border-radius: 0 0 10px 10px;
-      }
-    </style>
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="app-shell">
+    <!-- ==================== LOGIN ==================== -->
+    <div class="auth-overlay" id="auth-overlay" hidden>
+      <div class="auth-card">
+        <div class="auth-logo">🪼🪼</div>
+        <div class="auth-tag">nuestro lugar seguro</div>
+        <div class="auth-form">
+          <div class="user-picker" id="user-picker">
+            <!-- buttons added dynamically -->
+          </div>
+          <div class="auth-field">
+            <input type="password" id="auth-password" placeholder="Clave" autocomplete="current-password" inputmode="numeric" maxlength="64" />
+          </div>
+          <button class="btn primary block" id="auth-submit">Entrar</button>
+          <div class="status" id="auth-status"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== APP ==================== -->
+    <div class="app-shell" id="app-shell" hidden>
       <aside class="sidebar">
         <div class="brand">
           <div class="logo">🪼🪼</div>
           <div class="tag">nuestro lugar seguro</div>
         </div>
+        <div class="user-pill" id="user-pill">
+          <span class="dot"></span>
+          <span class="who" id="who-am-i">—</span>
+        </div>
         <nav class="menu" id="menu">
-          <a href="#/inicio" data-route="#/inicio"><span class="icon">🏠</span>Inicio</a>
+          <a href="#/inicio" data-route="#/inicio">
+            <span class="icon">🏠</span><span>Inicio</span>
+            <span class="badge-unread" data-unread="home" hidden></span>
+          </a>
           <div class="section-label">Notas</div>
-          <a href="#/notas/publicas" data-route="#/notas/publicas"><span class="icon">🌐</span>Públicas</a>
-          <a href="#/notas/privadas" data-route="#/notas/privadas"><span class="icon">🔒</span>Privadas</a>
+          <a href="#/notas/publicas" data-route="#/notas/publicas">
+            <span class="icon">🌐</span><span>Públicas</span>
+            <span class="badge-unread" data-unread="notas-publicas" hidden></span>
+          </a>
+          <a href="#/notas/privadas" data-route="#/notas/privadas">
+            <span class="icon">🔒</span><span>Privadas</span>
+            <span class="badge-unread" data-unread="notas-privadas" hidden></span>
+          </a>
           <div class="section-label">Media</div>
-          <a href="#/musica" data-route="#/musica"><span class="icon">🎵</span>Música</a>
-          <a href="#/fotos" data-route="#/fotos"><span class="icon">📸</span>Fotos</a>
+          <a href="#/musica" data-route="#/musica">
+            <span class="icon">🎵</span><span>Música</span>
+            <span class="badge-unread" data-unread="musica" hidden></span>
+          </a>
+          <a href="#/fotos" data-route="#/fotos">
+            <span class="icon">📸</span><span>Fotos</span>
+            <span class="badge-unread" data-unread="fotos" hidden></span>
+          </a>
+          <a href="#/lugares" data-route="#/lugares">
+            <span class="icon">📍</span><span>Lugares</span>
+            <span class="badge-unread" data-unread="lugares" hidden></span>
+          </a>
+          <div class="section-label">Otros</div>
+          <a href="#/configuracion" data-route="#/configuracion">
+            <span class="icon">⚙️</span><span>Configuración</span>
+          </a>
+          <a href="#" id="logout-link"><span class="icon">↩︎</span><span>Cerrar sesión</span></a>
         </nav>
       </aside>
 
       <main class="content" id="content"></main>
     </div>
 
-    <!-- Notes editor -->
-    <dialog class="modal" id="dlg-note" aria-labelledby="dlg-note-title">
+    <!-- ==================== Note editor ==================== -->
+    <dialog class="modal" id="dlg-note">
       <div class="modal-inner">
         <div class="modal-head">
           <h2 id="dlg-note-title">Nueva nota</h2>
-          <button class="close-x" type="button" data-close>✕</button>
+          <button class="close-x" data-close>✕</button>
         </div>
 
         <input type="text" class="title" id="note-title-input" placeholder="Título…" maxlength="200" />
 
-        <div class="toolbar" id="note-toolbar">
-          <button type="button" data-cmd="bold" title="Negrita (⌘B)"><b>B</b></button>
-          <button type="button" data-cmd="italic" title="Cursiva (⌘I)"><i>I</i></button>
-          <button type="button" data-cmd="insertUnorderedList" title="Lista con viñetas">•</button>
-          <button type="button" data-cmd="insertOrderedList" title="Lista numerada">1.</button>
-          <button type="button" data-cmd="createLink" title="Insertar enlace">🔗</button>
-          <div class="divider"></div>
-          <span class="visibility-pill" id="note-visibility">
-            <button type="button" data-vis="public" title="Pública">🌐 Pública</button>
-            <button type="button" data-vis="private" title="Privada">🔒 Privada</button>
-          </span>
-          <label class="toggle right">
-            <input type="checkbox" id="note-rich-toggle" />
-            Texto enriquecido
-          </label>
-        </div>
-
-        <div class="content-area" id="note-rich" contenteditable="true" data-placeholder="Escribe algo…" hidden></div>
         <textarea class="content-plain" id="note-plain" placeholder="Escribe algo…"></textarea>
+
+        <div class="tag-section">
+          <div class="tags-selected" id="note-tags"></div>
+          <input type="text" id="note-tag-input" placeholder="Añadir etiqueta… (Enter)" maxlength="40" />
+          <div class="tag-suggestions" id="note-tag-suggestions"></div>
+        </div>
 
         <div class="chips" id="note-links"></div>
         <div class="images-preview" id="note-images"></div>
 
+        <div class="modal-toolbar">
+          <span class="visibility-pill" id="note-visibility">
+            <button data-vis="public">🌐 Pública</button>
+            <button data-vis="private">🔒 Privada</button>
+          </span>
+          <button class="btn pin-toggle" id="note-pin-toggle" type="button" title="Anclar al inicio">📌 Anclar</button>
+        </div>
+
         <div class="modal-actions">
           <div class="left">
-            <button class="btn" type="button" id="note-add-link">+ Enlace</button>
-            <button class="btn" type="button" id="note-add-image">+ Imagen</button>
+            <button class="btn" id="note-add-link">+ Enlace</button>
+            <button class="btn" id="note-add-image">+ Imagen</button>
             <input type="file" id="note-image-input" accept="image/*" multiple hidden />
             <span class="status" id="note-status"></span>
           </div>
-          <button class="btn danger" type="button" id="note-delete" hidden>Eliminar</button>
+          <button class="btn danger" id="note-delete" hidden>Eliminar</button>
           <div class="right">
-            <button class="btn ghost" type="button" data-close>Cancelar</button>
-            <button class="btn primary" type="button" id="note-save">Guardar nota</button>
+            <button class="btn ghost" data-close>Cancelar</button>
+            <button class="btn primary" id="note-save">Guardar nota</button>
           </div>
         </div>
       </div>
     </dialog>
 
-    <!-- Media editor (Spotify / YouTube) -->
-    <dialog class="modal" id="dlg-media" aria-labelledby="dlg-media-title">
+    <!-- ==================== Media editor ==================== -->
+    <dialog class="modal" id="dlg-media">
       <div class="modal-inner">
         <div class="modal-head">
           <h2 id="dlg-media-title">Nueva música</h2>
-          <button class="close-x" type="button" data-close>✕</button>
+          <button class="close-x" data-close>✕</button>
         </div>
 
         <div class="field">
@@ -428,8 +136,8 @@
           <input type="url" id="media-url" placeholder="https://open.spotify.com/... o https://youtu.be/..." />
         </div>
         <div class="field">
-          <label for="media-title-input">Título</label>
-          <input type="text" id="media-title-input" placeholder="Nombre de la canción / playlist / video" maxlength="200" />
+          <label for="media-title-input">Título <span class="hint" id="media-title-hint"></span></label>
+          <input type="text" id="media-title-input" placeholder="Se rellena automáticamente" maxlength="200" />
         </div>
         <div class="field">
           <label for="media-note-input">Nota (opcional)</label>
@@ -438,848 +146,120 @@
 
         <div class="embed-preview" id="media-preview" hidden></div>
 
+        <div class="modal-toolbar">
+          <button class="btn pin-toggle" id="media-pin-toggle" type="button">📌 Anclar</button>
+        </div>
+
         <div class="modal-actions">
           <div class="left">
             <span class="status" id="media-status"></span>
           </div>
-          <button class="btn danger" type="button" id="media-delete" hidden>Eliminar</button>
+          <button class="btn danger" id="media-delete" hidden>Eliminar</button>
           <div class="right">
-            <button class="btn ghost" type="button" data-close>Cancelar</button>
-            <button class="btn primary" type="button" id="media-save">Guardar</button>
+            <button class="btn ghost" data-close>Cancelar</button>
+            <button class="btn primary" id="media-save">Guardar</button>
           </div>
         </div>
       </div>
     </dialog>
 
-    <!-- Photo upload modal -->
-    <dialog class="modal" id="dlg-photo" aria-labelledby="dlg-photo-title">
+    <!-- ==================== Theater mode (music play) ==================== -->
+    <dialog class="theater" id="dlg-theater">
+      <button class="theater-close" id="theater-close" aria-label="Cerrar">✕</button>
+      <button class="theater-edit" id="theater-edit">Editar</button>
+      <div class="theater-stage" id="theater-stage"></div>
+      <div class="theater-title" id="theater-title"></div>
+    </dialog>
+
+    <!-- ==================== Photo upload ==================== -->
+    <dialog class="modal" id="dlg-photo">
       <div class="modal-inner">
         <div class="modal-head">
-          <h2 id="dlg-photo-title">Subir fotos</h2>
-          <button class="close-x" type="button" data-close>✕</button>
+          <h2>Subir fotos</h2>
+          <button class="close-x" data-close>✕</button>
+        </div>
+
+        <div class="dropzone" id="photo-dropzone">
+          <div class="dz-inner">
+            <div class="dz-icon">📥</div>
+            <div class="dz-text">Arrastra fotos aquí o <button type="button" class="link-btn" id="photo-pick-btn">selecciónalas</button></div>
+            <div class="dz-sub">PNG · JPG · GIF · WebP · SVG · hasta 5MB</div>
+          </div>
+          <input type="file" id="photo-input" accept="image/*" multiple hidden />
         </div>
 
         <div class="field">
-          <label>Imágenes (puedes seleccionar varias)</label>
-          <input type="file" id="photo-input" accept="image/*" multiple />
-        </div>
-        <div class="field">
-          <label for="photo-caption">Pie de foto (opcional, se aplicará a todas)</label>
+          <label for="photo-caption">Pie de foto (opcional, se aplica a las nuevas que añadas)</label>
           <input type="text" id="photo-caption" placeholder="Una palabra o frase corta" maxlength="200" />
         </div>
+
+        <div class="upload-list" id="upload-list"></div>
 
         <div class="modal-actions">
           <div class="left">
             <span class="status" id="photo-status"></span>
           </div>
           <div class="right">
-            <button class="btn ghost" type="button" data-close>Cancelar</button>
-            <button class="btn primary" type="button" id="photo-upload">Subir</button>
+            <button class="btn primary" data-close>Listo</button>
           </div>
         </div>
       </div>
     </dialog>
 
-    <!-- Lightbox -->
+    <!-- ==================== Lightbox ==================== -->
     <dialog class="lightbox" id="dlg-lightbox">
+      <button class="lb-nav prev" id="lb-prev" aria-label="Anterior">‹</button>
+      <button class="lb-nav next" id="lb-next" aria-label="Siguiente">›</button>
+      <button class="lb-close" id="lb-close" aria-label="Cerrar">✕</button>
+      <button class="lb-pin" id="lb-pin" aria-label="Anclar">📌</button>
+      <button class="lb-feature" id="lb-feature" aria-label="Destacar">⭐</button>
+      <button class="lb-delete" id="lb-delete" aria-label="Eliminar">🗑</button>
       <img id="lightbox-img" src="" alt="" />
       <div class="lightbox-cap" id="lightbox-cap" hidden></div>
     </dialog>
 
-    <script type="module">
-      import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+    <!-- ==================== Place editor ==================== -->
+    <dialog class="modal" id="dlg-place">
+      <div class="modal-inner">
+        <div class="modal-head">
+          <h2 id="dlg-place-title">Nuevo lugar</h2>
+          <button class="close-x" data-close>✕</button>
+        </div>
 
-      const SUPABASE_URL = 'https://vmdsibzivcugjidtkhzt.supabase.co';
-      const SUPABASE_KEY = 'sb_publishable_ndJSJcAcexIbz9yn1zRoLw_iyeerQXy';
-      const BUCKET = 'notes-images';
+        <div class="field">
+          <label for="place-name">Nombre</label>
+          <input type="text" id="place-name" placeholder="Cómo lo llamamos" maxlength="200" />
+        </div>
+        <div class="field">
+          <label for="place-description">Descripción (opcional)</label>
+          <textarea id="place-description" placeholder="Por qué te gustó, qué pediste, etc."></textarea>
+        </div>
 
-      const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+        <div class="tag-section">
+          <div class="tags-selected" id="place-tags"></div>
+          <input type="text" id="place-tag-input" placeholder="Añadir etiqueta… (Enter)" maxlength="40" />
+          <div class="tag-suggestions" id="place-tag-suggestions"></div>
+        </div>
 
-      // ===================== Helpers =====================
-      const $ = (s, root = document) => root.querySelector(s);
-      const $$ = (s, root = document) => Array.from(root.querySelectorAll(s));
+        <div class="field"><label>Coordenadas</label><div class="coord-readout" id="place-coords">—</div></div>
 
-      const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-      const publicImageUrl = (path) => supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
-      const fmtDate = (iso) => {
-        const d = new Date(iso);
-        const now = new Date();
-        const sameDay = d.toDateString() === now.toDateString();
-        return sameDay
-          ? d.toLocaleTimeString('es', { hour: 'numeric', minute: '2-digit' })
-          : d.toLocaleDateString('es', { month: 'short', day: 'numeric', year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric' });
-      };
+        <div class="modal-toolbar">
+          <button class="btn pin-toggle" id="place-pin-toggle" type="button">📌 Anclar</button>
+        </div>
 
-      // URL parsing for media embeds
-      function parseMediaUrl(rawUrl) {
-        if (!rawUrl) return null;
-        let url;
-        try { url = new URL(rawUrl.trim()); } catch { return null; }
-        const host = url.hostname.replace(/^www\./, '');
-
-        // Spotify
-        if (host === 'open.spotify.com' || host === 'spotify.com') {
-          const m = url.pathname.match(/^\/(playlist|track|album|episode|show|artist)\/([A-Za-z0-9]+)/);
-          if (m) {
-            const [, type, id] = m;
-            return {
-              kind: 'spotify',
-              embedUrl: `https://open.spotify.com/embed/${type}/${id}`,
-              normalizedUrl: `https://open.spotify.com/${type}/${id}`,
-              thumbnailUrl: null,
-            };
-          }
-        }
-
-        // YouTube
-        if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
-          // playlist
-          const list = url.searchParams.get('list');
-          const v = url.searchParams.get('v');
-          if (v) {
-            return {
-              kind: 'youtube',
-              embedUrl: `https://www.youtube.com/embed/${v}${list ? `?list=${list}` : ''}`,
-              normalizedUrl: rawUrl,
-              thumbnailUrl: `https://i.ytimg.com/vi/${v}/hqdefault.jpg`,
-            };
-          }
-          if (url.pathname.startsWith('/playlist') && list) {
-            return {
-              kind: 'youtube',
-              embedUrl: `https://www.youtube.com/embed/videoseries?list=${list}`,
-              normalizedUrl: rawUrl,
-              thumbnailUrl: null,
-            };
-          }
-          // /shorts/{id}
-          const shorts = url.pathname.match(/^\/shorts\/([A-Za-z0-9_-]+)/);
-          if (shorts) {
-            return {
-              kind: 'youtube',
-              embedUrl: `https://www.youtube.com/embed/${shorts[1]}`,
-              normalizedUrl: rawUrl,
-              thumbnailUrl: `https://i.ytimg.com/vi/${shorts[1]}/hqdefault.jpg`,
-            };
-          }
-        }
-        if (host === 'youtu.be') {
-          const id = url.pathname.replace(/^\//, '');
-          if (id) {
-            return {
-              kind: 'youtube',
-              embedUrl: `https://www.youtube.com/embed/${id}`,
-              normalizedUrl: rawUrl,
-              thumbnailUrl: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
-            };
-          }
-        }
-
-        return null;
-      }
-
-      // ===================== State =====================
-      const state = {
-        route: '#/inicio',
-        notes: [],          // all notes (both visibilities)
-        media: [],
-        photos: [],
-        view: { notas: 'cards', musica: 'cards' }, // per-section toggle
-      };
-
-      // ===================== Data loading =====================
-      async function loadAll() {
-        const [{ data: notes }, { data: media }, { data: photos }] = await Promise.all([
-          supabase.from('notes').select('*').order('created_at', { ascending: false }),
-          supabase.from('media').select('*').order('created_at', { ascending: false }),
-          supabase.from('photos').select('*').order('created_at', { ascending: false }),
-        ]);
-        state.notes = notes || [];
-        state.media = media || [];
-        state.photos = photos || [];
-      }
-
-      // ===================== Router =====================
-      function syncMenu() {
-        $$('#menu a').forEach(a => a.classList.toggle('active', a.dataset.route === state.route));
-      }
-
-      async function router() {
-        const hash = location.hash || '#/inicio';
-        state.route = hash;
-        syncMenu();
-        const content = $('#content');
-        content.innerHTML = '<p class="status">Cargando…</p>';
-        await loadAll();
-        switch (hash) {
-          case '#/inicio': renderInicio(content); break;
-          case '#/notas/publicas': renderNotas(content, 'public'); break;
-          case '#/notas/privadas': renderNotas(content, 'private'); break;
-          case '#/musica': renderMusica(content); break;
-          case '#/fotos': renderFotos(content); break;
-          default:
-            location.hash = '#/inicio';
-        }
-      }
-
-      window.addEventListener('hashchange', router);
-
-      // ===================== Page: Inicio (dashboard) =====================
-      function renderInicio(root) {
-        const pubCount = state.notes.filter(n => n.visibility === 'public').length;
-        const privCount = state.notes.filter(n => n.visibility === 'private').length;
-        const mediaCount = state.media.length;
-        const photoCount = state.photos.length;
-
-        const recentNotes = state.notes.slice(0, 3);
-        const recentMedia = state.media.slice(0, 3);
-        const recentPhotos = state.photos.slice(0, 8);
-
-        root.innerHTML = `
-          <div class="page-head">
-            <div>
-              <h1>Hola 🪼</h1>
-              <div class="sub">Un vistazo a todo lo nuestro</div>
-            </div>
+        <div class="modal-actions">
+          <div class="left">
+            <span class="status" id="place-status"></span>
           </div>
-
-          <div class="stats">
-            <a class="stat" href="#/notas/publicas">
-              <span class="stat-label">🌐 Notas públicas</span>
-              <span class="stat-value">${pubCount}</span>
-            </a>
-            <a class="stat" href="#/notas/privadas">
-              <span class="stat-label">🔒 Notas privadas</span>
-              <span class="stat-value">${privCount}</span>
-            </a>
-            <a class="stat" href="#/musica">
-              <span class="stat-label">🎵 Música</span>
-              <span class="stat-value">${mediaCount}</span>
-            </a>
-            <a class="stat" href="#/fotos">
-              <span class="stat-label">📸 Fotos</span>
-              <span class="stat-value">${photoCount}</span>
-            </a>
+          <button class="btn danger" id="place-delete" hidden>Eliminar</button>
+          <div class="right">
+            <button class="btn ghost" data-close>Cancelar</button>
+            <button class="btn primary" id="place-save">Guardar lugar</button>
           </div>
+        </div>
+      </div>
+    </dialog>
 
-          <section class="section-block" id="dash-notes">
-            <div class="section-head">
-              <h2>Notas recientes</h2>
-              <a href="#/notas/publicas">Ver todas →</a>
-            </div>
-            <div class="grid-cards" id="dash-notes-grid"></div>
-          </section>
-
-          <section class="section-block" id="dash-media">
-            <div class="section-head">
-              <h2>Música reciente</h2>
-              <a href="#/musica">Ver toda →</a>
-            </div>
-            <div class="grid-cards" id="dash-media-grid"></div>
-          </section>
-
-          <section class="section-block" id="dash-photos">
-            <div class="section-head">
-              <h2>Fotos recientes</h2>
-              <a href="#/fotos">Ver todas →</a>
-            </div>
-            <div class="photo-grid" id="dash-photos-grid"></div>
-          </section>
-        `;
-
-        const notesGrid = $('#dash-notes-grid');
-        if (recentNotes.length) recentNotes.forEach(n => notesGrid.appendChild(renderNoteCard(n)));
-        else notesGrid.innerHTML = '<div class="empty">Aún no hay notas. Empieza desde una de las dos secciones.</div>';
-
-        const mediaGrid = $('#dash-media-grid');
-        if (recentMedia.length) recentMedia.forEach(m => mediaGrid.appendChild(renderMediaCard(m)));
-        else mediaGrid.innerHTML = '<div class="empty">Aún no hay música guardada.</div>';
-
-        const photosGrid = $('#dash-photos-grid');
-        if (recentPhotos.length) recentPhotos.forEach(p => photosGrid.appendChild(renderPhoto(p)));
-        else photosGrid.innerHTML = '<div class="empty">Aún no hay fotos.</div>';
-      }
-
-      // ===================== Page: Notas =====================
-      function renderNotas(root, visibility) {
-        const label = visibility === 'public' ? 'Notas públicas' : 'Notas privadas';
-        const icon = visibility === 'public' ? '🌐' : '🔒';
-        const sub = visibility === 'public' ? 'Visibles para los dos' : 'Solo para los dos';
-        const filtered = state.notes.filter(n => n.visibility === visibility);
-
-        root.innerHTML = `
-          <div class="page-head">
-            <div>
-              <h1>${icon} ${label}</h1>
-              <div class="sub">${sub}</div>
-            </div>
-            <div class="view-toggle" id="notes-view-toggle">
-              <button data-v="cards" class="${state.view.notas === 'cards' ? 'active' : ''}">Tarjetas</button>
-              <button data-v="list" class="${state.view.notas === 'list' ? 'active' : ''}">Lista</button>
-            </div>
-          </div>
-          <div class="${state.view.notas === 'cards' ? 'grid-cards' : 'grid-list'}" id="notes-grid"></div>
-        `;
-
-        $('#notes-view-toggle').addEventListener('click', (e) => {
-          const b = e.target.closest('button[data-v]');
-          if (!b) return;
-          state.view.notas = b.dataset.v;
-          renderNotas(root, visibility);
-        });
-
-        const grid = $('#notes-grid');
-        grid.appendChild(renderNewCtaTile('Nueva nota', () => openNoteEditor(null, visibility)));
-        filtered.forEach(n => grid.appendChild(renderNoteCard(n)));
-      }
-
-      function renderNewCtaTile(label, onOpen) {
-        const tile = document.createElement('article');
-        tile.className = 'card new-cta';
-        tile.setAttribute('role', 'button');
-        tile.setAttribute('tabindex', '0');
-        tile.setAttribute('aria-label', label);
-        tile.innerHTML = `<div class="plus" aria-hidden="true">＋</div><div class="label">${escapeHtml(label)}</div>`;
-        tile.addEventListener('click', onOpen);
-        tile.addEventListener('keydown', e => {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); }
-        });
-        return tile;
-      }
-
-      function renderNoteCard(note) {
-        const card = document.createElement('article');
-        card.className = 'card clickable';
-        card.setAttribute('role', 'button');
-        card.setAttribute('tabindex', '0');
-        card.setAttribute('aria-label', `Abrir nota: ${note.title}`);
-
-        const body = document.createElement('div');
-        body.className = 'body';
-
-        const h = document.createElement('h3');
-        h.textContent = note.title;
-        body.appendChild(h);
-
-        if (note.content) {
-          const p = document.createElement('div');
-          p.className = 'preview';
-          if (note.content_is_rich) p.innerHTML = note.content;
-          else p.textContent = note.content;
-          body.appendChild(p);
-        }
-
-        if (Array.isArray(note.images) && note.images.length) {
-          const gallery = document.createElement('div');
-          gallery.className = 'gallery';
-          for (const path of note.images) {
-            const img = document.createElement('img');
-            img.src = publicImageUrl(path);
-            img.alt = ''; img.loading = 'lazy';
-            gallery.appendChild(img);
-          }
-          body.appendChild(gallery);
-        }
-
-        if (Array.isArray(note.links) && note.links.length) {
-          const lk = document.createElement('div');
-          lk.className = 'links';
-          for (const link of note.links) {
-            const a = document.createElement('a');
-            a.href = link.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
-            a.textContent = link.label || link.url;
-            a.addEventListener('click', e => e.stopPropagation());
-            lk.appendChild(a);
-          }
-          body.appendChild(lk);
-        }
-
-        const meta = document.createElement('div');
-        meta.className = 'meta';
-        const badge = note.visibility === 'private'
-          ? '<span class="badge private">🔒 Privada</span>'
-          : '<span class="badge">🌐 Pública</span>';
-        meta.innerHTML = `<span>${fmtDate(note.updated_at || note.created_at)}</span>${badge}`;
-        body.appendChild(meta);
-
-        card.appendChild(body);
-        card.addEventListener('click', () => openNoteEditor(note));
-        card.addEventListener('keydown', e => {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNoteEditor(note); }
-        });
-        return card;
-      }
-
-      // ===================== Page: Música =====================
-      function renderMusica(root) {
-        root.innerHTML = `
-          <div class="page-head">
-            <div>
-              <h1>🎵 Música</h1>
-              <div class="sub">Playlists de Spotify y videos de YouTube</div>
-            </div>
-            <div class="view-toggle" id="media-view-toggle">
-              <button data-v="cards" class="${state.view.musica === 'cards' ? 'active' : ''}">Tarjetas</button>
-              <button data-v="list" class="${state.view.musica === 'list' ? 'active' : ''}">Lista</button>
-            </div>
-          </div>
-          <div class="${state.view.musica === 'cards' ? 'grid-cards' : 'grid-list'}" id="media-grid"></div>
-        `;
-        $('#media-view-toggle').addEventListener('click', e => {
-          const b = e.target.closest('button[data-v]');
-          if (!b) return;
-          state.view.musica = b.dataset.v;
-          renderMusica(root);
-        });
-
-        const grid = $('#media-grid');
-        grid.appendChild(renderNewCtaTile('Nueva música', () => openMediaEditor(null)));
-        state.media.forEach(m => grid.appendChild(renderMediaCard(m)));
-      }
-
-      function renderMediaCard(m) {
-        const card = document.createElement('article');
-        card.className = `card clickable media-card ${m.kind}`;
-        card.setAttribute('role', 'button');
-        card.setAttribute('tabindex', '0');
-        card.setAttribute('aria-label', `Abrir música: ${m.title}`);
-
-        const embed = document.createElement('div');
-        embed.className = 'embed-wrap';
-        const iframe = document.createElement('iframe');
-        iframe.loading = 'lazy';
-        iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
-        iframe.referrerPolicy = 'strict-origin-when-cross-origin';
-        iframe.src = m.embed_url;
-        // Prevent click on iframe from bubbling up and opening editor
-        embed.addEventListener('click', e => e.stopPropagation());
-        embed.appendChild(iframe);
-        card.appendChild(embed);
-
-        const body = document.createElement('div');
-        body.className = 'body';
-        const h = document.createElement('h3');
-        h.textContent = m.title;
-        body.appendChild(h);
-        if (m.note) {
-          const p = document.createElement('div');
-          p.className = 'preview';
-          p.textContent = m.note;
-          body.appendChild(p);
-        }
-        const meta = document.createElement('div');
-        meta.className = 'meta';
-        const kindLabel = m.kind === 'spotify' ? '🟢 Spotify' : '▶️ YouTube';
-        meta.innerHTML = `<span>${fmtDate(m.created_at)}</span><span class="badge">${kindLabel}</span>`;
-        body.appendChild(meta);
-        card.appendChild(body);
-
-        card.addEventListener('click', () => openMediaEditor(m));
-        card.addEventListener('keydown', e => {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openMediaEditor(m); }
-        });
-        return card;
-      }
-
-      // ===================== Page: Fotos =====================
-      function renderFotos(root) {
-        root.innerHTML = `
-          <div class="page-head">
-            <div>
-              <h1>📸 Fotos</h1>
-              <div class="sub">Nuestro álbum</div>
-            </div>
-          </div>
-          <div class="photo-grid" id="photo-grid"></div>
-        `;
-        const grid = $('#photo-grid');
-        const cta = document.createElement('div');
-        cta.className = 'photo-cta';
-        cta.setAttribute('role', 'button');
-        cta.setAttribute('tabindex', '0');
-        cta.innerHTML = `<div><div class="plus">＋</div><div class="label">Subir fotos</div></div>`;
-        cta.addEventListener('click', openPhotoUpload);
-        cta.addEventListener('keydown', e => {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPhotoUpload(); }
-        });
-        grid.appendChild(cta);
-        state.photos.forEach(p => grid.appendChild(renderPhoto(p)));
-      }
-
-      function renderPhoto(p) {
-        const tile = document.createElement('div');
-        tile.className = 'photo';
-        tile.setAttribute('role', 'button');
-        tile.setAttribute('tabindex', '0');
-        const src = publicImageUrl(p.storage_path);
-        tile.innerHTML = `<img src="${escapeHtml(src)}" alt="${escapeHtml(p.caption || '')}" loading="lazy" />` +
-          (p.caption ? `<div class="photo-caption">${escapeHtml(p.caption)}</div>` : '');
-        tile.addEventListener('click', () => openLightbox(p));
-        tile.addEventListener('keydown', e => {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLightbox(p); }
-        });
-        return tile;
-      }
-
-      // ===================== Notes editor =====================
-      const dlgNote = $('#dlg-note');
-      const noteTitle = $('#dlg-note-title');
-      const noteTitleInput = $('#note-title-input');
-      const noteRich = $('#note-rich');
-      const notePlain = $('#note-plain');
-      const noteRichToggle = $('#note-rich-toggle');
-      const noteToolbar = $('#note-toolbar');
-      const noteLinks = $('#note-links');
-      const noteImagesEl = $('#note-images');
-      const noteImageInput = $('#note-image-input');
-      const noteStatus = $('#note-status');
-      const noteSaveBtn = $('#note-save');
-      const noteDeleteBtn = $('#note-delete');
-      const noteVisPill = $('#note-visibility');
-
-      const noteDraft = {
-        id: null, title: '', content: '', isRich: false,
-        visibility: 'public', links: [], images: [],
-      };
-
-      function setNoteRichMode(isRich) {
-        noteDraft.isRich = isRich;
-        noteRichToggle.checked = isRich;
-        if (isRich) {
-          if (noteRich.innerHTML.trim() === '' && notePlain.value.trim() !== '') {
-            noteRich.innerText = notePlain.value;
-          }
-          noteRich.hidden = false; notePlain.hidden = true;
-        } else {
-          if (notePlain.value.trim() === '' && noteRich.innerText.trim() !== '') {
-            notePlain.value = noteRich.innerText;
-          }
-          noteRich.hidden = true; notePlain.hidden = false;
-        }
-      }
-
-      function setNoteVisibility(v) {
-        noteDraft.visibility = v;
-        $$('button', noteVisPill).forEach(b => b.classList.toggle('active', b.dataset.vis === v));
-      }
-
-      function renderNoteLinkChips() {
-        noteLinks.innerHTML = '';
-        noteDraft.links.forEach((link, i) => {
-          const chip = document.createElement('span');
-          chip.className = 'chip';
-          chip.innerHTML = `🔗 <a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.label || link.url)}</a> <button type="button" aria-label="Quitar">×</button>`;
-          chip.querySelector('button').addEventListener('click', () => {
-            noteDraft.links.splice(i, 1); renderNoteLinkChips();
-          });
-          noteLinks.appendChild(chip);
-        });
-      }
-
-      function renderNoteImagePreviews() {
-        noteImagesEl.innerHTML = '';
-        noteDraft.images.forEach((path, i) => {
-          const thumb = document.createElement('div');
-          thumb.className = 'thumb';
-          thumb.innerHTML = `<img src="${escapeHtml(publicImageUrl(path))}" alt="" /><button class="remove" type="button" aria-label="Quitar">×</button>`;
-          thumb.querySelector('button.remove').addEventListener('click', async () => {
-            try { await supabase.storage.from(BUCKET).remove([path]); } catch {}
-            noteDraft.images.splice(i, 1); renderNoteImagePreviews();
-          });
-          noteImagesEl.appendChild(thumb);
-        });
-      }
-
-      function openNoteEditor(note, defaultVis = 'public') {
-        noteDraft.id = note?.id || null;
-        noteTitleInput.value = note?.title || '';
-        noteDraft.isRich = !!note?.content_is_rich;
-        setNoteRichMode(noteDraft.isRich);
-        if (noteDraft.isRich) {
-          noteRich.innerHTML = note?.content || '';
-          notePlain.value = '';
-        } else {
-          notePlain.value = note?.content || '';
-          noteRich.innerHTML = '';
-        }
-        noteDraft.links = Array.isArray(note?.links) ? [...note.links] : [];
-        noteDraft.images = Array.isArray(note?.images) ? [...note.images] : [];
-        setNoteVisibility(note?.visibility || defaultVis);
-        renderNoteLinkChips();
-        renderNoteImagePreviews();
-        noteStatus.textContent = '';
-        noteTitle.textContent = note ? 'Editar nota' : 'Nueva nota';
-        noteSaveBtn.textContent = note ? 'Actualizar nota' : 'Guardar nota';
-        noteDeleteBtn.hidden = !note;
-        dlgNote.showModal();
-        setTimeout(() => noteTitleInput.focus(), 0);
-      }
-
-      noteVisPill.addEventListener('click', (e) => {
-        const b = e.target.closest('button[data-vis]');
-        if (b) setNoteVisibility(b.dataset.vis);
-      });
-
-      noteToolbar.addEventListener('click', (e) => {
-        const btn = e.target.closest('button[data-cmd]');
-        if (!btn) return;
-        if (!noteDraft.isRich) setNoteRichMode(true);
-        noteRich.focus();
-        const cmd = btn.dataset.cmd;
-        if (cmd === 'createLink') {
-          const url = prompt('URL del enlace:');
-          if (url) document.execCommand('createLink', false, url);
-        } else {
-          document.execCommand(cmd, false, null);
-        }
-      });
-
-      noteRichToggle.addEventListener('change', () => setNoteRichMode(noteRichToggle.checked));
-
-      $('#note-add-link').addEventListener('click', () => {
-        const url = prompt('URL del enlace:');
-        if (!url) return;
-        let normalized = url.trim();
-        if (!/^https?:\/\//i.test(normalized)) normalized = 'https://' + normalized;
-        const label = prompt('Etiqueta (opcional):', '') || '';
-        noteDraft.links.push({ url: normalized, label });
-        renderNoteLinkChips();
-      });
-
-      $('#note-add-image').addEventListener('click', () => noteImageInput.click());
-
-      noteImageInput.addEventListener('change', async () => {
-        const files = Array.from(noteImageInput.files || []);
-        noteImageInput.value = '';
-        if (!files.length) return;
-        setStatus(noteStatus, 'Subiendo…');
-        try {
-          for (const file of files) {
-            const ext = (file.name.split('.').pop() || 'png').toLowerCase();
-            const path = `${crypto.randomUUID()}.${ext}`;
-            const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
-              cacheControl: '3600', upsert: false, contentType: file.type,
-            });
-            if (error) throw error;
-            noteDraft.images.push(path);
-          }
-          renderNoteImagePreviews();
-          setStatus(noteStatus, 'Subida completa');
-        } catch (e) {
-          console.error(e); setStatus(noteStatus, `Error al subir: ${e.message || e}`, true);
-        }
-      });
-
-      noteSaveBtn.addEventListener('click', async () => {
-        const title = noteTitleInput.value.trim();
-        if (!title) { setStatus(noteStatus, 'El título es obligatorio', true); noteTitleInput.focus(); return; }
-        const content = noteDraft.isRich ? noteRich.innerHTML : notePlain.value;
-        const payload = {
-          title, content,
-          content_is_rich: noteDraft.isRich,
-          visibility: noteDraft.visibility,
-          links: noteDraft.links,
-          images: noteDraft.images,
-        };
-        setStatus(noteStatus, 'Guardando…');
-        try {
-          const { error } = noteDraft.id
-            ? await supabase.from('notes').update(payload).eq('id', noteDraft.id)
-            : await supabase.from('notes').insert(payload);
-          if (error) throw error;
-          dlgNote.close();
-          await router();
-        } catch (e) {
-          console.error(e); setStatus(noteStatus, `Error al guardar: ${e.message || e}`, true);
-        }
-      });
-
-      noteDeleteBtn.addEventListener('click', async () => {
-        if (!noteDraft.id) return;
-        const note = state.notes.find(n => n.id === noteDraft.id);
-        if (!note) return;
-        if (!confirm(`¿Eliminar "${note.title}"? Esta acción no se puede deshacer.`)) return;
-        setStatus(noteStatus, 'Eliminando…');
-        try {
-          if (Array.isArray(note.images) && note.images.length) {
-            try { await supabase.storage.from(BUCKET).remove(note.images); } catch {}
-          }
-          const { error } = await supabase.from('notes').delete().eq('id', note.id);
-          if (error) throw error;
-          dlgNote.close();
-          await router();
-        } catch (e) {
-          setStatus(noteStatus, `Error al eliminar: ${e.message || e}`, true);
-        }
-      });
-
-      // ===================== Media editor =====================
-      const dlgMedia = $('#dlg-media');
-      const mediaTitleHead = $('#dlg-media-title');
-      const mediaUrl = $('#media-url');
-      const mediaTitleInput = $('#media-title-input');
-      const mediaNoteInput = $('#media-note-input');
-      const mediaPreview = $('#media-preview');
-      const mediaStatus = $('#media-status');
-      const mediaSaveBtn = $('#media-save');
-      const mediaDeleteBtn = $('#media-delete');
-
-      const mediaDraft = { id: null, parsed: null };
-
-      function updateMediaPreview() {
-        const parsed = parseMediaUrl(mediaUrl.value);
-        mediaDraft.parsed = parsed;
-        if (!parsed) {
-          mediaPreview.hidden = true;
-          mediaPreview.innerHTML = '';
-          return;
-        }
-        mediaPreview.hidden = false;
-        mediaPreview.className = `embed-preview ${parsed.kind}`;
-        mediaPreview.innerHTML = `<iframe loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; encrypted-media; picture-in-picture" src="${escapeHtml(parsed.embedUrl)}"></iframe>`;
-      }
-
-      function openMediaEditor(m) {
-        mediaDraft.id = m?.id || null;
-        mediaUrl.value = m?.url || '';
-        mediaTitleInput.value = m?.title || '';
-        mediaNoteInput.value = m?.note || '';
-        mediaDraft.parsed = m
-          ? { kind: m.kind, embedUrl: m.embed_url, normalizedUrl: m.url, thumbnailUrl: m.thumbnail_url }
-          : null;
-        if (m) updateMediaPreview();
-        else { mediaPreview.hidden = true; mediaPreview.innerHTML = ''; }
-        mediaStatus.textContent = '';
-        mediaTitleHead.textContent = m ? 'Editar música' : 'Nueva música';
-        mediaSaveBtn.textContent = m ? 'Actualizar' : 'Guardar';
-        mediaDeleteBtn.hidden = !m;
-        dlgMedia.showModal();
-        setTimeout(() => (m ? mediaTitleInput : mediaUrl).focus(), 0);
-      }
-
-      mediaUrl.addEventListener('input', updateMediaPreview);
-      mediaUrl.addEventListener('paste', () => setTimeout(updateMediaPreview, 0));
-
-      mediaSaveBtn.addEventListener('click', async () => {
-        const title = mediaTitleInput.value.trim();
-        const parsed = parseMediaUrl(mediaUrl.value);
-        if (!parsed) {
-          setStatus(mediaStatus, 'Pega un enlace válido de Spotify o YouTube', true); mediaUrl.focus(); return;
-        }
-        if (!title) {
-          setStatus(mediaStatus, 'El título es obligatorio', true); mediaTitleInput.focus(); return;
-        }
-        const payload = {
-          kind: parsed.kind,
-          title,
-          url: parsed.normalizedUrl,
-          embed_url: parsed.embedUrl,
-          thumbnail_url: parsed.thumbnailUrl,
-          note: mediaNoteInput.value,
-        };
-        setStatus(mediaStatus, 'Guardando…');
-        try {
-          const { error } = mediaDraft.id
-            ? await supabase.from('media').update(payload).eq('id', mediaDraft.id)
-            : await supabase.from('media').insert(payload);
-          if (error) throw error;
-          dlgMedia.close();
-          await router();
-        } catch (e) {
-          console.error(e); setStatus(mediaStatus, `Error al guardar: ${e.message || e}`, true);
-        }
-      });
-
-      mediaDeleteBtn.addEventListener('click', async () => {
-        if (!mediaDraft.id) return;
-        const m = state.media.find(x => x.id === mediaDraft.id);
-        if (!m) return;
-        if (!confirm(`¿Eliminar "${m.title}"? Esta acción no se puede deshacer.`)) return;
-        setStatus(mediaStatus, 'Eliminando…');
-        try {
-          const { error } = await supabase.from('media').delete().eq('id', m.id);
-          if (error) throw error;
-          dlgMedia.close();
-          await router();
-        } catch (e) {
-          setStatus(mediaStatus, `Error al eliminar: ${e.message || e}`, true);
-        }
-      });
-
-      // ===================== Photo upload =====================
-      const dlgPhoto = $('#dlg-photo');
-      const photoInput = $('#photo-input');
-      const photoCaption = $('#photo-caption');
-      const photoStatus = $('#photo-status');
-      const photoUploadBtn = $('#photo-upload');
-
-      function openPhotoUpload() {
-        photoInput.value = '';
-        photoCaption.value = '';
-        photoStatus.textContent = '';
-        dlgPhoto.showModal();
-      }
-
-      photoUploadBtn.addEventListener('click', async () => {
-        const files = Array.from(photoInput.files || []);
-        if (!files.length) { setStatus(photoStatus, 'Selecciona al menos una imagen', true); return; }
-        setStatus(photoStatus, `Subiendo 0 / ${files.length}…`);
-        try {
-          const caption = photoCaption.value;
-          for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            const ext = (file.name.split('.').pop() || 'png').toLowerCase();
-            const path = `${crypto.randomUUID()}.${ext}`;
-            const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, {
-              cacheControl: '3600', upsert: false, contentType: file.type,
-            });
-            if (upErr) throw upErr;
-            const { error: insErr } = await supabase.from('photos').insert({ storage_path: path, caption });
-            if (insErr) throw insErr;
-            setStatus(photoStatus, `Subiendo ${i + 1} / ${files.length}…`);
-          }
-          dlgPhoto.close();
-          await router();
-        } catch (e) {
-          console.error(e); setStatus(photoStatus, `Error: ${e.message || e}`, true);
-        }
-      });
-
-      // ===================== Lightbox =====================
-      const dlgLightbox = $('#dlg-lightbox');
-      const lightboxImg = $('#lightbox-img');
-      const lightboxCap = $('#lightbox-cap');
-
-      function openLightbox(photo) {
-        lightboxImg.src = publicImageUrl(photo.storage_path);
-        if (photo.caption) {
-          lightboxCap.textContent = photo.caption;
-          lightboxCap.hidden = false;
-        } else {
-          lightboxCap.hidden = true;
-        }
-        dlgLightbox.showModal();
-      }
-      dlgLightbox.addEventListener('click', () => dlgLightbox.close());
-
-      // ===================== Generic modal helpers =====================
-      function setStatus(el, msg, isError = false) {
-        el.textContent = msg;
-        el.classList.toggle('error', isError);
-        if (msg && !isError) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 2500);
-      }
-
-      // Close buttons / backdrop click handling on all .modal dialogs
-      $$('dialog.modal').forEach(dlg => {
-        dlg.addEventListener('click', e => {
-          if (e.target === dlg) dlg.close();
-          if (e.target.matches('[data-close]')) dlg.close();
-        });
-      });
-
-      // ===================== Boot =====================
-      if (!location.hash) location.hash = '#/inicio';
-      router();
-    </script>
+    <script type="module" src="./app.js"></script>
   </body>
 </html>
