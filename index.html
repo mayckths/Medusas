@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>🪼🪼 — nuestro lugar seguro</title>
+    <title>🪼🪼 — Nuestro lugar seguro</title>
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="anonymous" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
@@ -15,7 +15,7 @@
     <div class="auth-overlay" id="auth-overlay" hidden>
       <div class="auth-card">
         <div class="auth-logo">🪼🪼</div>
-        <div class="auth-tag">nuestro lugar seguro</div>
+        <div class="auth-tag">Nuestro lugar seguro</div>
         <div class="auth-form">
           <div class="user-picker" id="user-picker">
             <!-- buttons added dynamically -->
@@ -34,11 +34,7 @@
       <aside class="sidebar">
         <div class="brand">
           <div class="logo">🪼🪼</div>
-          <div class="tag">nuestro lugar seguro</div>
-        </div>
-        <div class="user-pill" id="user-pill">
-          <span class="dot"></span>
-          <span class="who" id="who-am-i">—</span>
+          <div class="tag">Nuestro lugar seguro</div>
         </div>
         <nav class="menu" id="menu">
           <a href="#/inicio" data-route="#/inicio">
@@ -51,7 +47,7 @@
             <span class="badge-unread" data-unread="notas-publicas" hidden></span>
           </a>
           <a href="#/notas/privadas" data-route="#/notas/privadas">
-            <span class="icon">🔒</span><span>Privadas</span>
+            <span class="icon">🔒</span><span>Compartidas</span>
             <span class="badge-unread" data-unread="notas-privadas" hidden></span>
           </a>
           <div class="section-label">Media</div>
@@ -71,7 +67,6 @@
           <a href="#/configuracion" data-route="#/configuracion">
             <span class="icon">⚙️</span><span>Configuración</span>
           </a>
-          <a href="#" id="logout-link"><span class="icon">↩︎</span><span>Cerrar sesión</span></a>
         </nav>
       </aside>
 
@@ -102,7 +97,7 @@
         <div class="modal-toolbar">
           <span class="visibility-pill" id="note-visibility">
             <button data-vis="public">🌐 Pública</button>
-            <button data-vis="private">🔒 Privada</button>
+            <button data-vis="private">🔒 Compartida</button>
           </span>
           <button class="btn pin-toggle" id="note-pin-toggle" type="button" title="Anclar al inicio">📌 Anclar</button>
         </div>
@@ -148,6 +143,7 @@
 
         <div class="modal-toolbar">
           <button class="btn pin-toggle" id="media-pin-toggle" type="button">📌 Anclar</button>
+          <button class="btn pin-toggle" id="media-feature-toggle" type="button">⭐ Destacar</button>
         </div>
 
         <div class="modal-actions">
@@ -188,9 +184,16 @@
           <input type="file" id="photo-input" accept="image/*" multiple hidden />
         </div>
 
-        <div class="field">
-          <label for="photo-caption">Pie de foto (opcional, se aplica a las nuevas que añadas)</label>
-          <input type="text" id="photo-caption" placeholder="Una palabra o frase corta" maxlength="200" />
+        <div class="field two">
+          <div>
+            <label for="photo-album">Álbum (opcional)</label>
+            <input type="text" id="photo-album" placeholder="Europa, Cumpleaños…" list="photo-album-list" maxlength="100" />
+            <datalist id="photo-album-list"></datalist>
+          </div>
+          <div>
+            <label for="photo-caption">Pie de foto (opcional)</label>
+            <input type="text" id="photo-caption" placeholder="Se aplica a las nuevas que añadas" maxlength="200" />
+          </div>
         </div>
 
         <div class="upload-list" id="upload-list"></div>
@@ -213,9 +216,13 @@
       <button class="lb-close" id="lb-close" aria-label="Cerrar">✕</button>
       <button class="lb-pin" id="lb-pin" aria-label="Anclar">📌</button>
       <button class="lb-feature" id="lb-feature" aria-label="Destacar">⭐</button>
+      <button class="lb-note" id="lb-note" aria-label="Nota">💬</button>
       <button class="lb-delete" id="lb-delete" aria-label="Eliminar">🗑</button>
-      <img id="lightbox-img" src="" alt="" />
+      <div class="lb-stage" id="lb-stage">
+        <img id="lightbox-img" src="" alt="" />
+      </div>
       <div class="lightbox-cap" id="lightbox-cap" hidden></div>
+      <div class="lightbox-note" id="lightbox-note" hidden></div>
     </dialog>
 
     <!-- ==================== Place editor ==================== -->
@@ -224,6 +231,12 @@
         <div class="modal-head">
           <h2 id="dlg-place-title">Nuevo lugar</h2>
           <button class="close-x" data-close>✕</button>
+        </div>
+
+        <div class="field">
+          <label for="place-search">Buscar por dirección</label>
+          <input type="text" id="place-search" placeholder='Ej: "Plaza Mayor, Madrid" — luego elige un resultado' autocomplete="off" />
+          <div class="search-results" id="place-search-results"></div>
         </div>
 
         <div class="field">

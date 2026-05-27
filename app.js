@@ -207,7 +207,6 @@ function showLogin() {
 function hideLogin() {
   $('#auth-overlay').hidden = true;
   $('#app-shell').hidden = false;
-  $('#who-am-i').textContent = state.currentUser;
 }
 
 async function initAuthUI() {
@@ -252,8 +251,6 @@ async function initAuthUI() {
   };
   $('#auth-submit').addEventListener('click', submit);
   $('#auth-password').addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
-
-  $('#logout-link').addEventListener('click', (e) => { e.preventDefault(); logout(); });
 }
 
 // ============================================================
@@ -341,26 +338,68 @@ window.addEventListener('hashchange', router);
 // ============================================================
 // Page: Inicio (dashboard)
 // ============================================================
-function renderInicio(root) {
-  const pubCount = state.notes.filter(n => n.visibility === 'public').length;
-  const privCount = state.notes.filter(n => n.visibility === 'private').length;
-  const mediaCount = state.media.length;
-  const photoCount = state.photos.length;
-  const placeCount = state.places.length;
+const DEFAULT_DASHBOARD_ORDER = ['notes', 'media', 'photos', 'places'];
 
+function getDashboardOrder() {
+  const raw = state.settings.dashboard_order;
+  const sections = Array.isArray(raw?.order) ? raw.order : DEFAULT_DASHBOARD_ORDER;
+  // Ensure all sections present and no extras
+  const known = new Set(DEFAULT_DASHBOARD_ORDER);
+  const filtered = sections.filter(s => known.has(s));
+  DEFAULT_DASHBOARD_ORDER.forEach(s => { if (!filtered.includes(s)) filtered.push(s); });
+  return filtered;
+}
+
+function renderInicio(root) {
   const unreadNotesPub = state.notes.filter(n => n.visibility === 'public' && isUnread(n)).length;
   const unreadNotesPriv = state.notes.filter(n => n.visibility === 'private' && isUnread(n)).length;
   const unreadMedia = state.media.filter(isUnread).length;
   const unreadPhotos = state.photos.filter(isUnread).length;
   const unreadPlaces = state.places.filter(isUnread).length;
 
-  // Cross-item "new from the other user" list
-  const allUnread = [
-    ...state.notes.filter(isUnread).map(n => ({ ...n, _kind: 'note', _icon: n.visibility === 'private' ? '🔒' : '📝', _route: n.visibility === 'private' ? '#/notas/privadas' : '#/notas/publicas' })),
-    ...state.media.filter(isUnread).map(m => ({ ...m, _kind: 'media', _icon: m.kind === 'spotify' ? '🎵' : '▶️', _route: '#/musica' })),
-    ...state.photos.filter(isUnread).map(p => ({ ...p, _kind: 'photo', _icon: '📸', _route: '#/fotos' })),
-    ...state.places.filter(isUnread).map(p => ({ ...p, _kind: 'place', _icon: '📍', _route: '#/lugares' })),
-  ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  const unreadCards = [
+    { count: unreadNotesPub, icon: '🌐', label: 'notas públicas nuevas', route: '#/notas/publicas' },
+    { count: unreadNotesPriv, icon: '🔒', label: 'notas compartidas nuevas', route: '#/notas/privadas' },
+    { count: unreadMedia, icon: '🎵', label: 'música nueva', route: '#/musica' },
+    { count: unreadPhotos, icon: '📸', label: 'fotos nuevas', route: '#/fotos' },
+    { count: unreadPlaces, icon: '📍', label: 'lugares nuevos', route: '#/lugares' },
+  ].filter(c => c.count > 0);
+
+  const order = getDashboardOrder();
+  const sectionTemplates = {
+    notes: `
+      <section class="section-block" data-sec="notes">
+        <div class="section-head">
+          <h2>Notas recientes</h2>
+          <a href="#/notas/publicas">Ver todas →</a>
+        </div>
+        <div class="grid-cards" id="dash-notes-grid"></div>
+      </section>`,
+    media: `
+      <section class="section-block" data-sec="media">
+        <div class="section-head">
+          <h2>Música reciente</h2>
+          <a href="#/musica">Ver toda →</a>
+        </div>
+        <div class="grid-cards" id="dash-media-grid"></div>
+      </section>`,
+    photos: `
+      <section class="section-block" data-sec="photos">
+        <div class="section-head">
+          <h2>Fotos recientes</h2>
+          <a href="#/fotos">Ver todas →</a>
+        </div>
+        <div class="photo-grid" id="dash-photos-grid"></div>
+      </section>`,
+    places: `
+      <section class="section-block" data-sec="places">
+        <div class="section-head">
+          <h2>Lugares recientes</h2>
+          <a href="#/lugares">Ver todos →</a>
+        </div>
+        <div class="grid-cards" id="dash-places-grid"></div>
+      </section>`,
+  };
 
   root.innerHTML = `
     <div class="page-head">
@@ -370,89 +409,28 @@ function renderInicio(root) {
       </div>
     </div>
 
-    ${allUnread.length ? `
-      <div class="unread-banner">
-        <h3>Nuevo para ti (${allUnread.length})</h3>
-        <div class="unread-list" id="unread-list"></div>
-      </div>
-    ` : ''}
-
-    <div class="stats">
-      <a class="stat" href="#/notas/publicas">
-        <span class="stat-label">🌐 Notas públicas</span>
-        <span class="stat-value">${pubCount}</span>
-        ${unreadNotesPub ? `<span class="stat-unread">${unreadNotesPub}</span>` : ''}
-      </a>
-      <a class="stat" href="#/notas/privadas">
-        <span class="stat-label">🔒 Notas privadas</span>
-        <span class="stat-value">${privCount}</span>
-        ${unreadNotesPriv ? `<span class="stat-unread">${unreadNotesPriv}</span>` : ''}
-      </a>
-      <a class="stat" href="#/musica">
-        <span class="stat-label">🎵 Música</span>
-        <span class="stat-value">${mediaCount}</span>
-        ${unreadMedia ? `<span class="stat-unread">${unreadMedia}</span>` : ''}
-      </a>
-      <a class="stat" href="#/fotos">
-        <span class="stat-label">📸 Fotos</span>
-        <span class="stat-value">${photoCount}</span>
-        ${unreadPhotos ? `<span class="stat-unread">${unreadPhotos}</span>` : ''}
-      </a>
-      <a class="stat" href="#/lugares">
-        <span class="stat-label">📍 Lugares</span>
-        <span class="stat-value">${placeCount}</span>
-        ${unreadPlaces ? `<span class="stat-unread">${unreadPlaces}</span>` : ''}
-      </a>
-    </div>
-
     <div class="dashboard-grid">
       <div class="photo-widget" id="photo-widget">
         <div class="pw-empty">Aún no hay fotos para mostrar aquí.</div>
       </div>
-      <section class="section-block" style="margin: 0;">
-        <div class="section-head">
-          <h2>Notas recientes</h2>
-          <a href="#/notas/publicas">Ver todas →</a>
-        </div>
-        <div class="grid-cards" id="dash-notes-grid"></div>
-      </section>
+
+      <div class="unread-cards-wrap">
+        <div class="featured-label">📥 Nuevo para ti</div>
+        ${unreadCards.length ? `
+          <div class="stats unread-only" id="unread-cards">
+            ${unreadCards.map(c => `
+              <a class="stat unread-stat" href="${c.route}">
+                <span class="stat-label">${c.icon} ${escapeHtml(c.label)}</span>
+                <span class="stat-value">${c.count}</span>
+              </a>
+            `).join('')}
+          </div>
+        ` : `<div class="stats-empty">¡Al día con todo! 🎉</div>`}
+      </div>
     </div>
 
-    <section class="section-block" id="dash-media">
-      <div class="section-head">
-        <h2>Música reciente</h2>
-        <a href="#/musica">Ver toda →</a>
-      </div>
-      <div class="grid-cards" id="dash-media-grid"></div>
-    </section>
-
-    <section class="section-block" id="dash-photos">
-      <div class="section-head">
-        <h2>Fotos recientes</h2>
-        <a href="#/fotos">Ver todas →</a>
-      </div>
-      <div class="photo-grid" id="dash-photos-grid"></div>
-    </section>
-
-    <section class="section-block" id="dash-places">
-      <div class="section-head">
-        <h2>Lugares recientes</h2>
-        <a href="#/lugares">Ver todos →</a>
-      </div>
-      <div class="grid-cards" id="dash-places-grid"></div>
-    </section>
+    ${order.map(s => sectionTemplates[s]).join('')}
   `;
-
-  if (allUnread.length) {
-    const list = $('#unread-list');
-    allUnread.slice(0, 6).forEach(item => {
-      const a = document.createElement('a');
-      a.className = 'unread-item';
-      a.href = item._route;
-      a.innerHTML = `<span class="icon">${item._icon}</span><span>${escapeHtml(item.name || item.title || item.caption || 'Sin título')}</span><span class="who">— ${escapeHtml(item.created_by)}, ${fmtDate(item.created_at)}</span>`;
-      list.appendChild(a);
-    });
-  }
 
   // Recent notes (max 4)
   const notesGrid = $('#dash-notes-grid');
@@ -493,36 +471,69 @@ function setupPhotoWidget() {
   let pool = [];
   if (cfg.mode === 'featured') {
     pool = state.photos.filter(p => p.featured);
-    if (!pool.length) pool = state.photos; // fallback
+    if (!pool.length) pool = state.photos;
+  } else if (cfg.mode && cfg.mode.startsWith('album:')) {
+    const album = cfg.mode.slice('album:'.length);
+    pool = state.photos.filter(p => (p.album || '') === album);
+    if (!pool.length) pool = state.photos;
   } else {
     pool = state.photos;
   }
+
+  const albums = Array.from(new Set(state.photos.map(p => p.album || '').filter(Boolean))).sort();
+
+  const menuHtml = `
+    <button class="pw-menu-btn" id="pw-menu-btn" title="Opciones" aria-label="Opciones">⋯</button>
+    <div class="pw-menu" id="pw-menu">
+      <div class="pw-section">Qué mostrar</div>
+      <button class="pw-opt ${cfg.mode === 'featured' ? 'active' : ''}" data-mode="featured">⭐ Solo destacadas</button>
+      <button class="pw-opt ${cfg.mode === 'all' ? 'active' : ''}" data-mode="all">📸 Todas las fotos</button>
+      ${albums.length ? `<div class="pw-section">Álbumes</div>${albums.map(a => `
+        <button class="pw-opt ${cfg.mode === 'album:'+a ? 'active' : ''}" data-mode="album:${escapeHtml(a)}">📁 ${escapeHtml(a)}</button>
+      `).join('')}` : ''}
+      <div class="pw-section">Intervalo</div>
+      <div class="pw-row">
+        <input type="number" min="2" max="60" step="1" id="pw-interval" value="${(cfg.interval_ms || 6000)/1000}" />
+        <span style="color:var(--text-dim);font-size:.78rem;">segundos</span>
+        <button class="btn" id="pw-interval-save" style="margin-left:auto;padding:.3rem .55rem;">OK</button>
+      </div>
+    </div>`;
+
   if (!pool.length) {
-    root.innerHTML = `<div class="pw-empty">Aún no hay fotos para mostrar. Agrega algunas en la sección 📸.</div>`;
+    root.innerHTML = `<div class="pw-empty">Aún no hay fotos para mostrar. Agrega algunas en 📸.</div>${menuHtml}`;
+    wirePwMenu(root, cfg);
     return;
   }
-  root.innerHTML = pool.map((p, i) =>
-    `<img src="${escapeHtml(publicImageUrl(p.storage_path))}" alt="${escapeHtml(p.caption || '')}" class="${i === 0 ? 'active' : ''}" loading="lazy" />`
-  ).join('') + `
-    <div class="pw-dots">${cfg.mode === 'featured' ? '⭐ destacadas' : 'todas'} · ${pool.length}</div>
-    ${pool[0].caption ? `<div class="pw-cap" id="pw-cap">${escapeHtml(pool[0].caption)}</div>` : '<div class="pw-cap" id="pw-cap" hidden></div>'}
+
+  root.innerHTML = `
+    <div class="pw-stage" id="pw-stage">
+      ${pool.map((p, i) =>
+        `<img src="${escapeHtml(publicImageUrl(p.storage_path))}" alt="${escapeHtml(p.caption || '')}" class="${i === 0 ? 'active' : ''}" loading="lazy" />`
+      ).join('')}
+      <div class="pw-dots">${cfg.mode === 'featured' ? '⭐ destacadas' : (cfg.mode && cfg.mode.startsWith('album:') ? '📁 ' + cfg.mode.slice(6) : 'todas')} · ${pool.length}</div>
+      ${pool[0].caption ? `<div class="pw-cap" id="pw-cap">${escapeHtml(pool[0].caption)}</div>` : '<div class="pw-cap" id="pw-cap" hidden></div>'}
+    </div>
+    ${menuHtml}
   `;
 
-  root.dataset.idx = '0';
-  root.addEventListener('click', () => {
-    const i = Number(root.dataset.idx || 0);
+  const stage = $('#pw-stage', root);
+  stage.dataset.idx = '0';
+  stage.addEventListener('click', () => {
+    const i = Number(stage.dataset.idx || 0);
     openLightbox(pool, i);
   });
+
+  wirePwMenu(root, cfg);
 
   if (pool.length > 1) {
     let i = 0;
     const cap = $('.pw-cap', root);
     photoWidgetTimer = setInterval(() => {
-      const imgs = $$('img', root);
+      const imgs = $$('img', stage);
       imgs[i].classList.remove('active');
       i = (i + 1) % pool.length;
       imgs[i].classList.add('active');
-      root.dataset.idx = i;
+      stage.dataset.idx = i;
       if (cap) {
         if (pool[i].caption) { cap.textContent = pool[i].caption; cap.hidden = false; }
         else { cap.hidden = true; }
@@ -531,13 +542,39 @@ function setupPhotoWidget() {
   }
 }
 
+function wirePwMenu(root, cfg) {
+  const btn = $('#pw-menu-btn', root);
+  const menu = $('#pw-menu', root);
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    menu.classList.toggle('open');
+  });
+  document.addEventListener('click', (e) => {
+    if (!menu.contains(e.target) && e.target !== btn) menu.classList.remove('open');
+  });
+  $$('.pw-opt', menu).forEach(opt => {
+    opt.addEventListener('click', async () => {
+      const mode = opt.dataset.mode;
+      const interval_ms = cfg.interval_ms || 6000;
+      await saveSetting('photo_widget', { mode, interval_ms });
+      setupPhotoWidget();
+    });
+  });
+  $('#pw-interval-save', menu).addEventListener('click', async () => {
+    const sec = Math.max(2, Math.min(60, Number($('#pw-interval', menu).value) || 6));
+    const mode = cfg.mode || 'featured';
+    await saveSetting('photo_widget', { mode, interval_ms: sec * 1000 });
+    setupPhotoWidget();
+  });
+}
+
 // ============================================================
 // Page: Notas
 // ============================================================
 function renderNotas(root, visibility) {
-  const label = visibility === 'public' ? 'Notas públicas' : 'Notas privadas';
+  const label = visibility === 'public' ? 'Notas públicas' : 'Notas compartidas';
   const icon = visibility === 'public' ? '🌐' : '🔒';
-  const sub = visibility === 'public' ? 'Visibles para los dos' : 'Solo para los dos';
+  const sub = visibility === 'public' ? 'Para los dos, ligeritas' : 'Notas íntimas para los dos';
   const filterTag = state.filterTag.notas;
   let filtered = state.notes.filter(n => n.visibility === visibility);
   if (filterTag) filtered = filtered.filter(n => Array.isArray(n.tags) && n.tags.includes(filterTag));
@@ -698,7 +735,7 @@ function renderNoteCard(note) {
   const meta = document.createElement('div');
   meta.className = 'meta';
   const badge = note.visibility === 'private'
-    ? '<span class="badge private">🔒 Privada</span>'
+    ? '<span class="badge private">🔒 Compartida</span>'
     : '<span class="badge">🌐 Pública</span>';
   meta.innerHTML = `<span>${fmtDate(note.updated_at || note.created_at)} · ${escapeHtml(note.created_by || '?')}</span>${badge}`;
   body.appendChild(meta);
@@ -713,6 +750,7 @@ function renderNoteCard(note) {
 // Page: Música
 // ============================================================
 function renderMusica(root) {
+  const featured = state.media.filter(m => m.featured);
   root.innerHTML = `
     <div class="page-head">
       <div>
@@ -724,6 +762,10 @@ function renderMusica(root) {
         <button data-v="list" class="${state.view.musica === 'list' ? 'active' : ''}">Lista</button>
       </div>
     </div>
+    ${featured.length ? `
+      <div class="featured-label">⭐ Destacadas</div>
+      <div class="featured-strip" id="featured-media-strip"></div>
+    ` : ''}
     <div class="${state.view.musica === 'cards' ? 'grid-cards' : 'grid-list'}" id="media-grid"></div>
   `;
   $('#media-view-toggle').addEventListener('click', e => {
@@ -732,6 +774,11 @@ function renderMusica(root) {
     state.view.musica = b.dataset.v;
     renderMusica(root);
   });
+
+  if (featured.length) {
+    const strip = $('#featured-media-strip');
+    featured.forEach(m => strip.appendChild(renderMediaCard(m)));
+  }
 
   const grid = $('#media-grid');
   grid.appendChild(renderNewCtaTile('Nueva música', () => openMediaEditor(null)));
@@ -805,7 +852,7 @@ function renderMediaCard(m) {
   const meta = document.createElement('div');
   meta.className = 'meta';
   const kindLabel = m.kind === 'spotify' ? '🟢 Spotify' : '▶️ YouTube';
-  meta.innerHTML = `<span>${fmtDate(m.created_at)} · ${escapeHtml(m.created_by || '?')}</span><span class="badge">${kindLabel}</span>`;
+  meta.innerHTML = `<span>${fmtDate(m.created_at)} · ${escapeHtml(m.created_by || '?')}${m.featured ? ' · ⭐' : ''}</span><span class="badge">${kindLabel}</span>`;
   body.appendChild(meta);
   card.appendChild(body);
 
@@ -819,31 +866,85 @@ function renderMediaCard(m) {
 // Page: Fotos
 // ============================================================
 function renderFotos(root) {
+  const featured = state.photos.filter(p => p.featured);
+
+  // Group photos by album: '' (no album) = individual; named = grouped tile
+  const byAlbum = new Map();
+  for (const p of state.photos) {
+    const key = p.album || '';
+    if (!byAlbum.has(key)) byAlbum.set(key, []);
+    byAlbum.get(key).push(p);
+  }
+
   root.innerHTML = `
     <div class="page-head">
       <div>
         <h1>📸 Fotos</h1>
-        <div class="sub">Nuestro álbum · ${state.photos.length} fotos</div>
+        <div class="sub">Nuestro álbum · ${state.photos.length} fotos${byAlbum.size > 1 ? ` · ${Array.from(byAlbum.keys()).filter(k => k).length} álbumes` : ''}</div>
       </div>
       <div class="actions">
         ${state.photos.length ? `<button class="btn" id="view-all-btn">Ver todas en presentación</button>` : ''}
         <button class="btn primary" id="upload-btn">+ Subir fotos</button>
       </div>
     </div>
+    ${featured.length ? `
+      <div class="featured-label">⭐ Destacadas</div>
+      <div class="featured-strip" id="featured-strip"></div>
+    ` : ''}
     <div class="photo-grid" id="photo-grid"></div>
   `;
+
   $('#upload-btn').addEventListener('click', openPhotoUpload);
   if (state.photos.length) {
     $('#view-all-btn').addEventListener('click', () => openLightbox(state.photos, 0));
   }
+
+  if (featured.length) {
+    const strip = $('#featured-strip');
+    featured.forEach((p, i) => strip.appendChild(renderPhoto(p, featured, i)));
+  }
+
   const grid = $('#photo-grid');
-  state.photos.forEach((p, i) => grid.appendChild(renderPhoto(p, state.photos, i)));
   if (!state.photos.length) {
     const empty = document.createElement('div');
     empty.className = 'empty';
     empty.textContent = 'Aún no hay fotos. Sube las primeras con el botón "Subir fotos".';
     grid.appendChild(empty);
+    return;
   }
+
+  // Render albums (named ones) as single tiles, then individual photos with no album
+  const albumKeys = Array.from(byAlbum.keys()).filter(k => k);
+  albumKeys.sort();
+  for (const key of albumKeys) {
+    const photos = byAlbum.get(key);
+    grid.appendChild(renderAlbumTile(key, photos));
+  }
+  const loose = byAlbum.get('') || [];
+  loose.forEach((p, i) => grid.appendChild(renderPhoto(p, loose, i)));
+}
+
+function renderAlbumTile(name, photos) {
+  const tile = document.createElement('div');
+  tile.className = 'album-tile';
+  tile.setAttribute('role', 'button');
+  tile.setAttribute('tabindex', '0');
+  tile.setAttribute('aria-label', `Abrir álbum ${name}`);
+
+  const cover = photos[0];
+  tile.innerHTML = `
+    <div class="album-stack"></div>
+    <img src="${escapeHtml(publicImageUrl(cover.storage_path))}" alt="${escapeHtml(name)}" loading="lazy" />
+    <div class="album-info">
+      <div class="album-name">📁 ${escapeHtml(name)}</div>
+      <div class="album-count">${photos.length} foto${photos.length === 1 ? '' : 's'}</div>
+    </div>
+  `;
+  tile.addEventListener('click', () => openLightbox(photos, 0));
+  tile.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLightbox(photos, 0); }
+  });
+  return tile;
 }
 
 function renderPhoto(p, list, index) {
@@ -1085,8 +1186,17 @@ function renderPlaceCard(p) {
 // ============================================================
 // Page: Configuración
 // ============================================================
+const SECTION_LABELS = {
+  notes: '📝 Notas recientes',
+  media: '🎵 Música reciente',
+  photos: '📸 Fotos recientes',
+  places: '📍 Lugares recientes',
+};
+
 function renderConfig(root) {
   const cfg = state.settings.photo_widget || { mode: 'featured', interval_ms: 6000 };
+  const order = getDashboardOrder();
+
   root.innerHTML = `
     <div class="page-head">
       <div>
@@ -1104,11 +1214,29 @@ function renderConfig(root) {
           <button class="btn primary" id="cfg-save-pw">Cambiar clave</button>
           <span class="status" id="cfg-pw-status"></span>
         </div>
+        <div class="row danger-row">
+          <button class="btn ghost" id="cfg-logout">↩︎ Cerrar sesión</button>
+          <span style="color:var(--text-dim);font-size:.78rem;">Tendrás que volver a meter la clave.</span>
+        </div>
+      </div>
+
+      <div class="settings-card">
+        <h3>Orden del dashboard</h3>
+        <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Arrastra para cambiar el orden de las secciones del inicio.</div>
+        <div class="reorder-list" id="cfg-reorder">
+          ${order.map(s => `
+            <div class="reorder-item" draggable="true" data-sec="${s}">
+              <span class="grip">⋮⋮</span>
+              <span class="label">${SECTION_LABELS[s] || s}</span>
+            </div>
+          `).join('')}
+        </div>
+        <span class="status" id="cfg-order-status"></span>
       </div>
 
       <div class="settings-card">
         <h3>Widget de fotos en el inicio</h3>
-        <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Decide qué fotos rotan en la portada del dashboard.</div>
+        <div class="sub" style="color:var(--text-dim);font-size:.82rem;">También puedes cambiarlo desde el icono ⋯ del widget.</div>
         <div class="opts" id="cfg-widget-mode">
           <button data-mode="featured" class="${cfg.mode === 'featured' ? 'active' : ''}">⭐ Solo destacadas</button>
           <button data-mode="all" class="${cfg.mode === 'all' ? 'active' : ''}">Todas las fotos</button>
@@ -1144,6 +1272,8 @@ function renderConfig(root) {
     } catch (e) { setStatus(statusEl, `Error: ${e.message || e}`, true); }
   });
 
+  $('#cfg-logout').addEventListener('click', () => logout());
+
   $('#cfg-widget-mode').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-mode]');
     if (!b) return;
@@ -1156,6 +1286,47 @@ function renderConfig(root) {
     setStatus($('#cfg-widget-status'), 'Guardando…');
     await saveSetting('photo_widget', { mode, interval_ms: sec * 1000 });
     setStatus($('#cfg-widget-status'), 'Guardado ✓');
+  });
+
+  setupReorder();
+}
+
+function setupReorder() {
+  const list = $('#cfg-reorder');
+  if (!list) return;
+  let dragSrc = null;
+
+  list.addEventListener('dragstart', (e) => {
+    const item = e.target.closest('.reorder-item');
+    if (!item) return;
+    dragSrc = item;
+    item.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', item.dataset.sec); } catch {}
+  });
+  list.addEventListener('dragend', () => {
+    $$('.reorder-item', list).forEach(el => el.classList.remove('dragging', 'drop-target'));
+    dragSrc = null;
+  });
+  list.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    const item = e.target.closest('.reorder-item');
+    if (!item || item === dragSrc) return;
+    $$('.reorder-item', list).forEach(el => el.classList.toggle('drop-target', el === item));
+  });
+  list.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    const target = e.target.closest('.reorder-item');
+    if (!target || !dragSrc || target === dragSrc) return;
+    // Insert dragSrc before target if it's earlier in DOM order, else after
+    const items = Array.from($$('.reorder-item', list));
+    const srcIdx = items.indexOf(dragSrc);
+    const tgtIdx = items.indexOf(target);
+    if (srcIdx < tgtIdx) target.after(dragSrc); else target.before(dragSrc);
+    const newOrder = $$('.reorder-item', list).map(el => el.dataset.sec);
+    setStatus($('#cfg-order-status'), 'Guardando…');
+    await saveSetting('dashboard_order', { order: newOrder });
+    setStatus($('#cfg-order-status'), 'Orden actualizado ✓');
   });
 }
 
@@ -1380,13 +1551,19 @@ $('#note-delete').addEventListener('click', async () => {
 // Media editor
 // ============================================================
 const dlgMedia = $('#dlg-media');
-const mediaDraft = { id: null, parsed: null, pinned: false, thumbnail_url: null };
+const mediaDraft = { id: null, parsed: null, pinned: false, featured: false, thumbnail_url: null };
 
 function setMediaPin(p) {
   mediaDraft.pinned = p;
   const b = $('#media-pin-toggle');
   b.classList.toggle('is-pinned', p);
   b.textContent = p ? '📌 Anclada' : '📌 Anclar';
+}
+function setMediaFeatured(p) {
+  mediaDraft.featured = p;
+  const b = $('#media-feature-toggle');
+  b.classList.toggle('is-pinned', p);
+  b.textContent = p ? '⭐ Destacada' : '⭐ Destacar';
 }
 
 function updateMediaPreview() {
@@ -1420,6 +1597,7 @@ function openMediaEditor(m) {
   $('#media-note-input').value = m?.note || '';
   $('#media-title-hint').textContent = '';
   setMediaPin(!!m?.pinned);
+  setMediaFeatured(!!m?.featured);
   if (m) updateMediaPreview();
   else { $('#media-preview').hidden = true; $('#media-preview').innerHTML = ''; }
   $('#media-status').textContent = '';
@@ -1436,6 +1614,7 @@ $('#media-url').addEventListener('input', updateMediaPreview);
 $('#media-url').addEventListener('paste', () => setTimeout(() => { updateMediaPreview(); tryAutofillTitle(); }, 50));
 $('#media-url').addEventListener('blur', () => tryAutofillTitle());
 $('#media-pin-toggle').addEventListener('click', () => setMediaPin(!mediaDraft.pinned));
+$('#media-feature-toggle').addEventListener('click', () => setMediaFeatured(!mediaDraft.featured));
 
 $('#media-save').addEventListener('click', async () => {
   const title = $('#media-title-input').value.trim();
@@ -1450,6 +1629,7 @@ $('#media-save').addEventListener('click', async () => {
     thumbnail_url: mediaDraft.thumbnail_url || parsed.thumbnailUrl,
     note: $('#media-note-input').value,
     pinned: mediaDraft.pinned,
+    featured: mediaDraft.featured,
   };
   setStatus($('#media-status'), 'Guardando…');
   try {
@@ -1517,6 +1697,11 @@ const uploadList = $('#upload-list');
 
 function openPhotoUpload() {
   $('#photo-caption').value = '';
+  $('#photo-album').value = '';
+  // Populate album datalist
+  const list = $('#photo-album-list');
+  const albums = Array.from(new Set(state.photos.map(p => p.album || '').filter(Boolean))).sort();
+  list.innerHTML = albums.map(a => `<option value="${escapeHtml(a)}">`).join('');
   uploadList.innerHTML = '';
   $('#photo-status').textContent = '';
   $('#photo-input').value = '';
@@ -1547,9 +1732,11 @@ async function uploadOne(file) {
     bar.style.width = '70%';
     if (upErr) throw upErr;
     const caption = $('#photo-caption').value;
+    const album = $('#photo-album').value.trim();
     const { error: insErr } = await supabase.from('photos').insert({
       storage_path: path,
       caption,
+      album,
       created_by: state.currentUser,
       seen_by: [state.currentUser],
     });
@@ -1610,8 +1797,18 @@ function renderLightbox() {
   if (p.caption) { $('#lightbox-cap').textContent = p.caption; $('#lightbox-cap').hidden = false; }
   else $('#lightbox-cap').hidden = true;
 
+  const noteEl = $('#lightbox-note');
+  if (p.note) {
+    noteEl.innerHTML = `${escapeHtml(p.note)} <span class="note-author">${p.note_by ? '— ' + escapeHtml(p.note_by) : ''}</span>`;
+    noteEl.hidden = false;
+  } else {
+    noteEl.hidden = true;
+    noteEl.textContent = '';
+  }
+
   $('#lb-pin').classList.toggle('is-on', !!p.pinned);
   $('#lb-feature').classList.toggle('is-on', !!p.featured);
+  $('#lb-note').classList.toggle('is-on', !!p.note);
 
   if (isUnread(p)) markSeen('photos', p);
 }
@@ -1640,6 +1837,19 @@ $('#lb-feature').addEventListener('click', async (e) => {
   if (!p) return;
   p.featured = !p.featured;
   await supabase.from('photos').update({ featured: p.featured }).eq('id', p.id);
+  renderLightbox();
+});
+$('#lb-note').addEventListener('click', async (e) => {
+  e.stopPropagation();
+  const p = lightboxState.list[lightboxState.index];
+  if (!p) return;
+  const current = p.note || '';
+  const next = prompt('Escribe una nota para esta foto (se firmará con tu nombre):', current);
+  if (next === null) return; // cancelled
+  const trimmed = next.trim();
+  const noteBy = trimmed ? state.currentUser : '';
+  p.note = trimmed; p.note_by = noteBy;
+  await supabase.from('photos').update({ note: trimmed, note_by: noteBy }).eq('id', p.id);
   renderLightbox();
 });
 $('#lb-delete').addEventListener('click', async (e) => {
@@ -1728,7 +1938,12 @@ function openPlaceEditor(place, coords = null) {
 
   $('#place-name').value = place?.name || '';
   $('#place-description').value = place?.description || '';
-  $('#place-coords').textContent = `${placeDraft.lat.toFixed(5)}, ${placeDraft.lng.toFixed(5)}`;
+  $('#place-search').value = '';
+  $('#place-search-results').classList.remove('open');
+  $('#place-search-results').innerHTML = '';
+  $('#place-coords').textContent = (placeDraft.lat || placeDraft.lng)
+    ? `${placeDraft.lat.toFixed(5)}, ${placeDraft.lng.toFixed(5)}`
+    : '— (busca una dirección o haz clic en el mapa)';
   setPlacePin(placeDraft.pinned);
   renderPlaceTags();
   renderPlaceTagSuggestions('');
@@ -1738,10 +1953,59 @@ function openPlaceEditor(place, coords = null) {
   $('#place-save').textContent = place ? 'Actualizar' : 'Guardar lugar';
   $('#place-delete').hidden = !place;
   dlgPlace.showModal();
-  setTimeout(() => $('#place-name').focus(), 0);
+  setTimeout(() => (placeDraft.lat || placeDraft.lng ? $('#place-name') : $('#place-search')).focus(), 0);
 
   if (place && isUnread(place)) markSeen('places', place);
 }
+
+// Nominatim address search (OpenStreetMap geocoder — free, no API key)
+let placeSearchTimer = null;
+async function nominatimSearch(query) {
+  if (!query || query.length < 3) return [];
+  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=${encodeURIComponent(query)}`;
+  try {
+    const res = await fetch(url, { headers: { 'Accept-Language': 'es' } });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch { return []; }
+}
+
+$('#place-search').addEventListener('input', (e) => {
+  const q = e.target.value.trim();
+  clearTimeout(placeSearchTimer);
+  if (!q) { $('#place-search-results').classList.remove('open'); return; }
+  placeSearchTimer = setTimeout(async () => {
+    const results = await nominatimSearch(q);
+    const box = $('#place-search-results');
+    box.innerHTML = '';
+    if (!results.length) {
+      box.innerHTML = '<div class="res"><em style="color:var(--text-dim);">Sin resultados</em></div>';
+      box.classList.add('open');
+      return;
+    }
+    for (const r of results) {
+      const row = document.createElement('div');
+      row.className = 'res';
+      const title = r.name || r.display_name.split(',')[0];
+      const sub = r.display_name;
+      row.innerHTML = `<div>${escapeHtml(title)}</div><div class="res-sub">${escapeHtml(sub)}</div>`;
+      row.addEventListener('click', () => {
+        placeDraft.lat = parseFloat(r.lat);
+        placeDraft.lng = parseFloat(r.lon);
+        $('#place-coords').textContent = `${placeDraft.lat.toFixed(5)}, ${placeDraft.lng.toFixed(5)}`;
+        if (!$('#place-name').value.trim()) $('#place-name').value = title;
+        box.classList.remove('open');
+        $('#place-search').value = sub;
+      });
+      box.appendChild(row);
+    }
+    box.classList.add('open');
+  }, 500);
+});
+
+$('#place-search').addEventListener('blur', () => {
+  setTimeout(() => $('#place-search-results').classList.remove('open'), 200);
+});
 
 $('#place-pin-toggle').addEventListener('click', () => setPlacePin(!placeDraft.pinned));
 $('#place-tag-input').addEventListener('input', (e) => renderPlaceTagSuggestions(e.target.value));
