@@ -38,13 +38,34 @@ function setStatus(el, msg, isError = false) {
   if (msg && !isError) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 2500);
 }
 
-// Color for a tag — stable hash → HSL
+// Curated palette of visually-distinct tag colors
+const TAG_PALETTE = [
+  '#e74c3c', // red
+  '#e67e22', // orange
+  '#f39c12', // amber
+  '#27ae60', // green
+  '#16a085', // teal
+  '#2980b9', // blue
+  '#8e44ad', // purple
+  '#d35400', // burnt orange
+  '#c0392b', // dark red
+  '#1abc9c', // mint
+  '#0984e3', // bright blue
+  '#e84393', // pink
+  '#9b59b6', // violet
+  '#6d4c41', // brown
+  '#546e7a', // slate
+  '#fdcb6e', // mustard
+];
+
 function tagColor(tag) {
   if (!tag) return 'var(--text-dim)';
+  // User-defined override wins
+  const overrides = state.settings.tag_colors || {};
+  if (overrides[tag]) return overrides[tag];
   let h = 0;
   for (let i = 0; i < tag.length; i++) h = (h * 31 + tag.charCodeAt(i)) >>> 0;
-  const hue = h % 360;
-  return `hsl(${hue}, 62%, 50%)`;
+  return TAG_PALETTE[h % TAG_PALETTE.length];
 }
 
 // Spotify / YouTube URL parsing
@@ -160,6 +181,8 @@ const state = {
   media: [],
   photos: [],
   places: [],
+  movies: [],
+  chats: [],
   settings: {
     photo_widget: { mode: 'featured', interval_ms: 6000 },
   },
@@ -321,16 +344,22 @@ async function loadAll() {
     { data: media },
     { data: photos },
     { data: places },
+    { data: movies },
+    { data: chats },
   ] = await Promise.all([
     supabase.from('notes').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('media').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('photos').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('places').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
+    supabase.from('movies').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
+    supabase.from('chats').select('*').order('created_at', { ascending: true }).limit(200),
   ]);
   state.notes = notes || [];
   state.media = media || [];
   state.photos = photos || [];
   state.places = places || [];
+  state.movies = movies || [];
+  state.chats = chats || [];
   updateSidebarBadges();
 }
 
@@ -357,8 +386,9 @@ function updateSidebarBadges() {
     'musica': state.media.filter(isUnread).length,
     'fotos': state.photos.filter(isUnread).length,
     'lugares': state.places.filter(isUnread).length,
+    'pelis': state.movies.filter(isUnread).length,
   };
-  counts.home = counts['notas-publicas'] + counts['notas-privadas'] + counts['musica'] + counts['fotos'] + counts['lugares'];
+  counts.home = counts['notas-publicas'] + counts['notas-privadas'] + counts['musica'] + counts['fotos'] + counts['lugares'] + counts['pelis'];
   $$('[data-unread]').forEach(el => {
     const c = counts[el.dataset.unread] || 0;
     el.hidden = c === 0;
@@ -388,6 +418,7 @@ async function router() {
     case hash === '#/musica': renderMusica(content); break;
     case hash === '#/fotos': renderFotos(content); break;
     case hash === '#/lugares': renderLugares(content); break;
+    case hash === '#/pelis': renderPelis(content); break;
     case hash === '#/configuracion': renderConfig(content); break;
     default: location.hash = '#/inicio';
   }
@@ -397,7 +428,7 @@ window.addEventListener('hashchange', router);
 // ============================================================
 // Page: Inicio (dashboard)
 // ============================================================
-const DEFAULT_DASHBOARD_ORDER = ['notes', 'media', 'photos', 'places'];
+const DEFAULT_DASHBOARD_ORDER = ['notes', 'media', 'photos', 'movies', 'places'];
 
 function getDashboardOrder() {
   const raw = state.settings.dashboard_order;
@@ -410,20 +441,6 @@ function getDashboardOrder() {
 }
 
 function renderInicio(root) {
-  const unreadNotesPub = state.notes.filter(n => n.visibility === 'public' && isUnread(n)).length;
-  const unreadNotesPriv = state.notes.filter(n => n.visibility === 'private' && isUnread(n)).length;
-  const unreadMedia = state.media.filter(isUnread).length;
-  const unreadPhotos = state.photos.filter(isUnread).length;
-  const unreadPlaces = state.places.filter(isUnread).length;
-
-  const unreadCards = [
-    { count: unreadNotesPub, icon: '🌐', label: 'notas públicas nuevas', route: '#/notas/publicas' },
-    { count: unreadNotesPriv, icon: '🔒', label: 'notas compartidas nuevas', route: '#/notas/privadas' },
-    { count: unreadMedia, icon: '🎵', label: 'música nueva', route: '#/musica' },
-    { count: unreadPhotos, icon: '📸', label: 'fotos nuevas', route: '#/fotos' },
-    { count: unreadPlaces, icon: '📍', label: 'lugares nuevos', route: '#/lugares' },
-  ].filter(c => c.count > 0);
-
   const order = getDashboardOrder();
   const sectionTemplates = {
     notes: `
@@ -450,6 +467,14 @@ function renderInicio(root) {
         </div>
         <div class="photo-grid" id="dash-photos-grid"></div>
       </section>`,
+    movies: `
+      <section class="section-block" data-sec="movies">
+        <div class="section-head">
+          <h2>Pelis recientes</h2>
+          <a href="#/pelis">Ver todas →</a>
+        </div>
+        <div class="grid-cards" id="dash-movies-grid"></div>
+      </section>`,
     places: `
       <section class="section-block" data-sec="places">
         <div class="section-head">
@@ -460,11 +485,20 @@ function renderInicio(root) {
       </section>`,
   };
 
+  const totalUnread = totalUnreadCount();
+
   root.innerHTML = `
     <div class="page-head">
       <div>
         <h1>Hola, ${escapeHtml(state.currentUser)} 🪼</h1>
         <div class="sub">Un vistazo a todo lo nuestro</div>
+      </div>
+      <div class="actions">
+        <div class="notif-bell-wrap">
+          <button class="notif-bell" id="notif-bell" title="Notificaciones" aria-label="Notificaciones">
+            🔔${totalUnread ? `<span class="notif-count">${totalUnread}</span>` : ''}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -473,49 +507,75 @@ function renderInicio(root) {
         <div class="pw-empty">Aún no hay fotos para mostrar aquí.</div>
       </div>
 
-      <div class="unread-cards-wrap">
-        <div class="featured-label">📥 Nuevo para ti</div>
-        ${unreadCards.length ? `
-          <div class="stats unread-only" id="unread-cards">
-            ${unreadCards.map(c => `
-              <a class="stat unread-stat" href="${c.route}">
-                <span class="stat-label">${c.icon} ${escapeHtml(c.label)}</span>
-                <span class="stat-value">${c.count}</span>
-              </a>
-            `).join('')}
-          </div>
-        ` : `<div class="stats-empty">¡Al día con todo! 🎉</div>`}
+      <div class="chat-widget" id="chat-widget">
+        <div class="chat-head">
+          <span class="dot"></span>
+          Instantáneos
+        </div>
+        <div class="chat-body" id="chat-body">
+          <div class="chat-empty">Cargando…</div>
+        </div>
+        <div class="chat-input">
+          <input type="text" id="chat-input-field" placeholder="Un mensajito…" maxlength="500" />
+          <button id="chat-send" type="button">Enviar</button>
+        </div>
       </div>
     </div>
 
-    ${order.map(s => sectionTemplates[s]).join('')}
+    ${order.map(s => sectionTemplates[s] || '').join('')}
   `;
 
   // Recent notes (max 4)
   const notesGrid = $('#dash-notes-grid');
-  const recentNotes = state.notes.slice(0, 4);
-  if (recentNotes.length) recentNotes.forEach(n => notesGrid.appendChild(renderNoteCard(n)));
-  else notesGrid.innerHTML = '<div class="empty">Aún no hay notas.</div>';
+  if (notesGrid) {
+    const recentNotes = state.notes.slice(0, 4);
+    if (recentNotes.length) recentNotes.forEach(n => notesGrid.appendChild(renderNoteCard(n)));
+    else notesGrid.innerHTML = '<div class="empty">Aún no hay notas.</div>';
+  }
 
   // Recent media (max 4)
   const mediaGrid = $('#dash-media-grid');
-  const recentMedia = state.media.slice(0, 4);
-  if (recentMedia.length) recentMedia.forEach(m => mediaGrid.appendChild(renderMediaCard(m)));
-  else mediaGrid.innerHTML = '<div class="empty">Aún no hay música.</div>';
+  if (mediaGrid) {
+    const recentMedia = state.media.slice(0, 4);
+    if (recentMedia.length) recentMedia.forEach(m => mediaGrid.appendChild(renderMediaCard(m)));
+    else mediaGrid.innerHTML = '<div class="empty">Aún no hay música.</div>';
+  }
 
   // Recent photos
   const photosGrid = $('#dash-photos-grid');
-  const recentPhotos = state.photos.slice(0, 8);
-  if (recentPhotos.length) recentPhotos.forEach((p, i) => photosGrid.appendChild(renderPhoto(p, recentPhotos, i)));
-  else photosGrid.innerHTML = '<div class="empty">Aún no hay fotos.</div>';
+  if (photosGrid) {
+    const recentPhotos = state.photos.slice(0, 8);
+    if (recentPhotos.length) recentPhotos.forEach((p, i) => photosGrid.appendChild(renderPhoto(p, recentPhotos, i)));
+    else photosGrid.innerHTML = '<div class="empty">Aún no hay fotos.</div>';
+  }
+
+  // Recent movies
+  const moviesGrid = $('#dash-movies-grid');
+  if (moviesGrid) {
+    const recentMovies = state.movies.slice(0, 4);
+    if (recentMovies.length) recentMovies.forEach(m => moviesGrid.appendChild(renderMovieCard(m)));
+    else moviesGrid.innerHTML = '<div class="empty">Aún no hay pelis.</div>';
+  }
 
   // Recent places (max 3)
   const placesGrid = $('#dash-places-grid');
-  const recentPlaces = state.places.slice(0, 3);
-  if (recentPlaces.length) recentPlaces.forEach(p => placesGrid.appendChild(renderPlaceCard(p)));
-  else placesGrid.innerHTML = '<div class="empty">Aún no hay lugares.</div>';
+  if (placesGrid) {
+    const recentPlaces = state.places.slice(0, 3);
+    if (recentPlaces.length) recentPlaces.forEach(p => placesGrid.appendChild(renderPlaceCard(p)));
+    else placesGrid.innerHTML = '<div class="empty">Aún no hay lugares.</div>';
+  }
 
   setupPhotoWidget();
+  setupChatWidget();
+  setupNotifBell();
+}
+
+function totalUnreadCount() {
+  return state.notes.filter(isUnread).length
+    + state.media.filter(isUnread).length
+    + state.photos.filter(isUnread).length
+    + state.places.filter(isUnread).length
+    + state.movies.filter(isUnread).length;
 }
 
 // ============================================================
@@ -710,7 +770,7 @@ function renderNewCtaTile(label, onOpen) {
 
 function renderNoteCard(note) {
   const card = document.createElement('article');
-  card.className = 'card clickable with-stripe';
+  card.className = 'card clickable with-stripe note-card';
   if (note.pinned) card.classList.add('pinned');
   const stripeColor = (note.tags && note.tags.length) ? tagColor(note.tags[0]) : 'var(--border)';
   card.style.setProperty('--stripe', stripeColor);
@@ -963,24 +1023,53 @@ function renderFotos(root) {
     featured.forEach((p, i) => strip.appendChild(renderPhoto(p, featured, i)));
   }
 
-  const grid = $('#photo-grid');
+  const container = $('#photo-grid');
+  // Repurpose the #photo-grid container: convert it into a section host (we'll
+  // append section blocks, each containing its own grid).
+  container.classList.remove('photo-grid');
+  container.classList.add('photo-sections');
+  container.innerHTML = '';
+
   if (!state.photos.length) {
     const empty = document.createElement('div');
     empty.className = 'empty';
     empty.textContent = 'Aún no hay fotos. Sube las primeras con el botón "Subir fotos".';
-    grid.appendChild(empty);
+    container.appendChild(empty);
     return;
   }
 
-  // Render albums (named ones) as single tiles, then individual photos with no album
-  const albumKeys = Array.from(byAlbum.keys()).filter(k => k);
-  albumKeys.sort();
+  // Render each named album as its own titled section, then loose photos.
+  const albumKeys = Array.from(byAlbum.keys()).filter(k => k).sort();
   for (const key of albumKeys) {
     const photos = byAlbum.get(key);
-    grid.appendChild(renderAlbumTile(key, photos));
+    const section = document.createElement('div');
+    section.className = 'album-section';
+    section.innerHTML = `
+      <div class="album-title-row">
+        <h2>📁 ${escapeHtml(key)}</h2>
+        <span class="count">${photos.length} foto${photos.length === 1 ? '' : 's'}</span>
+      </div>
+      <div class="photo-grid"></div>
+    `;
+    const sg = section.querySelector('.photo-grid');
+    photos.forEach((p, i) => sg.appendChild(renderPhoto(p, photos, i)));
+    container.appendChild(section);
   }
   const loose = byAlbum.get('') || [];
-  loose.forEach((p, i) => grid.appendChild(renderPhoto(p, loose, i)));
+  if (loose.length) {
+    const section = document.createElement('div');
+    section.className = 'album-section';
+    section.innerHTML = `
+      <div class="album-title-row">
+        <h2>Sin álbum</h2>
+        <span class="count">${loose.length} foto${loose.length === 1 ? '' : 's'}</span>
+      </div>
+      <div class="photo-grid"></div>
+    `;
+    const sg = section.querySelector('.photo-grid');
+    loose.forEach((p, i) => sg.appendChild(renderPhoto(p, loose, i)));
+    container.appendChild(section);
+  }
 }
 
 function renderAlbumTile(name, photos) {
@@ -1062,6 +1151,10 @@ function renderLugares(root) {
       <span>🖱 Haz clic en el mapa para colocar el lugar.</span>
       <button class="btn" id="cancel-placing">Cancelar</button>
     </div>
+    <div class="places-search-row">
+      <input type="text" id="page-place-search" placeholder="Buscar por dirección… (ej: Plaza Mayor, Madrid)" autocomplete="off" />
+      <div class="search-results" id="page-place-search-results"></div>
+    </div>
     ${sortedTags.length ? `
       <div class="tag-filter-row" id="places-tag-filter">
         <button class="tag-chip ${!filterTag ? 'active' : ''}" data-tag="" style="--tag-color: var(--text-dim);">Todos</button>
@@ -1087,6 +1180,46 @@ function renderLugares(root) {
       renderLugares(root);
     });
   }
+
+  // Wire up the in-page address search
+  const searchInput = $('#page-place-search');
+  const searchResults = $('#page-place-search-results');
+  let pageSearchTimer = null;
+  searchInput.addEventListener('input', (e) => {
+    const q = e.target.value.trim();
+    clearTimeout(pageSearchTimer);
+    if (!q) { searchResults.classList.remove('open'); return; }
+    pageSearchTimer = setTimeout(async () => {
+      const results = await nominatimSearch(q);
+      searchResults.innerHTML = '';
+      if (!results.length) {
+        searchResults.innerHTML = '<div class="res"><em style="color:var(--text-dim);">Sin resultados</em></div>';
+        searchResults.classList.add('open');
+        return;
+      }
+      for (const r of results) {
+        const row = document.createElement('div');
+        row.className = 'res';
+        const title = r.name || r.display_name.split(',')[0];
+        const sub = r.display_name;
+        row.innerHTML = `<div>${escapeHtml(title)}</div><div class="res-sub">${escapeHtml(sub)}</div>`;
+        row.addEventListener('click', () => {
+          searchResults.classList.remove('open');
+          searchInput.value = '';
+          openPlaceEditor(null, { lat: parseFloat(r.lat), lng: parseFloat(r.lon) });
+          // Pre-fill the name in the modal
+          setTimeout(() => {
+            if (!$('#place-name').value) $('#place-name').value = title;
+          }, 50);
+        });
+        searchResults.appendChild(row);
+      }
+      searchResults.classList.add('open');
+    }, 500);
+  });
+  searchInput.addEventListener('blur', () => {
+    setTimeout(() => searchResults.classList.remove('open'), 200);
+  });
 
   // Init map
   initPlacesMap(filtered);
@@ -1249,12 +1382,20 @@ const SECTION_LABELS = {
   notes: '📝 Notas recientes',
   media: '🎵 Música reciente',
   photos: '📸 Fotos recientes',
+  movies: '🎬 Pelis recientes',
   places: '📍 Lugares recientes',
 };
 
+let configActiveTab = 'clave';
+
 function renderConfig(root) {
-  const cfg = state.settings.photo_widget || { mode: 'featured', interval_ms: 6000 };
-  const order = getDashboardOrder();
+  const tabs = [
+    { id: 'clave', label: '🔑 Contraseña' },
+    { id: 'dashboard', label: '🏠 Dashboard' },
+    { id: 'login', label: '🪼 Login' },
+    { id: 'tags', label: '🏷 Etiquetas' },
+    { id: 'logout', label: '↩︎ Cerrar sesión' },
+  ];
 
   root.innerHTML = `
     <div class="page-head">
@@ -1263,89 +1404,42 @@ function renderConfig(root) {
         <div class="sub">Solo para ti — los cambios se guardan al instante</div>
       </div>
     </div>
-    <div class="settings-grid">
-      <div class="settings-card">
-        <h3>Mi clave</h3>
-        <div class="field"><label>Usuario</label><input type="text" value="${escapeHtml(state.currentUser)}" disabled /></div>
-        <div class="field"><label>Clave actual</label><input type="password" id="cfg-old-pw" placeholder="0000" /></div>
-        <div class="field"><label>Nueva clave</label><input type="password" id="cfg-new-pw" placeholder="Mínimo 4 caracteres" /></div>
-        <div class="row" style="margin-top:.4rem;">
-          <button class="btn primary" id="cfg-save-pw">Cambiar clave</button>
-          <span class="status" id="cfg-pw-status"></span>
-        </div>
-        <div class="row danger-row">
-          <button class="btn ghost" id="cfg-logout">↩︎ Cerrar sesión</button>
-          <span style="color:var(--text-dim);font-size:.78rem;">Tendrás que volver a meter la clave.</span>
-        </div>
-      </div>
+    <div class="config-tabs" id="config-tabs">
+      ${tabs.map(t => `<button data-tab="${t.id}" class="${configActiveTab === t.id ? 'active' : ''}">${t.label}</button>`).join('')}
+    </div>
+    <div class="settings-grid" id="config-body"></div>
+  `;
 
-      <div class="settings-card">
-        <h3>Orden del dashboard</h3>
-        <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Arrastra para cambiar el orden de las secciones del inicio.</div>
-        <div class="reorder-list" id="cfg-reorder">
-          ${order.map(s => `
-            <div class="reorder-item" draggable="true" data-sec="${s}">
-              <span class="grip">⋮⋮</span>
-              <span class="label">${SECTION_LABELS[s] || s}</span>
-            </div>
-          `).join('')}
-        </div>
-        <span class="status" id="cfg-order-status"></span>
-      </div>
+  $('#config-tabs').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-tab]');
+    if (!b) return;
+    configActiveTab = b.dataset.tab;
+    renderConfig(root);
+  });
 
-      <div class="settings-card">
-        <h3>Imágenes del login</h3>
-        <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Tu avatar y la foto que aparece cuando te seleccionan. Y la foto de fondo por defecto (cuando nadie está seleccionado).</div>
+  renderConfigTab($('#config-body'));
+}
 
-        <div class="asset-row">
-          <div class="asset-preview" id="cfg-avatar-preview"></div>
-          <div class="asset-info">
-            <div class="asset-label">Mi avatar</div>
-            <div class="asset-sub">Pequeña imagen circular (idealmente cuadrada)</div>
-            <label class="btn">📁 Cambiar<input type="file" accept="image/*" id="cfg-avatar-input" hidden /></label>
-            <button class="btn ghost" id="cfg-avatar-clear" type="button">Quitar</button>
-          </div>
-        </div>
+function renderConfigTab(body) {
+  switch (configActiveTab) {
+    case 'clave': renderConfigClave(body); break;
+    case 'dashboard': renderConfigDashboard(body); break;
+    case 'login': renderConfigLogin(body); break;
+    case 'tags': renderConfigTags(body); break;
+    case 'logout': renderConfigLogout(body); break;
+  }
+}
 
-        <div class="asset-row">
-          <div class="asset-preview wide" id="cfg-bg-preview"></div>
-          <div class="asset-info">
-            <div class="asset-label">Mi foto del login</div>
-            <div class="asset-sub">Se ve cuando te seleccionan a ti</div>
-            <label class="btn">📁 Cambiar<input type="file" accept="image/*" id="cfg-bg-input" hidden /></label>
-            <button class="btn ghost" id="cfg-bg-clear" type="button">Quitar</button>
-          </div>
-        </div>
-
-        <div class="asset-row">
-          <div class="asset-preview wide" id="cfg-default-bg-preview"></div>
-          <div class="asset-info">
-            <div class="asset-label">Foto por defecto</div>
-            <div class="asset-sub">Cuando nadie está seleccionado (idealmente una foto de los dos)</div>
-            <label class="btn">📁 Cambiar<input type="file" accept="image/*" id="cfg-default-bg-input" hidden /></label>
-            <button class="btn ghost" id="cfg-default-bg-clear" type="button">Quitar</button>
-          </div>
-        </div>
-
-        <span class="status" id="cfg-assets-status"></span>
-      </div>
-
-      <div class="settings-card">
-        <h3>Widget de fotos en el inicio</h3>
-        <div class="sub" style="color:var(--text-dim);font-size:.82rem;">También puedes cambiarlo desde el icono ⋯ del widget.</div>
-        <div class="opts" id="cfg-widget-mode">
-          <button data-mode="featured" class="${cfg.mode === 'featured' ? 'active' : ''}">⭐ Solo destacadas</button>
-          <button data-mode="all" class="${cfg.mode === 'all' ? 'active' : ''}">Todas las fotos</button>
-        </div>
-        <div class="row" style="margin-top:.7rem;">
-          <label style="font-size:.8rem;color:var(--text-dim);">Intervalo (segundos)</label>
-          <input type="number" min="2" max="60" step="1" value="${(cfg.interval_ms || 6000)/1000}" id="cfg-widget-interval" style="width:80px;padding:.35rem .5rem;border-radius:6px;border:1px solid var(--border);background:var(--surface-alt);color:var(--text);" />
-          <button class="btn" id="cfg-widget-save">Guardar</button>
-          <span class="status" id="cfg-widget-status"></span>
-        </div>
-        <div class="sub" style="color:var(--text-dim);font-size:.78rem;margin-top:.5rem;">
-          Para destacar fotos, abre cualquier foto y pulsa ⭐.
-        </div>
+function renderConfigClave(body) {
+  body.innerHTML = `
+    <div class="settings-card">
+      <h3>Mi clave</h3>
+      <div class="field"><label>Usuario</label><input type="text" value="${escapeHtml(state.currentUser)}" disabled /></div>
+      <div class="field"><label>Clave actual</label><input type="password" id="cfg-old-pw" placeholder="0000" /></div>
+      <div class="field"><label>Nueva clave</label><input type="password" id="cfg-new-pw" placeholder="Mínimo 4 caracteres" /></div>
+      <div class="row" style="margin-top:.4rem;">
+        <button class="btn primary" id="cfg-save-pw">Cambiar clave</button>
+        <span class="status" id="cfg-pw-status"></span>
       </div>
     </div>
   `;
@@ -1367,15 +1461,64 @@ function renderConfig(root) {
       $('#cfg-old-pw').value = ''; $('#cfg-new-pw').value = '';
     } catch (e) { setStatus(statusEl, `Error: ${e.message || e}`, true); }
   });
+}
 
+function renderConfigLogout(body) {
+  body.innerHTML = `
+    <div class="settings-card">
+      <h3>Cerrar sesión</h3>
+      <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Tendrás que volver a meter la clave la próxima vez.</div>
+      <div class="row" style="margin-top:.7rem;">
+        <button class="btn primary" id="cfg-logout">↩︎ Cerrar sesión ahora</button>
+      </div>
+    </div>
+  `;
   $('#cfg-logout').addEventListener('click', () => logout());
+}
+
+function renderConfigDashboard(body) {
+  const cfg = state.settings.photo_widget || { mode: 'featured', interval_ms: 6000 };
+  const order = getDashboardOrder();
+
+  body.innerHTML = `
+    <div class="settings-card">
+      <h3>Orden del dashboard</h3>
+      <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Arrastra para cambiar el orden de las secciones del inicio.</div>
+      <div class="reorder-list" id="cfg-reorder">
+        ${order.map(s => `
+          <div class="reorder-item" draggable="true" data-sec="${s}">
+            <span class="grip">⋮⋮</span>
+            <span class="label">${SECTION_LABELS[s] || s}</span>
+          </div>
+        `).join('')}
+      </div>
+      <span class="status" id="cfg-order-status"></span>
+    </div>
+
+    <div class="settings-card">
+      <h3>Widget de fotos en el inicio</h3>
+      <div class="sub" style="color:var(--text-dim);font-size:.82rem;">También puedes cambiarlo desde el icono ⋯ del widget.</div>
+      <div class="opts" id="cfg-widget-mode">
+        <button data-mode="featured" class="${cfg.mode === 'featured' ? 'active' : ''}">⭐ Solo destacadas</button>
+        <button data-mode="all" class="${cfg.mode === 'all' ? 'active' : ''}">Todas las fotos</button>
+      </div>
+      <div class="row" style="margin-top:.7rem;">
+        <label style="font-size:.8rem;color:var(--text-dim);">Intervalo (segundos)</label>
+        <input type="number" min="2" max="60" step="1" value="${(cfg.interval_ms || 6000)/1000}" id="cfg-widget-interval" style="width:80px;padding:.35rem .5rem;border-radius:6px;border:1px solid var(--border);background:var(--surface-alt);color:var(--text);" />
+        <button class="btn" id="cfg-widget-save">Guardar</button>
+        <span class="status" id="cfg-widget-status"></span>
+      </div>
+      <div class="sub" style="color:var(--text-dim);font-size:.78rem;margin-top:.5rem;">
+        Para destacar fotos, abre cualquier foto y pulsa ⭐.
+      </div>
+    </div>
+  `;
 
   $('#cfg-widget-mode').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-mode]');
     if (!b) return;
     $$('#cfg-widget-mode button').forEach(x => x.classList.toggle('active', x === b));
   });
-
   $('#cfg-widget-save').addEventListener('click', async () => {
     const mode = $('#cfg-widget-mode button.active').dataset.mode;
     const sec = Math.max(2, Math.min(60, Number($('#cfg-widget-interval').value) || 6));
@@ -1385,6 +1528,107 @@ function renderConfig(root) {
   });
 
   setupReorder();
+}
+
+function renderConfigTags(body) {
+  // Collect all unique tags across notes and places
+  const allTags = new Set();
+  state.notes.forEach(n => (n.tags || []).forEach(t => allTags.add(t)));
+  state.places.forEach(p => (p.tags || []).forEach(t => allTags.add(t)));
+  const overrides = state.settings.tag_colors || {};
+
+  body.innerHTML = `
+    <div class="settings-card">
+      <h3>Colores de las etiquetas</h3>
+      <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Por defecto cada etiqueta tiene su propio color. Aquí puedes personalizarlos. Los cambios afectan a las notas y a los lugares.</div>
+      <div class="tag-color-list" id="cfg-tag-list">
+        ${allTags.size === 0 ? `<div class="empty">Aún no hay etiquetas. Crea alguna en una nota o lugar.</div>` : ''}
+        ${Array.from(allTags).sort().map(t => `
+          <div class="tag-color-row">
+            <span class="tag-chip-selected" style="--tag-color: ${tagColor(t)};">#${escapeHtml(t)}</span>
+            <input type="color" data-tag="${escapeHtml(t)}" value="${escapeHtml(toHexColor(tagColor(t)))}" class="tag-color-picker" />
+            ${overrides[t] ? `<button class="btn ghost reset-tag" data-tag="${escapeHtml(t)}" type="button">Resetear</button>` : ''}
+          </div>
+        `).join('')}
+      </div>
+      <span class="status" id="cfg-tags-status"></span>
+    </div>
+  `;
+
+  $$('input.tag-color-picker').forEach(input => {
+    input.addEventListener('change', async () => {
+      const tag = input.dataset.tag;
+      const next = { ...(state.settings.tag_colors || {}) };
+      next[tag] = input.value;
+      setStatus($('#cfg-tags-status'), 'Guardando…');
+      await saveSetting('tag_colors', next);
+      setStatus($('#cfg-tags-status'), 'Guardado ✓');
+      renderConfigTab(body); // refresh chip preview
+    });
+  });
+  $$('button.reset-tag').forEach(b => {
+    b.addEventListener('click', async () => {
+      const tag = b.dataset.tag;
+      const next = { ...(state.settings.tag_colors || {}) };
+      delete next[tag];
+      await saveSetting('tag_colors', next);
+      renderConfigTab(body);
+    });
+  });
+}
+
+function toHexColor(input) {
+  // Already hex
+  if (typeof input === 'string' && input.startsWith('#')) return input;
+  // hsl() — convert via canvas (simple)
+  try {
+    const c = document.createElement('canvas');
+    c.width = c.height = 1;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = input;
+    return ctx.fillStyle;
+  } catch { return '#888888'; }
+}
+
+function renderConfigLogin(body) {
+  body.innerHTML = `
+    <div class="settings-card">
+      <h3>Imágenes del login</h3>
+      <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Tu avatar y la foto que aparece cuando te seleccionan. Y la foto de fondo por defecto (cuando nadie está seleccionado).</div>
+
+      <div class="asset-row">
+        <div class="asset-preview" id="cfg-avatar-preview"></div>
+        <div class="asset-info">
+          <div class="asset-label">Mi avatar</div>
+          <div class="asset-sub">Pequeña imagen circular (idealmente cuadrada)</div>
+          <label class="btn">📁 Cambiar<input type="file" accept="image/*" id="cfg-avatar-input" hidden /></label>
+          <button class="btn ghost" id="cfg-avatar-clear" type="button">Quitar</button>
+        </div>
+      </div>
+
+      <div class="asset-row">
+        <div class="asset-preview wide" id="cfg-bg-preview"></div>
+        <div class="asset-info">
+          <div class="asset-label">Mi foto del login</div>
+          <div class="asset-sub">Se ve cuando te seleccionan a ti</div>
+          <label class="btn">📁 Cambiar<input type="file" accept="image/*" id="cfg-bg-input" hidden /></label>
+          <button class="btn ghost" id="cfg-bg-clear" type="button">Quitar</button>
+        </div>
+      </div>
+
+      <div class="asset-row">
+        <div class="asset-preview wide" id="cfg-default-bg-preview"></div>
+        <div class="asset-info">
+          <div class="asset-label">Foto por defecto</div>
+          <div class="asset-sub">Cuando nadie está seleccionado (idealmente una foto de los dos)</div>
+          <label class="btn">📁 Cambiar<input type="file" accept="image/*" id="cfg-default-bg-input" hidden /></label>
+          <button class="btn ghost" id="cfg-default-bg-clear" type="button">Quitar</button>
+        </div>
+      </div>
+
+      <span class="status" id="cfg-assets-status"></span>
+    </div>
+  `;
   setupAssetUploaders();
 }
 
@@ -1835,12 +2079,22 @@ $('#media-save').addEventListener('click', async () => {
   const parsed = parseMediaUrl($('#media-url').value);
   if (!parsed) { setStatus($('#media-status'), 'Pega un enlace válido de Spotify o YouTube', true); $('#media-url').focus(); return; }
   if (!title) { setStatus($('#media-status'), 'El título es obligatorio', true); $('#media-title-input').focus(); return; }
+
+  // Last-ditch attempt to grab a thumbnail (album cover) before saving
+  let thumb = mediaDraft.thumbnail_url || parsed.thumbnailUrl;
+  if (!thumb) {
+    try {
+      const oe = await fetchOembedTitle(parsed);
+      if (oe?.thumbnail) thumb = oe.thumbnail;
+    } catch {}
+  }
+
   const payload = {
     kind: parsed.kind,
     title,
     url: parsed.normalizedUrl,
     embed_url: parsed.embedUrl,
-    thumbnail_url: mediaDraft.thumbnail_url || parsed.thumbnailUrl,
+    thumbnail_url: thumb,
     note: $('#media-note-input').value,
     pinned: mediaDraft.pinned,
     featured: mediaDraft.featured,
@@ -2277,6 +2531,429 @@ $$('dialog.modal').forEach(dlg => {
     if (e.target === dlg) dlg.close();
     if (e.target.matches('[data-close]')) dlg.close();
   });
+});
+
+// ============================================================
+// Instantáneos chat widget (dashboard)
+// ============================================================
+let chatPollTimer = null;
+function setupChatWidget() {
+  const root = $('#chat-widget');
+  if (!root) return;
+  if (chatPollTimer) { clearInterval(chatPollTimer); chatPollTimer = null; }
+
+  renderChatBody();
+
+  const send = async () => {
+    const input = $('#chat-input-field');
+    const body = input.value.trim();
+    if (!body) return;
+    const btn = $('#chat-send');
+    btn.disabled = true;
+    try {
+      const { error } = await supabase.from('chats').insert({ author: state.currentUser, body });
+      if (error) throw error;
+      input.value = '';
+      await reloadChats();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      btn.disabled = false;
+      input.focus();
+    }
+  };
+  $('#chat-send').addEventListener('click', send);
+  $('#chat-input-field').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); send(); }
+  });
+
+  // Light polling so the other person's messages show up (every 8s while on dashboard)
+  chatPollTimer = setInterval(reloadChats, 8000);
+}
+
+async function reloadChats() {
+  try {
+    const { data } = await supabase.from('chats').select('*').order('created_at', { ascending: true }).limit(200);
+    state.chats = data || [];
+    renderChatBody();
+  } catch {}
+}
+
+function renderChatBody() {
+  const body = $('#chat-body');
+  if (!body) return;
+  if (!state.chats.length) {
+    body.innerHTML = `<div class="chat-empty">No hay mensajitos todavía.<br/>Escribe el primero ✨</div>`;
+    return;
+  }
+  body.innerHTML = '';
+  for (const m of state.chats) {
+    const div = document.createElement('div');
+    div.className = `chat-bubble ${m.author === state.currentUser ? 'mine' : 'theirs'}`;
+    div.innerHTML = `${escapeHtml(m.body)}<div class="bubble-meta">${escapeHtml(m.author)} · ${fmtDate(m.created_at)}</div>`;
+    body.appendChild(div);
+  }
+  // Scroll to bottom
+  requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
+}
+
+// ============================================================
+// Notifications bell (dashboard)
+// ============================================================
+function setupNotifBell() {
+  const bell = $('#notif-bell');
+  const popover = $('#notif-popover');
+  if (!bell || !popover) return;
+
+  const close = () => { popover.hidden = true; };
+  $('#notif-close').addEventListener('click', close);
+
+  bell.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!popover.hidden) { close(); return; }
+    renderNotifList();
+    popover.hidden = false;
+  });
+  document.addEventListener('click', (e) => {
+    if (!popover.contains(e.target) && e.target !== bell) close();
+  });
+}
+
+function renderNotifList() {
+  const list = $('#notif-list');
+  const title = $('#notif-head-title');
+  if (!list) return;
+
+  const tagItem = (item, kind, icon, route, label) => ({ ...item, _kind: kind, _icon: icon, _route: route, _label: label });
+
+  const all = [
+    ...state.notes.map(n => tagItem(n, 'note', n.visibility === 'private' ? '🔒' : '📝',
+      n.visibility === 'private' ? '#/notas/privadas' : '#/notas/publicas', n.title)),
+    ...state.media.map(m => tagItem(m, 'media', m.kind === 'spotify' ? '🎵' : '▶️', '#/musica', m.title)),
+    ...state.photos.map(p => tagItem(p, 'photo', '📸', '#/fotos', p.caption || 'Foto sin título')),
+    ...state.movies.map(m => tagItem(m, 'movie', '🎬', '#/pelis', m.title)),
+    ...state.places.map(p => tagItem(p, 'place', '📍', '#/lugares', p.name)),
+  ];
+
+  const unread = all.filter(it => isUnread(it));
+  const showUnread = unread.length > 0;
+  const items = showUnread
+    ? unread.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    : all.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 12);
+
+  title.textContent = showUnread ? `Nuevo para ti (${unread.length})` : 'Lo más reciente';
+
+  list.innerHTML = '';
+  if (!items.length) {
+    list.innerHTML = '<div class="empty">No hay nada todavía.</div>';
+    return;
+  }
+  for (const it of items) {
+    const a = document.createElement('a');
+    a.className = 'notif-item';
+    a.href = it._route;
+    a.innerHTML = `
+      ${showUnread ? '<span class="dot"></span>' : ''}
+      <span class="icon">${it._icon}</span>
+      <span class="info">
+        <span class="title">${escapeHtml(it._label || 'Sin título')}</span>
+        <span class="meta">${escapeHtml(it.created_by || '?')} · ${fmtDate(it.created_at)}</span>
+      </span>
+    `;
+    a.addEventListener('click', () => { $('#notif-popover').hidden = true; });
+    list.appendChild(a);
+  }
+}
+
+// ============================================================
+// Page: Pelis (movies)
+// ============================================================
+function renderPelis(root) {
+  const featured = state.movies.filter(m => m.score && m.score >= 4); // 4+ stars as informal "destacadas"
+  root.innerHTML = `
+    <div class="page-head">
+      <div>
+        <h1>🎬 Pelis</h1>
+        <div class="sub">Lo que queremos ver y lo que ya vimos</div>
+      </div>
+      <div class="actions">
+        <button class="btn primary" id="new-movie-btn">+ Nueva peli</button>
+      </div>
+    </div>
+    <div class="grid-cards" id="movies-grid"></div>
+  `;
+  $('#new-movie-btn').addEventListener('click', () => openMovieEditor(null));
+  const grid = $('#movies-grid');
+  if (!state.movies.length) {
+    grid.innerHTML = '<div class="empty">Aún no hay pelis. Añade la primera con el botón.</div>';
+    return;
+  }
+  state.movies.forEach(m => grid.appendChild(renderMovieCard(m)));
+}
+
+function renderMovieCard(m) {
+  const card = document.createElement('article');
+  card.className = 'card clickable movie-card';
+  if (m.pinned) card.classList.add('pinned');
+  card.setAttribute('role', 'button');
+  card.setAttribute('tabindex', '0');
+
+  if (isUnread(m)) {
+    const dot = document.createElement('span');
+    dot.className = 'unread-dot';
+    card.appendChild(dot);
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'card-actions';
+  actions.innerHTML = `<button title="${m.pinned ? 'Desanclar' : 'Anclar'}" class="${m.pinned ? 'is-on' : ''}" data-action="pin">📌</button>`;
+  actions.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (!e.target.closest('button[data-action="pin"]')) return;
+    const next = !m.pinned;
+    m.pinned = next;
+    await supabase.from('movies').update({ pinned: next }).eq('id', m.id);
+    await router();
+  });
+  card.appendChild(actions);
+
+  const poster = document.createElement('div');
+  poster.className = 'poster-wrap';
+  if (m.image_path) {
+    const img = document.createElement('img');
+    img.src = publicImageUrl(m.image_path);
+    img.alt = m.title; img.loading = 'lazy';
+    poster.appendChild(img);
+  } else {
+    const np = document.createElement('div');
+    np.className = 'no-poster';
+    np.textContent = '🎬';
+    poster.appendChild(np);
+  }
+  if (m.platform) {
+    const chip = document.createElement('div');
+    chip.className = 'platform-chip';
+    chip.textContent = m.platform;
+    poster.appendChild(chip);
+  }
+  // Watched badge
+  const watched = Array.isArray(m.watched_by) ? m.watched_by : [];
+  if (watched.length) {
+    const wb = document.createElement('div');
+    wb.className = 'watch-badge';
+    wb.innerHTML = watched.length === 2
+      ? '<span class="seen">✓</span> los dos'
+      : `<span class="seen">✓</span> ${escapeHtml(watched[0])}`;
+    poster.appendChild(wb);
+  }
+  card.appendChild(poster);
+
+  const body = document.createElement('div');
+  body.className = 'body';
+
+  const h = document.createElement('h3');
+  h.textContent = m.title;
+  body.appendChild(h);
+
+  if (m.score) {
+    const row = document.createElement('div');
+    row.className = 'stars-row';
+    const full = Math.floor(m.score);
+    let html = '';
+    for (let i = 0; i < 5; i++) {
+      html += i < full ? '★' : '<span class="empty-star">★</span>';
+    }
+    row.innerHTML = html;
+    body.appendChild(row);
+  }
+
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.innerHTML = `<span>${escapeHtml(m.created_by || '?')} · ${fmtDate(m.created_at)}</span>`;
+  body.appendChild(meta);
+
+  card.appendChild(body);
+  card.addEventListener('click', () => openMovieEditor(m));
+  card.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openMovieEditor(m); }
+  });
+  return card;
+}
+
+// ---------- Movie editor ----------
+const dlgMovie = $('#dlg-movie');
+const movieDraft = { id: null, score: null, watched_by: [], pinned: false, image_path: null };
+
+function setMovieStars(score) {
+  movieDraft.score = score;
+  $$('#movie-stars button').forEach((b, i) => {
+    // index 0 is the "clear" button (data-v="0")
+    if (i === 0) return;
+    b.classList.toggle('on', i <= (score || 0));
+  });
+}
+
+function setMoviePin(p) {
+  movieDraft.pinned = p;
+  const b = $('#movie-pin-toggle');
+  b.classList.toggle('is-pinned', p);
+  b.textContent = p ? '📌 Anclada' : '📌 Anclar';
+}
+
+function renderMovieImage() {
+  const el = $('#movie-image-preview');
+  el.innerHTML = '';
+  if (movieDraft.image_path) {
+    const img = document.createElement('img');
+    img.src = publicImageUrl(movieDraft.image_path);
+    el.appendChild(img);
+  } else {
+    el.textContent = '🎬';
+  }
+}
+
+function renderWatchedCheckboxes(usersNames) {
+  const wrap = $('#movie-watched');
+  // Keep label, remove existing checkboxes
+  wrap.innerHTML = '<div class="watched-label">¿Quién la vio?</div>';
+  for (const name of usersNames) {
+    const lbl = document.createElement('label');
+    lbl.className = 'watched-check';
+    const checked = movieDraft.watched_by.includes(name);
+    if (checked) lbl.classList.add('checked');
+    lbl.innerHTML = `<input type="checkbox" ${checked ? 'checked' : ''} /> ${escapeHtml(name)}`;
+    const cb = lbl.querySelector('input');
+    cb.addEventListener('change', () => {
+      if (cb.checked) {
+        if (!movieDraft.watched_by.includes(name)) movieDraft.watched_by.push(name);
+        lbl.classList.add('checked');
+      } else {
+        movieDraft.watched_by = movieDraft.watched_by.filter(x => x !== name);
+        lbl.classList.remove('checked');
+      }
+    });
+    wrap.appendChild(lbl);
+  }
+}
+
+async function openMovieEditor(m) {
+  movieDraft.id = m?.id || null;
+  movieDraft.score = m?.score ? Number(m.score) : null;
+  movieDraft.watched_by = Array.isArray(m?.watched_by) ? [...m.watched_by] : [];
+  movieDraft.pinned = !!m?.pinned;
+  movieDraft.image_path = m?.image_path || null;
+
+  $('#movie-title-input').value = m?.title || '';
+  $('#movie-platform').value = m?.platform || '';
+  $('#movie-notes').value = m?.notes || '';
+  setMovieStars(movieDraft.score);
+  setMoviePin(movieDraft.pinned);
+  renderMovieImage();
+  // Fetch user names dynamically
+  const userNames = Object.keys(state._userAssets || {});
+  if (userNames.length === 0) userNames.push('Jaime', 'Mayck');
+  renderWatchedCheckboxes(userNames);
+
+  $('#movie-status').textContent = '';
+  $('#dlg-movie-title').textContent = m ? 'Editar peli' : 'Nueva peli';
+  $('#movie-save').textContent = m ? 'Actualizar' : 'Guardar';
+  $('#movie-delete').hidden = !m;
+
+  // Opportunistically ask the creator "¿la has visto ya?" only when creating a NEW movie
+  if (!m) {
+    setTimeout(() => {
+      const answer = confirm(`¿Ya viste "${$('#movie-title-input').value || 'esta peli'}"?\n\nOK = sí, ya la vi\nCancelar = todavía no`);
+      if (answer && !movieDraft.watched_by.includes(state.currentUser)) {
+        movieDraft.watched_by.push(state.currentUser);
+        renderWatchedCheckboxes(userNames);
+      }
+    }, 300);
+  }
+
+  dlgMovie.showModal();
+  setTimeout(() => $('#movie-title-input').focus(), 0);
+  if (m && isUnread(m)) markSeen('movies', m);
+}
+
+$('#movie-stars').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]');
+  if (!b) return;
+  setMovieStars(Number(b.dataset.v));
+});
+
+$('#movie-pin-toggle').addEventListener('click', () => setMoviePin(!movieDraft.pinned));
+
+$('#movie-image-input').addEventListener('change', async (e) => {
+  if (!e.target.files?.length) return;
+  const file = e.target.files[0];
+  e.target.value = '';
+  setStatus($('#movie-status'), 'Subiendo imagen…');
+  try {
+    const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+    const path = `movies/${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+      cacheControl: '3600', upsert: false, contentType: file.type,
+    });
+    if (error) throw error;
+    movieDraft.image_path = path;
+    renderMovieImage();
+    setStatus($('#movie-status'), 'Imagen subida');
+  } catch (err) {
+    setStatus($('#movie-status'), `Error: ${err.message || err}`, true);
+  }
+});
+
+$('#movie-image-clear').addEventListener('click', () => {
+  if (movieDraft.image_path) {
+    supabase.storage.from(BUCKET).remove([movieDraft.image_path]).catch(() => {});
+  }
+  movieDraft.image_path = null;
+  renderMovieImage();
+});
+
+$('#movie-save').addEventListener('click', async () => {
+  const title = $('#movie-title-input').value.trim();
+  if (!title) { setStatus($('#movie-status'), 'El título es obligatorio', true); $('#movie-title-input').focus(); return; }
+  const payload = {
+    title,
+    score: movieDraft.score || null,
+    platform: $('#movie-platform').value.trim(),
+    notes: $('#movie-notes').value,
+    image_path: movieDraft.image_path,
+    watched_by: movieDraft.watched_by,
+    pinned: movieDraft.pinned,
+  };
+  setStatus($('#movie-status'), 'Guardando…');
+  try {
+    if (movieDraft.id) {
+      const { error } = await supabase.from('movies').update(payload).eq('id', movieDraft.id);
+      if (error) throw error;
+    } else {
+      payload.created_by = state.currentUser;
+      payload.seen_by = [state.currentUser];
+      const { error } = await supabase.from('movies').insert(payload);
+      if (error) throw error;
+    }
+    dlgMovie.close();
+    await router();
+  } catch (e) { setStatus($('#movie-status'), `Error al guardar: ${e.message || e}`, true); }
+});
+
+$('#movie-delete').addEventListener('click', async () => {
+  if (!movieDraft.id) return;
+  const m = state.movies.find(x => x.id === movieDraft.id);
+  if (!m) return;
+  if (!confirm(`¿Eliminar "${m.title}"? No se puede deshacer.`)) return;
+  setStatus($('#movie-status'), 'Eliminando…');
+  try {
+    if (m.image_path) {
+      try { await supabase.storage.from(BUCKET).remove([m.image_path]); } catch {}
+    }
+    const { error } = await supabase.from('movies').delete().eq('id', m.id);
+    if (error) throw error;
+    dlgMovie.close();
+    await router();
+  } catch (e) { setStatus($('#movie-status'), `Error al eliminar: ${e.message || e}`, true); }
 });
 
 // ============================================================

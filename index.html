@@ -61,6 +61,10 @@
             <span class="icon">📍</span><span>Lugares</span>
             <span class="badge-unread" data-unread="lugares" hidden></span>
           </a>
+          <a href="#/pelis" data-route="#/pelis">
+            <span class="icon">🎬</span><span>Pelis</span>
+            <span class="badge-unread" data-unread="pelis" hidden></span>
+          </a>
           <div class="section-label">Otros</div>
           <a href="#/configuracion" data-route="#/configuracion">
             <span class="icon">⚙️</span><span>Configuración</span>
@@ -270,6 +274,81 @@
         </div>
       </div>
     </dialog>
+
+    <!-- ==================== Movie editor ==================== -->
+    <dialog class="modal" id="dlg-movie">
+      <div class="modal-inner">
+        <div class="modal-head">
+          <h2 id="dlg-movie-title">Nueva peli</h2>
+          <button class="close-x" data-close>✕</button>
+        </div>
+
+        <input type="text" class="title" id="movie-title-input" placeholder="Título de la peli…" maxlength="200" />
+
+        <div class="movie-image-wrap">
+          <div class="movie-image-preview" id="movie-image-preview"></div>
+          <div class="movie-image-actions">
+            <label class="btn">📁 Subir imagen<input type="file" accept="image/*" id="movie-image-input" hidden /></label>
+            <button class="btn ghost" id="movie-image-clear" type="button">Quitar</button>
+          </div>
+        </div>
+
+        <div class="field two">
+          <div>
+            <label>Puntaje</label>
+            <div class="stars" id="movie-stars">
+              <button data-v="0">☆</button>
+              <button data-v="1">★</button>
+              <button data-v="2">★</button>
+              <button data-v="3">★</button>
+              <button data-v="4">★</button>
+              <button data-v="5">★</button>
+            </div>
+          </div>
+          <div>
+            <label for="movie-platform">Plataforma (opcional)</label>
+            <input type="text" id="movie-platform" placeholder="Netflix, HBO, Filmin…" list="movie-platform-list" maxlength="100" />
+            <datalist id="movie-platform-list">
+              <option value="Netflix"><option value="HBO Max"><option value="Disney+"><option value="Prime Video"><option value="Filmin"><option value="Apple TV+"><option value="Movistar"><option value="Cine"></option>
+            </datalist>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="movie-notes">Notas (opcional)</label>
+          <textarea id="movie-notes" placeholder="Por qué quieres verla, alguien la recomendó, etc."></textarea>
+        </div>
+
+        <div class="watched-row" id="movie-watched">
+          <div class="watched-label">¿Quién la vio?</div>
+          <!-- checkboxes injected -->
+        </div>
+
+        <div class="modal-toolbar">
+          <button class="btn pin-toggle" id="movie-pin-toggle" type="button">📌 Anclar</button>
+        </div>
+
+        <div class="modal-actions">
+          <div class="left">
+            <span class="status" id="movie-status"></span>
+          </div>
+          <button class="btn danger" id="movie-delete" hidden>Eliminar</button>
+          <div class="right">
+            <button class="btn ghost" data-close>Cancelar</button>
+            <button class="btn primary" id="movie-save">Guardar</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- ==================== Notifications popover ==================== -->
+    <div class="notif-popover" id="notif-popover" hidden>
+      <div class="notif-head">
+        <h3 id="notif-head-title">Novedades</h3>
+        <button class="close-x" id="notif-close">✕</button>
+      </div>
+      <div class="notif-list" id="notif-list"></div>
+    </div>
 
     <script type="module" src="./app.js"></script>
   </body>

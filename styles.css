@@ -567,8 +567,8 @@ textarea.content-plain:focus { border-color: var(--accent); background: var(--su
 
 .modal-toolbar {
   display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
-  padding: 0.5rem 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
-  margin: 0.5rem 0;
+  padding: 0.5rem 0; border-top: 1px solid var(--border);
+  margin: 0.5rem 0 0;
 }
 .visibility-pill {
   display: inline-flex; gap: 2px; background: var(--surface-alt); border-radius: 999px; padding: 2px;
@@ -745,6 +745,245 @@ dialog.lightbox .lightbox-note .note-author { color: #aaa; font-style: normal; m
   border: 1px solid var(--border); background: var(--surface-alt); color: var(--text); cursor: pointer; font-size: 0.85rem;
 }
 .settings-card .opts button.active { background: var(--accent); color: white; border-color: transparent; }
+
+/* ======== Config tabs / submenu ======== */
+.config-tabs {
+  display: flex; gap: 0.25rem; flex-wrap: wrap; margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.config-tabs button {
+  background: transparent; border: 0; padding: 0.55rem 0.9rem; cursor: pointer;
+  color: var(--text-dim); font-size: 0.9rem; border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.config-tabs button:hover { color: var(--text); }
+.config-tabs button.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+
+/* ======== Notifications bell ======== */
+.notif-bell-wrap { position: relative; }
+.notif-bell {
+  background: var(--surface-alt); border: 1px solid var(--border);
+  border-radius: 999px; width: 40px; height: 40px; cursor: pointer;
+  display: grid; place-items: center; font-size: 1rem; position: relative;
+  color: var(--text);
+}
+.notif-bell:hover { background: var(--border); }
+.notif-bell .notif-count {
+  position: absolute; top: -4px; right: -4px;
+  background: var(--accent); color: white; font-size: 0.65rem; font-weight: 700;
+  border-radius: 999px; padding: 0.1rem 0.4rem; min-width: 18px; text-align: center;
+}
+
+.notif-popover {
+  position: fixed; top: 4rem; right: 1rem;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+  width: min(360px, calc(100vw - 2rem));
+  max-height: 70vh; overflow: hidden;
+  z-index: 60;
+  display: flex; flex-direction: column;
+}
+.notif-popover .notif-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--border);
+}
+.notif-popover .notif-head h3 { margin: 0; font-size: 0.95rem; }
+.notif-popover .notif-list { overflow-y: auto; padding: 0.4rem; flex: 1; }
+.notif-popover .notif-item {
+  display: flex; align-items: flex-start; gap: 0.6rem;
+  padding: 0.55rem 0.6rem; border-radius: 8px; cursor: pointer;
+  color: var(--text); text-decoration: none;
+}
+.notif-popover .notif-item:hover { background: var(--surface-alt); }
+.notif-popover .notif-item .icon { font-size: 1.05rem; flex-shrink: 0; padding-top: 0.05rem; }
+.notif-popover .notif-item .info { flex: 1; min-width: 0; }
+.notif-popover .notif-item .title { font-weight: 600; font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notif-popover .notif-item .meta { color: var(--text-dim); font-size: 0.75rem; margin-top: 0.1rem; }
+.notif-popover .notif-item .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--accent); flex-shrink: 0; margin-top: 0.4rem; }
+.notif-popover .empty { padding: 1.5rem; }
+
+/* ======== Instantáneos chat widget ======== */
+.chat-widget {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow); min-height: 320px;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.chat-widget .chat-head {
+  padding: 0.7rem 0.9rem 0.45rem;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 0.4rem;
+  font-size: 0.9rem; font-weight: 600;
+}
+.chat-widget .chat-head .dot {
+  width: 7px; height: 7px; border-radius: 999px; background: #22c55e;
+}
+.chat-widget .chat-body {
+  flex: 1; overflow-y: auto; padding: 0.6rem 0.7rem;
+  display: flex; flex-direction: column; gap: 0.4rem;
+  scroll-behavior: smooth;
+}
+.chat-widget .chat-empty {
+  margin: auto; color: var(--text-dim); font-size: 0.85rem; text-align: center;
+}
+.chat-bubble {
+  max-width: 78%; padding: 0.45rem 0.7rem; border-radius: 14px;
+  font-size: 0.88rem; line-height: 1.4;
+  word-wrap: break-word; overflow-wrap: break-word;
+  position: relative;
+}
+.chat-bubble.mine {
+  align-self: flex-end;
+  background: var(--accent); color: white;
+  border-bottom-right-radius: 4px;
+}
+.chat-bubble.theirs {
+  align-self: flex-start;
+  background: var(--surface-alt); color: var(--text);
+  border-bottom-left-radius: 4px;
+}
+.chat-bubble .bubble-meta {
+  font-size: 0.66rem; opacity: 0.7; margin-top: 0.2rem;
+}
+.chat-bubble.mine .bubble-meta { text-align: right; }
+.chat-widget .chat-input {
+  display: flex; gap: 0.4rem; padding: 0.5rem; border-top: 1px solid var(--border);
+}
+.chat-widget .chat-input input {
+  flex: 1; border: 1px solid var(--border); background: var(--surface-alt); color: var(--text);
+  padding: 0.55rem 0.75rem; border-radius: 999px; font-size: 0.88rem; outline: none;
+}
+.chat-widget .chat-input input:focus { border-color: var(--accent); background: var(--surface); }
+.chat-widget .chat-input button {
+  background: var(--accent); color: white; border: 0; border-radius: 999px;
+  padding: 0 0.95rem; cursor: pointer; font-size: 0.85rem; font-weight: 600;
+}
+.chat-widget .chat-input button:hover { background: var(--accent-hover); }
+.chat-widget .chat-input button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ======== Movie card / stars ======== */
+.movie-card { padding: 0; overflow: hidden; }
+.movie-card .poster-wrap {
+  position: relative; aspect-ratio: 2 / 3;
+  background: linear-gradient(135deg, #3a1d4a, #1e3a5f);
+  overflow: hidden;
+}
+.movie-card .poster-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.movie-card .poster-wrap .no-poster {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  color: rgba(255,255,255,0.5); font-size: 2.5rem;
+}
+.movie-card .poster-wrap .platform-chip {
+  position: absolute; top: 8px; left: 8px;
+  background: rgba(0,0,0,0.65); color: white; border-radius: 999px;
+  font-size: 0.7rem; padding: 0.15rem 0.55rem;
+}
+.movie-card .poster-wrap .watch-badge {
+  position: absolute; bottom: 8px; right: 8px;
+  background: rgba(0,0,0,0.65); color: white; border-radius: 999px;
+  font-size: 0.7rem; padding: 0.15rem 0.55rem; display: flex; gap: 0.2rem;
+}
+.movie-card .poster-wrap .watch-badge .seen { color: #22c55e; }
+.movie-card .body { padding: 0.6rem 0.75rem 0.75rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.movie-card .stars-row { color: #f9b233; font-size: 0.85rem; letter-spacing: 0.05em; }
+.movie-card .stars-row .empty-star { color: var(--border); }
+
+.stars {
+  display: inline-flex; gap: 0.1rem; align-items: center;
+}
+.stars button {
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--border); font-size: 1.4rem; padding: 0 0.15rem; line-height: 1;
+}
+.stars button.on { color: #f9b233; }
+.stars button:first-child { color: var(--text-dim); font-size: 0.85rem; margin-right: 0.3rem; }
+
+.movie-image-wrap {
+  display: flex; gap: 0.7rem; align-items: center; margin: 0.5rem 0;
+}
+.movie-image-preview {
+  width: 80px; height: 120px; border-radius: 8px; overflow: hidden;
+  border: 1px solid var(--border); background: var(--surface-alt);
+  display: grid; place-items: center; color: var(--text-dim); font-size: 1.5rem;
+  flex-shrink: 0;
+}
+.movie-image-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.movie-image-actions { display: flex; flex-direction: column; gap: 0.35rem; align-items: flex-start; }
+
+.watched-row {
+  display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;
+  padding: 0.5rem 0; border-top: 1px solid var(--border); margin-top: 0.4rem;
+}
+.watched-row .watched-label { font-size: 0.82rem; color: var(--text-dim); }
+.watched-row label.watched-check {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.3rem 0.7rem; border-radius: 999px;
+  background: var(--surface-alt); border: 1px solid var(--border);
+  cursor: pointer; font-size: 0.82rem;
+}
+.watched-row label.watched-check input { margin: 0; }
+.watched-row label.watched-check.checked { background: var(--accent); color: white; border-color: transparent; }
+
+/* ======== Notes layout fixes ======== */
+.card.note-card { padding-bottom: 2.2rem; min-height: 120px; }
+.card.note-card .meta {
+  position: absolute; bottom: 8px; left: 12px; right: 12px;
+  align-items: center;
+}
+.card.note-card .meta .badge { margin-left: auto; }
+.notes-list-page .card.note-card { padding-bottom: 0.9rem; }
+.notes-list-page .card.note-card .meta { position: static; }
+
+.tag-row { margin-bottom: 0.25rem; }
+
+/* Note editor: more spacing between header and title input */
+#dlg-note .modal-inner input.title { margin-top: 0.5rem; padding-top: 0.4rem; }
+
+/* Album titles on Photos page */
+.album-section { margin-bottom: 1.4rem; }
+.album-section .album-title-row {
+  display: flex; align-items: baseline; gap: 0.45rem; margin-bottom: 0.5rem;
+}
+.album-section .album-title-row h2 {
+  margin: 0; font-size: 1.05rem; letter-spacing: -0.01em;
+}
+.album-section .album-title-row .count { color: var(--text-dim); font-size: 0.78rem; }
+
+/* Places address search shown on the page itself */
+.places-search-row {
+  display: flex; gap: 0.4rem; margin-bottom: 0.5rem; position: relative;
+}
+.places-search-row input {
+  flex: 1; padding: 0.55rem 0.85rem; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface-alt); color: var(--text);
+  font-size: 0.9rem; outline: none;
+}
+.places-search-row input:focus { border-color: var(--accent); background: var(--surface); }
+.places-search-row .search-results {
+  position: absolute; top: 100%; left: 0; right: 0; margin-top: 0.3rem; z-index: 10;
+}
+
+/* Spotify card with album art background */
+.media-card.spotify .thumb-wrap {
+  background: linear-gradient(135deg, #1db954, #168d40);
+}
+.media-card.spotify .thumb-wrap img {
+  width: 100%; height: 100%; object-fit: cover;
+}
+
+.tag-color-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+.tag-color-row {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.4rem 0.55rem; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface-alt);
+}
+.tag-color-row .tag-chip-selected { padding: 0.2rem 0.7rem; }
+.tag-color-row input[type=color] {
+  width: 38px; height: 32px; border-radius: 6px; border: 1px solid var(--border);
+  cursor: pointer; padding: 0; background: transparent;
+}
+.tag-color-row .btn { margin-left: auto; }
+
+.asset-row {
 
 .asset-row {
   display: flex; gap: 0.85rem; align-items: center;
