@@ -1,0 +1,15 @@
+# Local config / secrets — never commit
+.mcp.json
+.claude/
+.env
+.env.local
+.env.*.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Dependencies (in case we add tooling later)
+node_modules/
