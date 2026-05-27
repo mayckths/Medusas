@@ -3334,16 +3334,20 @@ $('#movie-delete').addEventListener('click', async () => {
 // Boot
 // ============================================================
 async function boot() {
-  await initAuthUI();
   const saved = localStorage.getItem(AUTH_KEY);
   if (saved) {
+    // Restore the session quickly — hide the (visible-by-default) login,
+    // then set up everything else in parallel.
     state.currentUser = saved;
     hideLogin();
+    initAuthUI(); // wire pincode for next logout, runs async without blocking
     await loadSettings();
     if (!location.hash) location.hash = '#/inicio';
     await router();
   } else {
+    // Logged out: the auth overlay is already visible in HTML; just wire it up.
     showLogin();
+    await initAuthUI();
   }
 }
 boot();

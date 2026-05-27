@@ -1016,9 +1016,14 @@ dialog.lightbox .lightbox-cap {
 
 /* ======== Instantáneos chat widget ======== */
 .chat-widget {
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
   box-shadow: var(--shadow); height: 360px; max-height: 360px;
   display: flex; flex-direction: column; overflow: hidden;
+}
+@media (max-width: 760px) {
+  .chat-widget { height: 320px; max-height: 320px; }
+  .photo-widget { min-height: 240px; }
+  .dashboard-grid > .photo-widget { min-height: 240px; }
 }
 .chat-widget .chat-head {
   padding: 0.6rem 0.9rem 0.5rem;

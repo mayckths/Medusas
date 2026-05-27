@@ -18,7 +18,9 @@
   </head>
   <body>
     <!-- ==================== LOGIN ==================== -->
-    <div class="auth-overlay" id="auth-overlay" hidden>
+    <!-- Visible by default so users see the universe even if JS is slow to load.
+         JS hides it when an authenticated session is restored. -->
+    <div class="auth-overlay" id="auth-overlay">
       <div class="cosmos">
         <div class="stars stars-1"></div>
         <div class="stars stars-2"></div>
