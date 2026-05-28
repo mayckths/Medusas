@@ -423,7 +423,7 @@ async function loadAll() {
     supabase.from('places').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('movies').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('chats').select('*').order('created_at', { ascending: true }).limit(200),
-    supabase.from('postits').select('*').order('created_at', { ascending: false }),
+    supabase.from('postits').select('*').order('z_index', { ascending: true }).order('created_at', { ascending: true }),
   ]);
   state.notes = notes || [];
   state.media = media || [];
@@ -648,7 +648,7 @@ function renderInicio(root) {
           <button class="pb-new" id="pb-new" type="button">+ Nuevo post-it</button>
           <div class="pb-empty" id="pb-empty" hidden>Toca <strong>+ Nuevo post-it</strong> para empezar el tablero.</div>
         </div>
-        ${order.filter(s => s !== 'photos').map(s => sectionTemplates[s] || '').join('')}
+        ${order.map(s => sectionTemplates[s] || '').join('')}
       </div>
 
       <div class="col-right">
@@ -687,8 +687,6 @@ function renderInicio(root) {
         </div>
       </div>
     </div>
-
-    ${order.includes('photos') ? sectionTemplates.photos : ''}
   `;
 
   // Recent notes (3 cards — wider in the 2/3 column)
@@ -747,25 +745,13 @@ function renderInicio(root) {
 // sticky positioning keeps the column at top:16 which leaves some
 // unused space at the bottom — acceptable tradeoff for always-fits.
 function fitColRightToViewport() {
+  // Both right-column cards have fixed heights now, so we no longer need
+  // to compute a viewport-fitting size. Clear any previously-set inline
+  // height in case the user is loading a session that wrote them.
   const col = document.querySelector('.col-right');
   if (!col) return;
-  // On narrow viewports the columns stack — let CSS handle sizing.
-  if (window.innerWidth <= 980) {
-    col.style.height = '';
-    col.style.maxHeight = '';
-    return;
-  }
-  // Clear our previous inline values so we can re-measure cleanly
   col.style.height = '';
   col.style.maxHeight = '';
-  // Compute the column's top relative to the document. This represents
-  // the worst-case top offset for the sticky element (at scroll = 0).
-  const rect = col.getBoundingClientRect();
-  const docTop = rect.top + window.scrollY;
-  const visibleTop = Math.max(16, docTop);
-  const fitH = Math.max(280, window.innerHeight - visibleTop - 16);
-  col.style.height = `${fitH}px`;
-  col.style.maxHeight = `${fitH}px`;
 }
 if (!window._medusasColResizeWired) {
   window._medusasColResizeWired = true;
@@ -1057,7 +1043,14 @@ function renderNewCtaTile(label, onOpen) {
 function renderNoteCard(note) {
   const card = document.createElement('article');
   card.className = 'card clickable with-stripe note-card';
+  card.dataset.id = note.id;
   if (note.pinned) card.classList.add('pinned');
+  // If this card was just pinned (animation handoff from previous render),
+  // play the arrival animation.
+  if (state._justPinnedNoteId === note.id) {
+    card.classList.add('just-pinned');
+    delete state._justPinnedNoteId;
+  }
   const stripeColor = (note.tags && note.tags.length) ? tagColor(note.tags[0]) : 'var(--border)';
   card.style.setProperty('--stripe', stripeColor);
   card.setAttribute('role', 'button');
@@ -1079,7 +1072,13 @@ function renderNoteCard(note) {
     e.stopPropagation();
     const next = !note.pinned;
     note.pinned = next;
-    await supabase.from('notes').update({ pinned: next }).eq('id', note.id);
+    // Animate the shrink-out, then re-render with the just-pinned card
+    // playing the arrival animation at its new position.
+    card.classList.add('is-pinning');
+    if (next) state._justPinnedNoteId = note.id;
+    const persist = supabase.from('notes').update({ pinned: next }).eq('id', note.id);
+    await new Promise(r => setTimeout(r, 220));
+    await persist;
     await router();
   });
   card.appendChild(pinBtn);
@@ -1355,10 +1354,8 @@ function renderFotos(root) {
         <button class="btn primary" id="upload-btn">+ Subir fotos</button>
       </div>
     </div>
-    ${featured.length ? `
-      <div class="featured-label"><span class="material-symbols-outlined">star</span> Destacadas</div>
-      <div class="featured-strip" id="featured-strip"></div>
-    ` : ''}
+    <div class="featured-label" ${featured.length ? '' : 'hidden'}><span class="material-symbols-outlined">star</span> Destacadas</div>
+    <div class="featured-strip" id="featured-strip" ${featured.length ? '' : 'hidden'}></div>
     <div id="photo-sections"></div>
   `;
 
@@ -1393,15 +1390,14 @@ function renderAlbumDetail(root, slug) {
   const isUnnamed = !albumName;
 
   root.innerHTML = `
-    <div class="page-head">
-      <div class="album-detail-head" style="position:relative;">
-        <a class="back-link" href="#/fotos"><span class="material-symbols-outlined">arrow_back</span> Fotos</a>
+    <a class="back-link" href="#/fotos"><span class="material-symbols-outlined">arrow_back</span> Fotos</a>
+    <div class="page-head album-detail-head">
+      <div class="album-detail-title">
         <h1>
-          ${albumName ? '<span class="material-symbols-outlined" style="font-size:1em;">folder</span>' : ''}
           ${escapeHtml(displayName)}
           <span class="album-menu-wrap">
             <button class="album-menu-btn" type="button" title="Opciones del álbum" aria-label="Opciones del álbum">
-              <span class="material-symbols-outlined">more_horiz</span>
+              <span class="material-symbols-outlined">keyboard_arrow_down</span>
             </button>
             <div class="album-menu-popover">
               <button data-action="rename"><span class="material-symbols-outlined">edit</span>${isUnnamed ? 'Asignar nombre…' : 'Renombrar álbum'}</button>
@@ -1425,7 +1421,7 @@ function renderAlbumDetail(root, slug) {
     $('#view-all-btn').addEventListener('click', () => openLightbox(photos, 0));
   }
 
-  wireAlbumMenu($('.album-detail-head'), albumName, photos);
+  wireAlbumMenu($('.album-detail-title'), albumName, photos);
 
   const grid = $('#photo-grid');
   if (!photos.length) {
@@ -1456,10 +1452,10 @@ function renderAlbumSection(name, photos) {
   section.className = 'album-section';
   section.innerHTML = `
     <div class="album-title-row">
-      <h2>${isUnnamed ? '' : '<span class="material-symbols-outlined" style="font-size:1.1em;">folder</span> '}${escapeHtml(displayName)}</h2>
+      <h2>${escapeHtml(displayName)}</h2>
       <span class="album-menu-wrap">
         <button class="album-menu-btn" type="button" title="Opciones del álbum" aria-label="Opciones del álbum">
-          <span class="material-symbols-outlined">more_horiz</span>
+          <span class="material-symbols-outlined">keyboard_arrow_down</span>
         </button>
         <div class="album-menu-popover">
           <button data-action="rename"><span class="material-symbols-outlined">edit</span>${isUnnamed ? 'Asignar nombre…' : 'Renombrar álbum'}</button>
@@ -1697,6 +1693,8 @@ function renderPhoto(p, list, index) {
     if (icon) icon.classList.toggle('filled', p.featured);
     star.title = p.featured ? 'Quitar de destacadas' : 'Destacar';
     star.setAttribute('aria-label', star.title);
+    // Keep the destacadas preview strip in sync without a full reload
+    syncFeaturedStrip();
     try {
       await supabase.from('photos').update({ featured: p.featured }).eq('id', p.id);
     } catch (err) { console.error('toggle featured', err); }
@@ -1720,6 +1718,28 @@ function renderPhoto(p, list, index) {
   tile.addEventListener('click', () => openLightbox(list, index));
   tile.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLightbox(list, index); } });
   return tile;
+}
+
+// Refresh the "Destacadas" strip at the top of the Fotos page (or the
+// dashboard "Fotos destacadas" section) without rebuilding the whole
+// page. Called whenever the featured flag of a photo toggles via the
+// star button on a tile.
+function syncFeaturedStrip() {
+  const strip = document.getElementById('featured-strip');
+  if (!strip) return;
+  const featured = state.photos.filter(p => p.featured);
+  // If the strip's host wrapper has a wrapper label, hide it when empty
+  const label = strip.previousElementSibling;
+  if (!featured.length) {
+    strip.innerHTML = '';
+    if (label && label.classList.contains('featured-label')) label.hidden = true;
+    strip.hidden = true;
+    return;
+  }
+  strip.hidden = false;
+  if (label && label.classList.contains('featured-label')) label.hidden = false;
+  strip.innerHTML = '';
+  featured.forEach((p, i) => strip.appendChild(renderPhoto(p, featured, i)));
 }
 
 // ============================================================
@@ -3615,6 +3635,34 @@ function setupNotifBell() {
   });
 }
 
+// Collapse photo uploads that share an author + album and were created
+// within a few minutes of each other into a single notification group.
+function groupPhotoUploads(photos) {
+  const WINDOW_MS = 10 * 60 * 1000;
+  const sorted = [...photos].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  const groups = [];
+  for (const p of sorted) {
+    const last = groups[groups.length - 1];
+    const sameBucket = last
+      && last.created_by === p.created_by
+      && (last.album || '') === (p.album || '')
+      && Math.abs(new Date(last.last_created_at) - new Date(p.created_at)) < WINDOW_MS;
+    if (sameBucket) {
+      last.photos.push(p);
+      last.last_created_at = p.created_at;
+    } else {
+      groups.push({
+        created_by: p.created_by,
+        album: p.album || '',
+        photos: [p],
+        created_at: p.created_at,
+        last_created_at: p.created_at,
+      });
+    }
+  }
+  return groups;
+}
+
 function renderNotifList() {
   const list = $('#notif-list');
   const title = $('#notif-head-title');
@@ -3623,10 +3671,35 @@ function renderNotifList() {
   const tagItem = (item, kind, icon, route, label) => ({ ...item, _kind: kind, _icon: icon, _route: route, _label: label });
 
   const mi = (n) => `<span class="material-symbols-outlined" style="font-size:18px;">${n}</span>`;
+
+  // Group photo uploads that landed in the same album within ~10 minutes
+  // of each other into a single "[user] subió N fotos a [álbum]" entry.
+  const groupedPhotos = groupPhotoUploads(state.photos);
+
   const all = [
     ...state.notes.filter(n => n.visibility !== 'private').map(n => tagItem(n, 'note', mi('edit_note'), '#/notas', n.title)),
     ...state.media.map(m => tagItem(m, 'media', mi(m.kind === 'spotify' ? 'music_note' : 'play_circle'), '#/musica', m.title)),
-    ...state.photos.map(p => tagItem(p, 'photo', mi('photo_library'), '#/fotos', p.caption || 'Foto sin título')),
+    ...groupedPhotos.map(g => {
+      if (g.photos.length > 1) {
+        const slug = g.album ? albumSlugFor(g.album) : '';
+        const route = g.album ? `#/fotos/album/${slug}` : '#/fotos';
+        const label = g.album
+          ? `${g.photos.length} fotos en ${g.album}`
+          : `${g.photos.length} fotos nuevas`;
+        return {
+          _kind: 'photo',
+          _icon: mi('photo_library'),
+          _route: route,
+          _label: label,
+          created_by: g.created_by,
+          created_at: g.created_at,
+          read_by: g.photos.every(p => (p.read_by || []).includes(state.currentUser)) ? [state.currentUser] : [],
+          id: 'group-' + g.photos[0].id,
+          _group: g,
+        };
+      }
+      return tagItem(g.photos[0], 'photo', mi('photo_library'), '#/fotos', g.photos[0].caption || 'Foto sin título');
+    }),
     ...state.movies.map(m => tagItem(m, 'movie', mi('movie'), '#/pelis', m.title)),
   ];
 
@@ -3954,18 +4027,31 @@ const POSTIT_W = 130;
 const POSTIT_H = 130;
 let postitDragState = null;
 let postitTopZ = 10;
-// Per-postit z-index map so re-renders (from polling) keep the relative
-// stacking the user established by dragging/creating.
-const postitZMap = new Map();
+// Bring this post-it to the top of the stacking order. We bump a local
+// counter, set inline z-index, and persist the new z_index to Supabase
+// so it survives refreshes (for both users).
 function bringPostitToFront(el, id) {
   postitTopZ += 1;
-  if (id != null) postitZMap.set(id, postitTopZ);
-  el.style.zIndex = String(postitTopZ);
+  const z = postitTopZ;
+  el.style.zIndex = String(z);
+  // Reflect locally so the next renderPostits() preserves it
+  const p = state.postits.find(x => x.id === id);
+  if (p) p.z_index = z;
+  if (id != null) {
+    // Fire-and-forget — drag/create UX shouldn't wait on the round trip.
+    supabase.from('postits').update({ z_index: z }).eq('id', id).then(() => {}, () => {});
+  }
 }
 
 function setupPostitBoard() {
   const board = $('#postit-board');
   if (!board) return;
+  // Seed the local counter from the highest persisted z_index so subsequent
+  // bring-to-front calls always end up on top.
+  postitTopZ = Math.max(
+    postitTopZ,
+    ...state.postits.map(p => Number(p.z_index) || 0)
+  );
   // Render initial post-its
   renderPostits();
 
@@ -4000,7 +4086,7 @@ function setupPostitBoard() {
   if (window._postitPoll) clearInterval(window._postitPoll);
   window._postitPoll = setInterval(async () => {
     try {
-      const { data } = await supabase.from('postits').select('*').order('created_at', { ascending: false });
+      const { data } = await supabase.from('postits').select('*').order('z_index', { ascending: true }).order('created_at', { ascending: true });
       if (data) {
         // Only re-render if list changed
         if (data.length !== state.postits.length ||
@@ -4036,9 +4122,8 @@ function renderPostitEl(p) {
   el.style.left = `${p.x}px`;
   el.style.top = `${p.y}px`;
   el.style.transform = `rotate(${p.rotation || 0}deg)`;
-  // Restore stacking order assigned via drag/create across re-renders
-  const z = postitZMap.get(p.id);
-  if (z) el.style.zIndex = String(z);
+  // Stacking order comes from the DB so it survives refreshes
+  if (p.z_index != null) el.style.zIndex = String(p.z_index);
 
   el.innerHTML = `
     <div class="pi-author">${escapeHtml(p.author || '?')}</div>
