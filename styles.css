@@ -1028,8 +1028,15 @@ dialog.theater::backdrop { background: rgba(0,0,0,0.85); }
   gap: 0.5rem;
 }
 .photo {
-  position: relative; aspect-ratio: 1 / 1; border-radius: 8px; overflow: hidden;
-  background: var(--surface-alt); border: 1px solid var(--border); cursor: pointer;
+  position: relative; aspect-ratio: 1 / 1; border-radius: 12px; overflow: hidden;
+  background: var(--surface-alt);
+  border: 0;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.photo:hover {
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45), 0 3px 6px rgba(0, 0, 0, 0.25);
 }
 .photo img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.2s ease; }
 .photo:hover img { transform: scale(1.04); }
@@ -1106,6 +1113,38 @@ dialog.modal {
   box-shadow: 0 10px 40px rgba(0,0,0,0.25);
 }
 dialog.modal::backdrop { background: rgba(0,0,0,0.45); }
+
+/* Custom alert / confirm dialog */
+dialog.ui-dialog { max-width: 460px; }
+dialog.ui-dialog .ui-dialog-message {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--text);
+  margin: 0.4rem 0 0.5rem;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+dialog.ui-dialog .modal-actions {
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+dialog.ui-dialog .ui-prompt-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  color: var(--text);
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  outline: none;
+  margin-top: 0.4rem;
+  margin-bottom: 0.1rem;
+}
+dialog.ui-dialog .ui-prompt-input:focus {
+  border-color: var(--accent);
+  background: var(--surface);
+}
 .modal-inner { padding: 1rem 1.1rem 1rem; }
 .modal-head {
   display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;
@@ -1288,21 +1327,42 @@ dialog.lightbox .lightbox-cap {
 }
 
 .lb-nav, .lb-close, .lb-pin, .lb-feature, .lb-move, .lb-delete {
-  position: absolute; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.18);
-  color: white; cursor: pointer; border-radius: 999px; z-index: 2;
+  position: absolute;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: white;
+  cursor: pointer;
+  border-radius: 999px;
+  z-index: 2;
+  display: grid; place-items: center;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
 }
-.lb-nav:hover, .lb-close:hover, .lb-pin:hover, .lb-feature:hover, .lb-move:hover, .lb-delete:hover { background: rgba(0,0,0,0.75); }
+.lb-nav:hover, .lb-close:hover, .lb-pin:hover, .lb-feature:hover, .lb-move:hover, .lb-delete:hover {
+  background: rgba(0, 0, 0, 0.8);
+  border-color: rgba(255, 255, 255, 0.35);
+  transform: scale(1.08);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.lb-nav:active, .lb-close:active, .lb-pin:active,
+.lb-feature:active, .lb-move:active, .lb-delete:active {
+  transform: scale(0.96);
+}
 .lb-nav { top: 50%; transform: translateY(-50%); width: 48px; height: 48px; font-size: 1.6rem; line-height: 1; }
+/* The base translateY for nav needs to be preserved on hover */
+.lb-nav:hover { transform: translateY(-50%) scale(1.08); }
+.lb-nav:active { transform: translateY(-50%) scale(0.96); }
 .lb-nav.prev { left: 0.6rem; }
 .lb-nav.next { right: 0.6rem; }
 .lb-close { top: 0.6rem; right: 0.6rem; width: 38px; height: 38px; font-size: 1rem; }
 .lb-pin { top: 0.6rem; right: 4rem; width: 38px; height: 38px; font-size: 0.95rem; }
-.lb-pin.is-on { background: var(--accent); border-color: transparent; }
+.lb-pin.is-on { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.lb-pin.is-on:hover { background: var(--accent-hover); border-color: transparent; }
 .lb-feature { top: 0.6rem; right: 7.4rem; width: 38px; height: 38px; font-size: 0.95rem; }
 .lb-feature.is-on { background: var(--warn); border-color: transparent; }
+.lb-feature.is-on:hover { background: #ffc857; border-color: transparent; }
 .lb-move { top: 0.6rem; right: 10.8rem; width: 38px; height: 38px; font-size: 0.95rem; }
 .lb-delete { top: 0.6rem; left: 0.6rem; width: 38px; height: 38px; font-size: 0.95rem; }
-.lb-delete:hover { background: var(--danger); }
+.lb-delete:hover { background: var(--danger); border-color: transparent; }
 
 @media (max-width: 760px) {
   .lb-stage { inset: 4rem 0.6rem 5rem 0.6rem; }
@@ -2129,8 +2189,15 @@ a.btn.icon-pill .material-symbols-outlined { font-size: 20px; }
 
 /* ======== Album tile (photos page) ======== */
 .album-tile {
-  position: relative; aspect-ratio: 1 / 1; border-radius: 8px; overflow: hidden;
-  background: var(--surface-alt); border: 1px solid var(--border); cursor: pointer;
+  position: relative; aspect-ratio: 1 / 1; border-radius: 12px; overflow: hidden;
+  background: var(--surface-alt);
+  border: 0;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4), 0 2px 5px rgba(0, 0, 0, 0.2);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.album-tile:hover {
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.5), 0 3px 7px rgba(0, 0, 0, 0.25);
 }
 .album-tile img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.2s ease; }
 .album-tile:hover img { transform: scale(1.04); }

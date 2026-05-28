@@ -38,6 +38,178 @@ function setStatus(el, msg, isError = false) {
   if (msg && !isError) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 2500);
 }
 
+// ============================================================
+// Custom alert / confirm modals (no native browser dialogs).
+// Both are async and return a promise — uiAlert resolves with no
+// value, uiConfirm resolves with true (confirmed) or false (cancelled).
+// ============================================================
+function ensureUiDialog() {
+  let dlg = document.getElementById('ui-dialog');
+  if (dlg) return dlg;
+  dlg = document.createElement('dialog');
+  dlg.id = 'ui-dialog';
+  dlg.className = 'modal ui-dialog';
+  dlg.innerHTML = `
+    <div class="modal-inner">
+      <div class="modal-head">
+        <h2 id="ui-dialog-title"></h2>
+        <button class="close-x" id="ui-dialog-close" type="button" aria-label="Cerrar">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div class="ui-dialog-message" id="ui-dialog-message"></div>
+      <div class="modal-actions">
+        <button class="btn" id="ui-dialog-cancel" type="button">Cancelar</button>
+        <button class="btn primary" id="ui-dialog-confirm" type="button">Aceptar</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(dlg);
+  return dlg;
+}
+
+function _openUiDialog({ title, message, confirmLabel, cancelLabel, danger, withCancel }) {
+  return new Promise(resolve => {
+    const dlg = ensureUiDialog();
+    dlg.querySelector('#ui-dialog-title').textContent = title;
+    dlg.querySelector('#ui-dialog-message').textContent = message;
+    const cancelBtn = dlg.querySelector('#ui-dialog-cancel');
+    const confirmBtn = dlg.querySelector('#ui-dialog-confirm');
+    const closeBtn = dlg.querySelector('#ui-dialog-close');
+    cancelBtn.hidden = !withCancel;
+    cancelBtn.textContent = cancelLabel;
+    confirmBtn.textContent = confirmLabel;
+    confirmBtn.classList.toggle('danger', !!danger);
+    confirmBtn.classList.toggle('primary', !danger);
+    let result = false;
+    const finish = (value) => {
+      result = value;
+      try { dlg.close(); } catch {}
+      cleanup();
+      resolve(result);
+    };
+    const onConfirm = () => finish(true);
+    const onCancel = () => finish(false);
+    const onClose = () => finish(false);
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+      else if (e.key === 'Enter') { e.preventDefault(); onConfirm(); }
+    };
+    const onCancelDlg = () => finish(false); // browser fires 'cancel' on Escape
+    const cleanup = () => {
+      closeBtn.removeEventListener('click', onClose);
+      confirmBtn.removeEventListener('click', onConfirm);
+      cancelBtn.removeEventListener('click', onCancel);
+      dlg.removeEventListener('keydown', onKey);
+      dlg.removeEventListener('cancel', onCancelDlg);
+    };
+    closeBtn.addEventListener('click', onClose);
+    confirmBtn.addEventListener('click', onConfirm);
+    cancelBtn.addEventListener('click', onCancel);
+    dlg.addEventListener('keydown', onKey);
+    dlg.addEventListener('cancel', onCancelDlg);
+    try { dlg.showModal(); } catch { dlg.setAttribute('open', ''); }
+    setTimeout(() => confirmBtn.focus(), 30);
+  });
+}
+
+function uiAlert(message, opts = {}) {
+  return _openUiDialog({
+    title: opts.title || 'Aviso',
+    message: String(message),
+    confirmLabel: opts.confirmLabel || 'Cerrar',
+    cancelLabel: 'Cancelar',
+    danger: !!opts.danger,
+    withCancel: false,
+  });
+}
+
+function uiConfirm(message, opts = {}) {
+  return _openUiDialog({
+    title: opts.title || 'Confirmar',
+    message: String(message),
+    confirmLabel: opts.confirmLabel || 'Aceptar',
+    cancelLabel: opts.cancelLabel || 'Cancelar',
+    danger: !!opts.danger,
+    withCancel: true,
+  });
+}
+
+// Async prompt — resolves to the entered string, or null if cancelled.
+function uiPrompt(message, opts = {}) {
+  return new Promise(resolve => {
+    let dlg = document.getElementById('ui-prompt');
+    if (!dlg) {
+      dlg = document.createElement('dialog');
+      dlg.id = 'ui-prompt';
+      dlg.className = 'modal ui-dialog';
+      dlg.innerHTML = `
+        <div class="modal-inner">
+          <div class="modal-head">
+            <h2 id="ui-prompt-title"></h2>
+            <button class="close-x" id="ui-prompt-close" type="button" aria-label="Cerrar">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          <div class="ui-dialog-message" id="ui-prompt-message"></div>
+          <input type="text" id="ui-prompt-input" class="ui-prompt-input" />
+          <div class="modal-actions">
+            <button class="btn" id="ui-prompt-cancel" type="button">Cancelar</button>
+            <button class="btn primary" id="ui-prompt-confirm" type="button">Aceptar</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(dlg);
+    }
+    const titleEl = dlg.querySelector('#ui-prompt-title');
+    const msgEl = dlg.querySelector('#ui-prompt-message');
+    const input = dlg.querySelector('#ui-prompt-input');
+    const confirmBtn = dlg.querySelector('#ui-prompt-confirm');
+    const cancelBtn = dlg.querySelector('#ui-prompt-cancel');
+    const closeBtn = dlg.querySelector('#ui-prompt-close');
+    titleEl.textContent = opts.title || 'Escribe algo';
+    msgEl.textContent = message || '';
+    msgEl.hidden = !message;
+    input.value = opts.defaultValue || '';
+    input.placeholder = opts.placeholder || '';
+    input.type = opts.type || 'text';
+    confirmBtn.textContent = opts.confirmLabel || 'Aceptar';
+    cancelBtn.textContent = opts.cancelLabel || 'Cancelar';
+
+    const finish = (value) => {
+      try { dlg.close(); } catch {}
+      cleanup();
+      resolve(value);
+    };
+    const onConfirm = () => {
+      const v = (input.value || '').trim();
+      if (opts.required && !v) { input.focus(); return; }
+      finish(v);
+    };
+    const onCancel = () => finish(null);
+    const onClose = () => finish(null);
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+      else if (e.key === 'Enter' && document.activeElement === input) { e.preventDefault(); onConfirm(); }
+    };
+    const onCancelDlg = () => finish(null);
+    const cleanup = () => {
+      confirmBtn.removeEventListener('click', onConfirm);
+      cancelBtn.removeEventListener('click', onCancel);
+      closeBtn.removeEventListener('click', onClose);
+      dlg.removeEventListener('keydown', onKey);
+      dlg.removeEventListener('cancel', onCancelDlg);
+    };
+    confirmBtn.addEventListener('click', onConfirm);
+    cancelBtn.addEventListener('click', onCancel);
+    closeBtn.addEventListener('click', onClose);
+    dlg.addEventListener('keydown', onKey);
+    dlg.addEventListener('cancel', onCancelDlg);
+    try { dlg.showModal(); } catch { dlg.setAttribute('open', ''); }
+    setTimeout(() => { input.focus(); input.select(); }, 50);
+  });
+}
+
 // Curated palette of visually-distinct tag colors
 const TAG_PALETTE = [
   '#e74c3c', // red
@@ -628,7 +800,7 @@ function renderInicio(root) {
     <div class="page-head">
       <div>
         <h1>Hola, ${escapeHtml(state.currentUser)}</h1>
-        <div class="sub">Un vistazo a todo lo nuestro</div>
+        <div class="sub">Este es nuestro lugar seguro</div>
       </div>
       <div class="actions">
         <div class="notif-bell-wrap">
@@ -1511,7 +1683,10 @@ function wireAlbumMenu(rootEl, name, photos) {
     if (btn.dataset.action === 'rename') openAlbumEditModal('rename', name, photos);
     if (btn.dataset.action === 'move') openAlbumEditModal('move', name, photos);
     if (btn.dataset.action === 'delete') {
-      const ok = confirm(`¿Borrar ${isUnnamed ? `las ${photos.length} fotos sin álbum` : `el álbum "${name}" y sus ${photos.length} foto${photos.length === 1 ? '' : 's'}`}?\n\nEsta acción no se puede deshacer.`);
+      const ok = await uiConfirm(
+        `¿Borrar ${isUnnamed ? `las ${photos.length} fotos sin álbum` : `el álbum "${name}" y sus ${photos.length} foto${photos.length === 1 ? '' : 's'}`}?\n\nEsta acción no se puede deshacer.`,
+        { title: 'Borrar álbum', confirmLabel: 'Borrar', danger: true }
+      );
       if (!ok) return;
       await deletePhotosBatch(photos);
     }
@@ -1640,7 +1815,7 @@ async function deletePhotosBatch(photos) {
     }
     rerenderCurrentPage();
   } catch (e) {
-    alert('Error al borrar: ' + (e.message || e));
+    uiAlert('Error al borrar: ' + (e.message || e), { title: 'Error' });
   }
 }
 
@@ -2502,7 +2677,7 @@ function setupAssetUploaders() {
   $('#cfg-avatar-clear').addEventListener('click', async () => {
     const current = state._userAssets[me]?.avatar;
     if (!current) return;
-    if (!confirm('¿Quitar tu avatar?')) return;
+    if (!(await uiConfirm('¿Quitar tu avatar?', { title: 'Quitar avatar', confirmLabel: 'Quitar', danger: true }))) return;
     setStatus(statusEl, 'Quitando…');
     try {
       const { error } = await supabase.rpc('set_user_assets', { p_name: me, p_avatar_path: '', p_background_path: null });
@@ -2516,7 +2691,7 @@ function setupAssetUploaders() {
   $('#cfg-bg-clear').addEventListener('click', async () => {
     const current = state._userAssets[me]?.bg;
     if (!current) return;
-    if (!confirm('¿Quitar tu imagen del login?')) return;
+    if (!(await uiConfirm('¿Quitar tu imagen del login?', { title: 'Quitar imagen', confirmLabel: 'Quitar', danger: true }))) return;
     setStatus(statusEl, 'Quitando…');
     try {
       const { error } = await supabase.rpc('set_user_assets', { p_name: me, p_avatar_path: null, p_background_path: '' });
@@ -2529,7 +2704,7 @@ function setupAssetUploaders() {
   });
   $('#cfg-default-bg-clear').addEventListener('click', async () => {
     if (!state._defaultBg) return;
-    if (!confirm('¿Quitar la foto por defecto?')) return;
+    if (!(await uiConfirm('¿Quitar la foto por defecto?', { title: 'Quitar foto', confirmLabel: 'Quitar', danger: true }))) return;
     setStatus(statusEl, 'Quitando…');
     try {
       const old = state._defaultBg;
@@ -2734,13 +2909,13 @@ $('#note-tag-input').addEventListener('keydown', (e) => {
   }
 });
 
-$('#note-add-link').addEventListener('click', () => {
-  const url = prompt('URL del enlace:');
+$('#note-add-link').addEventListener('click', async () => {
+  const url = await uiPrompt('Pega o escribe la URL', { title: 'Nuevo enlace', placeholder: 'https://…', required: true });
   if (!url) return;
   let normalized = url.trim();
   if (!/^https?:\/\//i.test(normalized)) normalized = 'https://' + normalized;
-  const label = prompt('Etiqueta (opcional):', '') || '';
-  noteDraft.links.push({ url: normalized, label });
+  const label = await uiPrompt('Una etiqueta corta (opcional)', { title: 'Etiqueta del enlace', placeholder: 'Mi enlace', confirmLabel: 'Añadir' });
+  noteDraft.links.push({ url: normalized, label: (label || '').trim() });
   renderNoteLinkChips();
 });
 
@@ -2805,7 +2980,7 @@ $('#note-delete').addEventListener('click', async () => {
   if (!noteDraft.id) return;
   const note = state.notes.find(n => n.id === noteDraft.id);
   if (!note) return;
-  if (!confirm(`¿Eliminar "${note.title}"? Esta acción no se puede deshacer.`)) return;
+  if (!(await uiConfirm(`¿Eliminar "${note.title}"? Esta acción no se puede deshacer.`, { title: 'Eliminar nota', confirmLabel: 'Eliminar', danger: true }))) return;
   setStatus($('#note-status'), 'Eliminando…');
   try {
     if (Array.isArray(note.images) && note.images.length) {
@@ -2932,7 +3107,7 @@ $('#media-delete').addEventListener('click', async () => {
   if (!mediaDraft.id) return;
   const m = state.media.find(x => x.id === mediaDraft.id);
   if (!m) return;
-  if (!confirm(`¿Eliminar "${m.title}"? Esta acción no se puede deshacer.`)) return;
+  if (!(await uiConfirm(`¿Eliminar "${m.title}"? Esta acción no se puede deshacer.`, { title: 'Eliminar', confirmLabel: 'Eliminar', danger: true }))) return;
   setStatus($('#media-status'), 'Eliminando…');
   try {
     const { error } = await supabase.from('media').delete().eq('id', m.id);
@@ -3222,7 +3397,7 @@ $('#lb-delete').addEventListener('click', async (e) => {
   e.stopPropagation();
   const p = lightboxState.list[lightboxState.index];
   if (!p) return;
-  if (!confirm('¿Eliminar esta foto? No se puede deshacer.')) return;
+  if (!(await uiConfirm('¿Eliminar esta foto? No se puede deshacer.', { title: 'Eliminar foto', confirmLabel: 'Eliminar', danger: true }))) return;
   try { await supabase.storage.from(BUCKET).remove([p.storage_path]); } catch {}
   await supabase.from('photos').delete().eq('id', p.id);
   // Remove from state caches
@@ -3424,7 +3599,7 @@ $('#place-save').addEventListener('click', async () => {
 
 $('#place-delete').addEventListener('click', async () => {
   if (!placeDraft.id) return;
-  if (!confirm('¿Eliminar este lugar? No se puede deshacer.')) return;
+  if (!(await uiConfirm('¿Eliminar este lugar? No se puede deshacer.', { title: 'Eliminar lugar', confirmLabel: 'Eliminar', danger: true }))) return;
   try {
     await supabase.from('places').delete().eq('id', placeDraft.id);
     dlgPlace.close();
@@ -4005,7 +4180,7 @@ $('#movie-delete').addEventListener('click', async () => {
   if (!movieDraft.id) return;
   const m = state.movies.find(x => x.id === movieDraft.id);
   if (!m) return;
-  if (!confirm(`¿Eliminar "${m.title}"? No se puede deshacer.`)) return;
+  if (!(await uiConfirm(`¿Eliminar "${m.title}"? No se puede deshacer.`, { title: 'Eliminar peli', confirmLabel: 'Eliminar', danger: true }))) return;
   setStatus($('#movie-status'), 'Eliminando…');
   try {
     if (m.image_path) {
@@ -4077,7 +4252,7 @@ function setupPostitBoard() {
       if (newEl) newEl.focus();
     } catch (e) {
       console.error('postit create', e);
-      alert('No se pudo crear el post-it: ' + (e.message || e));
+      uiAlert('No se pudo crear el post-it: ' + (e.message || e), { title: 'Error' });
     }
   });
 
@@ -4169,7 +4344,7 @@ function renderPostitEl(p) {
   // Delete
   el.querySelector('.pi-del').addEventListener('click', async (e) => {
     e.stopPropagation();
-    if (!confirm('¿Borrar este post-it?')) return;
+    if (!(await uiConfirm('¿Borrar este post-it?', { title: 'Borrar post-it', confirmLabel: 'Borrar', danger: true }))) return;
     try {
       await supabase.from('postits').delete().eq('id', p.id);
       state.postits = state.postits.filter(x => x.id !== p.id);
@@ -4319,7 +4494,7 @@ function setupDoodleBoard() {
   const clearBtn = board.querySelector('.db-clear');
   if (clearBtn) {
     clearBtn.addEventListener('click', async () => {
-      if (!confirm('¿Borrar todo el dibujo? Esta acción no se puede deshacer.')) return;
+      if (!(await uiConfirm('¿Borrar todo el dibujo? Esta acción no se puede deshacer.', { title: 'Borrar dibujo', confirmLabel: 'Borrar', danger: true }))) return;
       try {
         await supabase.from('doodles').delete().neq('id', '00000000-0000-0000-0000-000000000000');
         doodleState.strokes = [];
@@ -4327,7 +4502,7 @@ function setupDoodleBoard() {
         redrawDoodles();
       } catch (e) {
         console.error('doodle clear', e);
-        alert('No se pudo borrar el dibujo: ' + (e.message || e));
+        uiAlert('No se pudo borrar el dibujo: ' + (e.message || e), { title: 'Error' });
       }
     });
   }
