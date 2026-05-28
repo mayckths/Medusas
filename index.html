@@ -19,13 +19,27 @@
 
     <link rel="stylesheet" href="./styles.css" />
 
-    <!-- Apply theme immediately to avoid a flash of dark on light-mode users -->
+    <!-- Apply theme + bg mode immediately to avoid a flash on first paint -->
     <script>
       (function() {
         try {
           const t = localStorage.getItem('medusas:theme');
           if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
         } catch {}
+        try {
+          const raw = localStorage.getItem('medusas:bg');
+          if (raw) {
+            const b = JSON.parse(raw);
+            if (b && (b.mode === 'photo' || b.mode === 'color')) {
+              document.documentElement.dataset.bgMode = b.mode;
+              if (b.mode === 'color' && b.color) {
+                document.documentElement.style.setProperty('--bg-color', b.color);
+              }
+            }
+          } else {
+            document.documentElement.dataset.bgMode = 'photo';
+          }
+        } catch { document.documentElement.dataset.bgMode = 'photo'; }
       })();
     </script>
   </head>

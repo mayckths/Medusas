@@ -79,16 +79,27 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
 }
 :root[data-theme="light"] .bg-photo::after { background: rgba(0, 0, 0, 0.45); }
 
-/* Text that sits directly on the ambient backdrop (not on cards) — always
-   white so it stays readable on top of the dark scrim, regardless of theme */
-.page-head h1,
-.page-head .sub,
-.section-block > .section-head h2,
-.section-block > .section-head .count,
-.album-section .album-title-row h2,
-.album-section .album-title-row .count {
+/* Text that sits directly on the ambient backdrop (not on cards) — white
+   when the dark scrim is active (photo mode). In color mode, fall back to
+   the theme's text color so the user's chosen background works. */
+:root[data-bg-mode="photo"] .page-head h1,
+:root[data-bg-mode="photo"] .page-head .sub,
+:root[data-bg-mode="photo"] .section-block > .section-head h2,
+:root[data-bg-mode="photo"] .section-block > .section-head .count,
+:root[data-bg-mode="photo"] .album-section .album-title-row h2,
+:root[data-bg-mode="photo"] .album-section .album-title-row .count,
+:root:not([data-bg-mode]) .page-head h1,
+:root:not([data-bg-mode]) .page-head .sub,
+:root:not([data-bg-mode]) .section-block > .section-head h2,
+:root:not([data-bg-mode]) .section-block > .section-head .count,
+:root:not([data-bg-mode]) .album-section .album-title-row h2,
+:root:not([data-bg-mode]) .album-section .album-title-row .count {
   color: #ffffff;
 }
+/* Solid color mode: hide the blurred backdrop, paint the body with the
+   user-chosen color. The page-head/section titles inherit the theme color. */
+:root[data-bg-mode="color"] .bg-photo { display: none; }
+:root[data-bg-mode="color"] body { background: var(--bg-color, var(--bg)); }
 
 /* App shell sits on top of the backdrop */
 .app-shell { position: relative; z-index: 1; }
@@ -1638,6 +1649,13 @@ dialog.lightbox .lightbox-cap {
   padding-bottom: 1rem; min-height: 0; height: 72px;
   align-items: center; overflow: hidden;
 }
+/* New-CTA in list mode matches the 72px row height (override the
+   square aspect-ratio from card mode). */
+.grid-list .card.new-cta {
+  aspect-ratio: auto;
+  height: 72px;
+  min-height: 0;
+}
 .grid-list .card.note-card .body {
   display: flex; flex-direction: row; align-items: center; gap: 0.7rem;
   width: 100%; min-width: 0;
@@ -1790,6 +1808,52 @@ dialog.lightbox .lightbox-cap {
 }
 .media-card.spotify .thumb-wrap img {
   width: 100%; height: 100%; object-fit: cover;
+}
+
+/* ======== Background color picker (Configuración → Inicio) ======== */
+.bg-color-row {
+  margin-top: 0.85rem;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.65rem;
+}
+.bg-color-row[hidden] { display: none; }
+.bg-picker-label {
+  display: inline-flex; align-items: center; gap: 0.55rem;
+  padding: 0.35rem 0.55rem 0.35rem 0.4rem;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.bg-picker-label input[type=color] {
+  appearance: none; -webkit-appearance: none;
+  width: 32px; height: 32px;
+  border: 0; padding: 0; background: transparent;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.bg-picker-label input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+.bg-picker-label input[type=color]::-webkit-color-swatch { border-radius: 999px; border: 1px solid var(--border); }
+.bg-picker-label input[type=color]::-moz-color-swatch { border-radius: 999px; border: 1px solid var(--border); }
+.bg-color-value {
+  font: 0.82rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.bg-presets { display: inline-flex; gap: 0.35rem; flex-wrap: wrap; }
+.bg-presets .bg-preset {
+  width: 28px; height: 28px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: 0 0 0 1px var(--border) inset, 0 1px 2px rgba(0,0,0,0.15);
+  transition: transform 0.1s ease, border-color 0.15s ease;
+}
+.bg-presets .bg-preset:hover { transform: scale(1.08); }
+.bg-presets .bg-preset.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
 }
 
 .tag-color-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }

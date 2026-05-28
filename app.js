@@ -475,10 +475,14 @@ async function loadSettings() {
     const { data } = await supabase.from('app_settings').select('*');
     for (const row of (data || [])) state.settings[row.key] = row.value;
   } catch (e) { console.warn(e); }
+  // Sync the bg mode now that settings are loaded
+  applyBgMode();
 }
 
 async function saveSetting(key, value) {
   state.settings[key] = value;
+  // Bg setting changes need to be re-applied on the live page
+  if (key === 'bg') applyBgMode();
   try {
     const { error } = await supabase.from('app_settings').upsert({ key, value });
     if (error) throw error;
@@ -783,6 +787,9 @@ function totalUnreadCount() {
 let bgPhotoActiveLayer = 0;
 let bgPhotoLastPath = null;
 function setBgPhoto(path) {
+  // Only the photo mode uses the blurred backdrop. In color mode, skip.
+  const cfg = getBgSetting();
+  if (cfg.mode === 'color') return;
   if (!path || path === bgPhotoLastPath) return;
   bgPhotoLastPath = path;
   const layers = [$('#bg-photo-a'), $('#bg-photo-b')];
@@ -799,6 +806,36 @@ function setBgPhoto(path) {
     bgPhotoActiveLayer = next;
   };
   probe.src = url;
+}
+
+// ----- Background mode (photo vs solid color) -----
+// Persisted under state.settings.bg = { mode: 'photo'|'color', color: '#...' }.
+// Also mirrored to localStorage so the inline FOUC-prevention script can
+// apply the right mode before the first paint.
+function getBgSetting() {
+  const s = state.settings && state.settings.bg;
+  if (s && (s.mode === 'photo' || s.mode === 'color')) {
+    return { mode: s.mode, color: s.color || '#0a0a0c' };
+  }
+  return { mode: 'photo', color: '#0a0a0c' };
+}
+function applyBgMode() {
+  const cfg = getBgSetting();
+  const prevMode = document.documentElement.dataset.bgMode;
+  document.documentElement.dataset.bgMode = cfg.mode;
+  if (cfg.mode === 'color') {
+    document.documentElement.style.setProperty('--bg-color', cfg.color);
+  } else {
+    document.documentElement.style.removeProperty('--bg-color');
+    // Switching back to photo mode — re-seed the blurred backdrop. We reset
+    // bgPhotoLastPath so setBgPhoto doesn't bail thinking nothing changed.
+    if (prevMode === 'color' && Array.isArray(state.photos) && state.photos.length) {
+      bgPhotoLastPath = null;
+      const ambient = state.photos.find(p => p.featured) || state.photos[0];
+      if (ambient) setBgPhoto(ambient.storage_path);
+    }
+  }
+  try { localStorage.setItem('medusas:bg', JSON.stringify(cfg)); } catch {}
 }
 
 let photoWidgetTimer = null;
@@ -2062,7 +2099,9 @@ function renderConfigLogout(body) {
 
 function renderConfigDashboard(body) {
   const cfg = state.settings.photo_widget || { mode: 'featured', interval_ms: 6000 };
+  const bg = getBgSetting();
   const order = getDashboardOrder();
+  const presets = ['#0a0a0c', '#15151a', '#1a1142', '#1e3a5f', '#3a1d4a', '#0d2616', '#f5f4ee'];
 
   body.innerHTML = `
     <div class="settings-card">
@@ -2084,6 +2123,25 @@ function renderConfigDashboard(body) {
     </div>
 
     <div class="settings-card">
+      <h3>Fondo de la app</h3>
+      <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Elige cómo quieres que se vea el fondo.</div>
+      <div class="opts" id="cfg-bg-mode">
+        <button data-mode="photo" class="${bg.mode === 'photo' ? 'active' : ''}"><span class="material-symbols-outlined">image</span> Adaptativo (fotos destacadas)</button>
+        <button data-mode="color" class="${bg.mode === 'color' ? 'active' : ''}"><span class="material-symbols-outlined">palette</span> Color sólido</button>
+      </div>
+      <div class="bg-color-row" id="cfg-bg-color-row" ${bg.mode === 'color' ? '' : 'hidden'}>
+        <label class="bg-picker-label">
+          <input type="color" id="cfg-bg-color" value="${bg.color}" />
+          <span class="bg-color-value">${bg.color}</span>
+        </label>
+        <div class="bg-presets" id="cfg-bg-presets">
+          ${presets.map(c => `<button type="button" class="bg-preset ${c.toLowerCase() === bg.color.toLowerCase() ? 'is-active' : ''}" data-c="${c}" style="background:${c}" aria-label="${c}"></button>`).join('')}
+        </div>
+        <span class="status" id="cfg-bg-status"></span>
+      </div>
+    </div>
+
+    <div class="settings-card">
       <h3>Widget de fotos en el inicio</h3>
       <div class="sub" style="color:var(--text-dim);font-size:.82rem;">También puedes cambiarlo desde el icono ⋯ del widget.</div>
       <div class="opts" id="cfg-widget-mode">
@@ -2102,6 +2160,55 @@ function renderConfigDashboard(body) {
     </div>
   `;
 
+  // ----- Bg mode toggle -----
+  const bgRow = $('#cfg-bg-color-row');
+  const bgColorInput = $('#cfg-bg-color');
+  const bgColorValue = $('.bg-color-value', bgRow);
+
+  const setActiveBgPreset = (color) => {
+    $$('#cfg-bg-presets .bg-preset').forEach(p => {
+      p.classList.toggle('is-active', (p.dataset.c || '').toLowerCase() === color.toLowerCase());
+    });
+  };
+
+  const persistBg = async (next) => {
+    setStatus($('#cfg-bg-status'), 'Guardando…');
+    await saveSetting('bg', next);
+    setStatus($('#cfg-bg-status'), 'Guardado ✓');
+  };
+
+  $('#cfg-bg-mode').addEventListener('click', async (e) => {
+    const b = e.target.closest('button[data-mode]');
+    if (!b) return;
+    $$('#cfg-bg-mode button').forEach(x => x.classList.toggle('active', x === b));
+    const mode = b.dataset.mode;
+    bgRow.hidden = mode !== 'color';
+    const color = bgColorInput.value || '#0a0a0c';
+    await persistBg({ mode, color });
+  });
+
+  bgColorInput.addEventListener('input', (e) => {
+    const color = e.target.value;
+    bgColorValue.textContent = color;
+    setActiveBgPreset(color);
+    // Apply live for instant preview, but debounce DB writes
+    document.documentElement.dataset.bgMode = 'color';
+    document.documentElement.style.setProperty('--bg-color', color);
+    clearTimeout(bgColorInput._t);
+    bgColorInput._t = setTimeout(() => persistBg({ mode: 'color', color }), 350);
+  });
+
+  $('#cfg-bg-presets').addEventListener('click', async (e) => {
+    const b = e.target.closest('button.bg-preset');
+    if (!b) return;
+    const color = b.dataset.c;
+    bgColorInput.value = color;
+    bgColorValue.textContent = color;
+    setActiveBgPreset(color);
+    await persistBg({ mode: 'color', color });
+  });
+
+  // ----- Photo widget settings -----
   $('#cfg-widget-mode').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-mode]');
     if (!b) return;
