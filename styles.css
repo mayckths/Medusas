@@ -8,10 +8,17 @@
   --border-strong: rgba(255,255,255,0.10);
   --text: #f5f5f0;
   --text-dim: #888888;
-  --accent: #d6ff3a;
+  /* Accent is the brand-active color. White for active states / focus rings,
+     with --on-accent (dark) used for text/icons placed on top of it. */
+  --accent: #ffffff;
   --accent-2: #6d5be6;
-  --accent-hover: #b8e030;
+  --accent-hover: #e8e8e0;
   --on-accent: #0a0a0c;
+  /* Glass button tokens (the new pill design from Figma). */
+  --glass-bg: rgba(0, 0, 0, 0.2);
+  --glass-bg-hover: rgba(0, 0, 0, 0.35);
+  --glass-border: rgba(255, 255, 255, 0.10);
+  --glass-text: #ffffff;
   --danger: #ff6b6b;
   --warn: #ffb84d;
   --radius: 16px;
@@ -20,26 +27,6 @@
   --shadow: 0 4px 20px rgba(0,0,0,0.35);
   --shadow-lg: 0 12px 32px rgba(0,0,0,0.45);
   --sidebar-w: 256px;
-}
-
-:root[data-theme="light"] {
-  color-scheme: light;
-  --bg: #f5f4ee;
-  --surface: #ffffff;
-  --surface-alt: #f0eee5;
-  --surface-2: #e5e2d6;
-  --border: rgba(0,0,0,0.07);
-  --border-strong: rgba(0,0,0,0.14);
-  --text: #14140e;
-  --text-dim: #6a675e;
-  --accent: #c2eb1b;
-  --accent-2: #6d5be6;
-  --accent-hover: #abd111;
-  --on-accent: #0a0a0c;
-  --danger: #d63838;
-  --warn: #e08600;
-  --shadow: 0 4px 20px rgba(20, 20, 14, 0.08);
-  --shadow-lg: 0 12px 32px rgba(20, 20, 14, 0.12);
 }
 * { box-sizing: border-box; }
 /* The HTML `hidden` attribute must win even when CSS sets an explicit display
@@ -74,11 +61,6 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
   pointer-events: none;
 }
 
-:root[data-theme="light"] .bg-photo-img {
-  filter: blur(64px) saturate(110%) brightness(1.0);
-}
-:root[data-theme="light"] .bg-photo::after { background: rgba(0, 0, 0, 0.45); }
-
 /* Text that sits directly on the ambient backdrop (not on cards) — white
    when the dark scrim is active (photo mode). In color mode, fall back to
    the theme's text color so the user's chosen background works. */
@@ -100,6 +82,25 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
    user-chosen color. The page-head/section titles inherit the theme color. */
 :root[data-bg-mode="color"] .bg-photo { display: none; }
 :root[data-bg-mode="color"] body { background: var(--bg-color, var(--bg)); }
+
+/* Image mode: a user-uploaded image fills the viewport. The .bg-photo is
+   hidden; we keep using a dark scrim for legibility. */
+:root[data-bg-mode="image"] .bg-photo { display: none; }
+:root[data-bg-mode="image"] body {
+  background:
+    linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.45)),
+    var(--bg-image, none) center/cover no-repeat fixed,
+    var(--bg);
+}
+/* When in image mode, keep the titles white (same as photo mode). */
+:root[data-bg-mode="image"] .page-head h1,
+:root[data-bg-mode="image"] .page-head .sub,
+:root[data-bg-mode="image"] .section-block > .section-head h2,
+:root[data-bg-mode="image"] .section-block > .section-head .count,
+:root[data-bg-mode="image"] .album-section .album-title-row h2,
+:root[data-bg-mode="image"] .album-section .album-title-row .count {
+  color: #ffffff;
+}
 
 /* App shell sits on top of the backdrop */
 .app-shell { position: relative; z-index: 1; }
@@ -489,20 +490,69 @@ nav.menu a .m-icon { font-size: 20px; width: 22px; text-align: center; }
   }
 }
 
-/* ======== Buttons ======== */
+/* ======== Buttons — glass pill (Figma 41:637) ======== */
 button.btn, a.btn, label.btn {
-  border: 1px solid var(--border); background: var(--surface-alt); color: var(--text);
-  padding: 0.45rem 0.85rem; border-radius: 8px; cursor: pointer; font-size: 0.85rem;
-  text-decoration: none; display: inline-flex; align-items: center; gap: 0.35rem;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--glass-text);
+  padding: 8px 16px;
+  border-radius: 30px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.1;
+  text-decoration: none;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
-button.btn:hover, a.btn:hover, label.btn:hover { background: var(--border); }
-button.btn.primary, a.btn.primary, label.btn.primary { background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 600; }
-button.btn.primary:hover, label.btn.primary:hover { background: var(--accent-hover); }
-button.btn.ghost { background: transparent; }
-button.btn.danger { color: var(--danger); border-color: transparent; background: transparent; }
-button.btn.danger:hover { background: rgba(192, 57, 43, 0.08); }
-button.btn.pin-toggle.is-pinned { background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 600; }
-.link-btn { background: transparent; border: 0; color: var(--accent); cursor: pointer; padding: 0; font: inherit; text-decoration: underline; }
+button.btn:hover, a.btn:hover, label.btn:hover {
+  background: var(--glass-bg-hover);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+/* Primary CTA: solid white with dark text. */
+button.btn.primary, a.btn.primary, label.btn.primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: transparent;
+  font-weight: 600;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+button.btn.primary:hover, label.btn.primary:hover {
+  background: var(--accent-hover);
+  border-color: transparent;
+}
+button.btn.ghost {
+  background: transparent;
+  border-color: transparent;
+}
+button.btn.ghost:hover {
+  background: var(--glass-bg);
+  border-color: var(--glass-border);
+}
+button.btn.danger {
+  color: var(--danger);
+  border-color: transparent;
+  background: transparent;
+  backdrop-filter: none;
+}
+button.btn.danger:hover {
+  background: rgba(255, 107, 107, 0.10);
+  border-color: transparent;
+}
+button.btn.pin-toggle.is-pinned {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: transparent;
+  font-weight: 600;
+  backdrop-filter: none;
+}
+.link-btn {
+  background: transparent; border: 0; color: var(--text);
+  cursor: pointer; padding: 0; font: inherit; text-decoration: underline;
+}
 
 .view-toggle {
   display: inline-flex; background: var(--surface-alt); border-radius: 999px; padding: 3px;
@@ -737,48 +787,6 @@ button.btn.pin-toggle.is-pinned { background: var(--accent); color: var(--on-acc
 .postit.green { background: #a8d95e; }
 .postit.pink { background: #ff8db5; }
 
-/* ======== Light mode toggle in sidebar ======== */
-.lightmode-row {
-  /* Match the shape of regular nav anchors so it doesn't read as a button */
-  display: flex; align-items: center; gap: 0.65rem;
-  padding: 0.5rem 0.65rem;
-  border-radius: 8px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.92rem;
-  color: var(--text-dim);
-  /* Reset native <button> chrome */
-  background: transparent;
-  border: 0;
-  outline: 0;
-  appearance: none;
-  -webkit-appearance: none;
-  width: 100%;
-  text-align: left;
-}
-.lightmode-row:hover { background: var(--surface-alt); color: var(--text); }
-.lightmode-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.lightmode-row .lm-label { flex: 1; }
-.lightmode-row .lm-toggle {
-  width: 30px; height: 16px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  border: 1px solid var(--border-strong);
-  position: relative;
-  flex-shrink: 0;
-  transition: background 0.15s ease;
-}
-.lightmode-row .lm-toggle::after {
-  content: ''; position: absolute;
-  top: 1px; left: 1px;
-  width: 12px; height: 12px;
-  background: var(--text);
-  border-radius: 999px;
-  transition: transform 0.18s ease;
-}
-:root[data-theme="light"] .lightmode-row .lm-toggle { background: var(--accent); border-color: transparent; }
-:root[data-theme="light"] .lightmode-row .lm-toggle::after { transform: translateX(14px); background: var(--on-accent); }
-
 .photo-widget {
   position: relative; min-height: 280px;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
@@ -831,6 +839,42 @@ button.btn.pin-toggle.is-pinned { background: var(--accent); color: var(--on-acc
 }
 
 .section-block { margin-bottom: 1.8rem; }
+
+/* Dashboard recent photos: single horizontal row that bleeds past the
+   main content + app-shell padding to the viewport right edge. Width is
+   extended past 100% so the flex children overflow visibly through to
+   the viewport edge; padding-right gives a small scroll inset. */
+.dash-photos-section .dash-photos-strip {
+  display: flex; flex-wrap: nowrap;
+  gap: 0.5rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x mandatory;
+  box-sizing: content-box;
+  width: 100%;
+  margin-right: calc(-1 * (clamp(1rem, 4vw, 2rem) + 16px));
+  padding-right: calc(clamp(1rem, 4vw, 2rem) + 16px);
+  padding-bottom: 0.25rem;
+  scrollbar-width: none;
+}
+.dash-photos-section .dash-photos-strip::-webkit-scrollbar { display: none; }
+.dash-photos-section .dash-photos-strip .photo {
+  flex: 0 0 200px;
+  width: 200px; height: 200px;
+  aspect-ratio: auto;
+  scroll-snap-align: start;
+}
+@media (max-width: 760px) {
+  .dash-photos-section .dash-photos-strip {
+    /* On mobile the app-shell padding is 0 — only main padding remains */
+    margin-right: calc(-1 * 1rem);
+    padding-right: 1rem;
+  }
+  .dash-photos-section .dash-photos-strip .photo {
+    flex: 0 0 160px;
+    width: 160px; height: 160px;
+  }
+}
 .section-block .section-head {
   display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 0.65rem; gap: 0.5rem; flex-wrap: wrap;
 }
@@ -1512,6 +1556,7 @@ dialog.lightbox .lightbox-cap {
 .doodle-board .db-size .db-dot-sm { width: 4px; height: 4px; }
 .doodle-board .db-size .db-dot-md { width: 7px; height: 7px; }
 .doodle-board .db-size .db-dot-lg { width: 11px; height: 11px; }
+.doodle-board .db-tool,
 .doodle-board .db-clear {
   background: transparent;
   border: 0;
@@ -1520,12 +1565,21 @@ dialog.lightbox .lightbox-cap {
   border-radius: 6px;
   display: grid; place-items: center;
   color: var(--text-dim);
+  padding: 0;
   transition: background 0.15s ease, color 0.15s ease;
+}
+.doodle-board .db-tool:hover,
+.doodle-board .db-clear:hover { color: var(--text); background: var(--surface-alt); }
+.doodle-board .db-tool.is-active {
+  color: var(--text);
+  background: var(--surface-alt);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
 }
 .doodle-board .db-clear:hover {
   color: var(--danger);
   background: rgba(255, 107, 107, 0.12);
 }
+.doodle-board .db-tool .material-symbols-outlined,
 .doodle-board .db-clear .material-symbols-outlined { font-size: 18px; }
 /* Stage: holds the canvas. The canvas fills the stage exactly so we
    can measure its CSS dimensions in JS. */
@@ -1855,6 +1909,32 @@ dialog.lightbox .lightbox-cap {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
 }
+
+/* Image upload row inside the Fondo card */
+.bg-image-row {
+  margin-top: 0.85rem;
+  display: flex; gap: 0.85rem; align-items: center;
+  flex-wrap: wrap;
+}
+.bg-image-row[hidden] { display: none; }
+.bg-image-preview {
+  width: 140px; height: 84px;
+  border-radius: 12px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.bg-image-preview img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.bg-image-empty {
+  width: 100%; height: 100%;
+  display: grid; place-items: center;
+  color: var(--text-dim);
+}
+.bg-image-empty .material-symbols-outlined { font-size: 28px; }
+.bg-image-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 
 .tag-color-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
 .tag-color-row {

@@ -19,21 +19,20 @@
 
     <link rel="stylesheet" href="./styles.css" />
 
-    <!-- Apply theme + bg mode immediately to avoid a flash on first paint -->
+    <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>
       (function() {
-        try {
-          const t = localStorage.getItem('medusas:theme');
-          if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
-        } catch {}
         try {
           const raw = localStorage.getItem('medusas:bg');
           if (raw) {
             const b = JSON.parse(raw);
-            if (b && (b.mode === 'photo' || b.mode === 'color')) {
+            if (b && (b.mode === 'photo' || b.mode === 'color' || b.mode === 'image')) {
               document.documentElement.dataset.bgMode = b.mode;
               if (b.mode === 'color' && b.color) {
                 document.documentElement.style.setProperty('--bg-color', b.color);
+              }
+              if (b.mode === 'image' && b.image_url) {
+                document.documentElement.style.setProperty('--bg-image', `url("${b.image_url}")`);
               }
             }
           } else {
@@ -111,16 +110,6 @@
             <span class="material-symbols-outlined m-icon">movie</span><span>Pelis</span>
             <span class="badge-unread" data-unread="pelis" hidden></span>
           </a>
-        </nav>
-        <nav class="menu menu-bottom">
-          <a href="#/configuracion" data-route="#/configuracion">
-            <span class="material-symbols-outlined m-icon">settings</span><span>Configuración</span>
-          </a>
-          <button class="lightmode-row" id="lightmode-toggle" type="button" aria-label="Cambiar tema">
-            <span class="material-symbols-outlined m-icon" id="lightmode-icon">dark_mode</span>
-            <span class="lm-label">Light mode</span>
-            <span class="lm-toggle" aria-hidden="true"></span>
-          </button>
         </nav>
       </aside>
 

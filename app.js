@@ -244,8 +244,6 @@ function showLogin() {
 function hideLogin() {
   $('#auth-overlay').hidden = true;
   $('#app-shell').hidden = false;
-  // Wire up the theme toggle now that the sidebar is in the DOM
-  setupThemeToggle();
 }
 
 async function initAuthUI() {
@@ -597,12 +595,12 @@ function renderInicio(root) {
         <div class="grid-cards" id="dash-media-grid"></div>
       </section>`,
     photos: `
-      <section class="section-block" data-sec="photos">
+      <section class="section-block dash-photos-section" data-sec="photos">
         <div class="section-head">
           <h2>Fotos recientes</h2>
           <a href="#/fotos">Ver todas →</a>
         </div>
-        <div class="photo-grid" id="dash-photos-grid"></div>
+        <div class="dash-photos-strip" id="dash-photos-grid"></div>
       </section>`,
     movies: `
       <section class="section-block" data-sec="movies">
@@ -650,7 +648,7 @@ function renderInicio(root) {
           <button class="pb-new" id="pb-new" type="button">+ Nuevo post-it</button>
           <div class="pb-empty" id="pb-empty" hidden>Toca <strong>+ Nuevo post-it</strong> para empezar el tablero.</div>
         </div>
-        ${order.map(s => sectionTemplates[s] || '').join('')}
+        ${order.filter(s => s !== 'photos').map(s => sectionTemplates[s] || '').join('')}
       </div>
 
       <div class="col-right">
@@ -675,6 +673,9 @@ function renderInicio(root) {
               <button class="db-size is-active" type="button" data-w="4" title="Pluma media"><span class="db-dot db-dot-md"></span></button>
               <button class="db-size" type="button" data-w="8" title="Pluma gruesa"><span class="db-dot db-dot-lg"></span></button>
               <span class="db-divider"></span>
+              <button class="db-tool" type="button" data-tool="erase" title="Borrador">
+                <span class="material-symbols-outlined">ink_eraser</span>
+              </button>
               <button class="db-clear" type="button" title="Borrar todo">
                 <span class="material-symbols-outlined">delete</span>
               </button>
@@ -686,6 +687,8 @@ function renderInicio(root) {
         </div>
       </div>
     </div>
+
+    ${order.includes('photos') ? sectionTemplates.photos : ''}
   `;
 
   // Recent notes (3 cards — wider in the 2/3 column)
@@ -814,28 +817,48 @@ function setBgPhoto(path) {
 // apply the right mode before the first paint.
 function getBgSetting() {
   const s = state.settings && state.settings.bg;
-  if (s && (s.mode === 'photo' || s.mode === 'color')) {
-    return { mode: s.mode, color: s.color || '#0a0a0c' };
+  if (s && (s.mode === 'photo' || s.mode === 'color' || s.mode === 'image')) {
+    return {
+      mode: s.mode,
+      color: s.color || '#0a0a0c',
+      image_path: s.image_path || null,
+    };
   }
-  return { mode: 'photo', color: '#0a0a0c' };
+  return { mode: 'photo', color: '#0a0a0c', image_path: null };
 }
 function applyBgMode() {
   const cfg = getBgSetting();
   const prevMode = document.documentElement.dataset.bgMode;
   document.documentElement.dataset.bgMode = cfg.mode;
+
+  // Clear all bg vars first; set the ones relevant to the current mode below.
+  document.documentElement.style.removeProperty('--bg-color');
+  document.documentElement.style.removeProperty('--bg-image');
+
   if (cfg.mode === 'color') {
     document.documentElement.style.setProperty('--bg-color', cfg.color);
-  } else {
-    document.documentElement.style.removeProperty('--bg-color');
-    // Switching back to photo mode — re-seed the blurred backdrop. We reset
+  } else if (cfg.mode === 'image' && cfg.image_path) {
+    const url = publicAssetUrl(cfg.image_path);
+    document.documentElement.style.setProperty('--bg-image', `url("${url}")`);
+  } else if (cfg.mode === 'photo') {
+    // Switching back to photo mode — re-seed the blurred backdrop. Reset
     // bgPhotoLastPath so setBgPhoto doesn't bail thinking nothing changed.
-    if (prevMode === 'color' && Array.isArray(state.photos) && state.photos.length) {
+    if (prevMode !== 'photo' && Array.isArray(state.photos) && state.photos.length) {
       bgPhotoLastPath = null;
       const ambient = state.photos.find(p => p.featured) || state.photos[0];
       if (ambient) setBgPhoto(ambient.storage_path);
     }
   }
-  try { localStorage.setItem('medusas:bg', JSON.stringify(cfg)); } catch {}
+  // Mirror to localStorage so the inline FOUC script can apply on the next
+  // load (resolve to public URL when needed so it works without the SDK).
+  try {
+    const ls = { mode: cfg.mode, color: cfg.color };
+    if (cfg.mode === 'image' && cfg.image_path) {
+      ls.image_path = cfg.image_path;
+      ls.image_url = publicAssetUrl(cfg.image_path);
+    }
+    localStorage.setItem('medusas:bg', JSON.stringify(ls));
+  } catch {}
 }
 
 let photoWidgetTimer = null;
@@ -2126,8 +2149,9 @@ function renderConfigDashboard(body) {
       <h3>Fondo de la app</h3>
       <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Elige cómo quieres que se vea el fondo.</div>
       <div class="opts" id="cfg-bg-mode">
-        <button data-mode="photo" class="${bg.mode === 'photo' ? 'active' : ''}"><span class="material-symbols-outlined">image</span> Adaptativo (fotos destacadas)</button>
+        <button data-mode="photo" class="${bg.mode === 'photo' ? 'active' : ''}"><span class="material-symbols-outlined">photo_library</span> Adaptativo (fotos destacadas)</button>
         <button data-mode="color" class="${bg.mode === 'color' ? 'active' : ''}"><span class="material-symbols-outlined">palette</span> Color sólido</button>
+        <button data-mode="image" class="${bg.mode === 'image' ? 'active' : ''}"><span class="material-symbols-outlined">image</span> Imagen</button>
       </div>
       <div class="bg-color-row" id="cfg-bg-color-row" ${bg.mode === 'color' ? '' : 'hidden'}>
         <label class="bg-picker-label">
@@ -2137,8 +2161,21 @@ function renderConfigDashboard(body) {
         <div class="bg-presets" id="cfg-bg-presets">
           ${presets.map(c => `<button type="button" class="bg-preset ${c.toLowerCase() === bg.color.toLowerCase() ? 'is-active' : ''}" data-c="${c}" style="background:${c}" aria-label="${c}"></button>`).join('')}
         </div>
-        <span class="status" id="cfg-bg-status"></span>
       </div>
+      <div class="bg-image-row" id="cfg-bg-image-row" ${bg.mode === 'image' ? '' : 'hidden'}>
+        <div class="bg-image-preview" id="cfg-bg-image-preview">
+          ${bg.image_path ? `<img src="${escapeHtml(publicAssetUrl(bg.image_path))}" alt="" />` : '<div class="bg-image-empty"><span class="material-symbols-outlined">image</span></div>'}
+        </div>
+        <div class="bg-image-actions">
+          <label class="btn">
+            <span class="material-symbols-outlined">upload</span>
+            ${bg.image_path ? 'Cambiar imagen' : 'Subir imagen'}
+            <input type="file" id="cfg-bg-image-file" accept="image/*" hidden />
+          </label>
+          ${bg.image_path ? '<button class="btn danger" id="cfg-bg-image-remove" type="button"><span class="material-symbols-outlined">delete</span> Quitar</button>' : ''}
+        </div>
+      </div>
+      <span class="status" id="cfg-bg-status" style="margin-top:.5rem;display:inline-block;"></span>
     </div>
 
     <div class="settings-card">
@@ -2161,9 +2198,11 @@ function renderConfigDashboard(body) {
   `;
 
   // ----- Bg mode toggle -----
-  const bgRow = $('#cfg-bg-color-row');
+  const bgColorRow = $('#cfg-bg-color-row');
+  const bgImageRow = $('#cfg-bg-image-row');
   const bgColorInput = $('#cfg-bg-color');
-  const bgColorValue = $('.bg-color-value', bgRow);
+  const bgColorValue = $('.bg-color-value', bgColorRow);
+  const bgFileInput = $('#cfg-bg-image-file');
 
   const setActiveBgPreset = (color) => {
     $$('#cfg-bg-presets .bg-preset').forEach(p => {
@@ -2182,9 +2221,10 @@ function renderConfigDashboard(body) {
     if (!b) return;
     $$('#cfg-bg-mode button').forEach(x => x.classList.toggle('active', x === b));
     const mode = b.dataset.mode;
-    bgRow.hidden = mode !== 'color';
-    const color = bgColorInput.value || '#0a0a0c';
-    await persistBg({ mode, color });
+    bgColorRow.hidden = mode !== 'color';
+    bgImageRow.hidden = mode !== 'image';
+    const next = { mode, color: bgColorInput.value || '#0a0a0c', image_path: bg.image_path || null };
+    await persistBg(next);
   });
 
   bgColorInput.addEventListener('input', (e) => {
@@ -2195,7 +2235,7 @@ function renderConfigDashboard(body) {
     document.documentElement.dataset.bgMode = 'color';
     document.documentElement.style.setProperty('--bg-color', color);
     clearTimeout(bgColorInput._t);
-    bgColorInput._t = setTimeout(() => persistBg({ mode: 'color', color }), 350);
+    bgColorInput._t = setTimeout(() => persistBg({ mode: 'color', color, image_path: null }), 350);
   });
 
   $('#cfg-bg-presets').addEventListener('click', async (e) => {
@@ -2205,8 +2245,43 @@ function renderConfigDashboard(body) {
     bgColorInput.value = color;
     bgColorValue.textContent = color;
     setActiveBgPreset(color);
-    await persistBg({ mode: 'color', color });
+    await persistBg({ mode: 'color', color, image_path: null });
   });
+
+  // ----- Bg image upload -----
+  if (bgFileInput) {
+    bgFileInput.addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        setStatus($('#cfg-bg-status'), 'El archivo no es una imagen', true);
+        return;
+      }
+      setStatus($('#cfg-bg-status'), 'Subiendo…');
+      try {
+        const path = await uploadAssetFile(file, 'app-bg');
+        const next = { mode: 'image', color: bgColorInput.value || '#0a0a0c', image_path: path };
+        await saveSetting('bg', next);
+        setStatus($('#cfg-bg-status'), 'Imagen aplicada ✓');
+        // Refresh the card so the preview + Remove button show up
+        renderConfigTab(body);
+      } catch (err) {
+        console.error('bg upload', err);
+        setStatus($('#cfg-bg-status'), 'Error al subir: ' + (err.message || err), true);
+      }
+    });
+  }
+  const bgRemoveBtn = $('#cfg-bg-image-remove');
+  if (bgRemoveBtn) {
+    bgRemoveBtn.addEventListener('click', async () => {
+      // Best-effort: also remove the file from storage
+      if (bg.image_path) {
+        try { await supabase.storage.from(APP_ASSETS_BUCKET).remove([bg.image_path]); } catch {}
+      }
+      await saveSetting('bg', { mode: 'image', color: bgColorInput.value || '#0a0a0c', image_path: null });
+      renderConfigTab(body);
+    });
+  }
 
   // ----- Photo widget settings -----
   $('#cfg-widget-mode').addEventListener('click', (e) => {
@@ -4063,11 +4138,17 @@ function startDrag(el, p, evt) {
 // ============================================================
 // Garabatos — collaborative drawing board (dashboard right column)
 // ============================================================
+// Sentinel color used to mark erase strokes — when drawing, we set
+// globalCompositeOperation = 'destination-out' which erases pixels.
+const DOODLE_ERASE = '__erase__';
+
 const doodleState = {
   strokes: [],     // persisted strokes from DB (oldest → newest)
   pending: [],     // strokes we drew locally that haven't been confirmed
   current: null,   // the stroke currently being drawn (live)
-  color: '#d6ff3a',
+  tool: 'pen',     // 'pen' | 'erase'
+  color: '#ffffff',
+  prevColor: '#ffffff', // remember pen color while eraser is active
   width: 4,
   canvas: null,
   ctx: null,
@@ -4113,12 +4194,15 @@ function setupDoodleBoard() {
     doodleState.resizeObs.observe(canvas);
   }
 
-  // Tool wiring — colors
+  // Tool wiring — colors (also exits the eraser tool)
   board.querySelectorAll('.db-color').forEach(btn => {
     btn.style.setProperty('--c', btn.dataset.color);
     btn.addEventListener('click', () => {
       doodleState.color = btn.dataset.color;
+      doodleState.prevColor = btn.dataset.color;
+      doodleState.tool = 'pen';
       board.querySelectorAll('.db-color').forEach(b => b.classList.toggle('is-active', b === btn));
+      board.querySelectorAll('.db-tool').forEach(b => b.classList.remove('is-active'));
     });
   });
   // Sizes
@@ -4126,6 +4210,25 @@ function setupDoodleBoard() {
     btn.addEventListener('click', () => {
       doodleState.width = parseFloat(btn.dataset.w);
       board.querySelectorAll('.db-size').forEach(b => b.classList.toggle('is-active', b === btn));
+    });
+  });
+  // Eraser tool — toggles between erase and the previously selected pen color
+  board.querySelectorAll('.db-tool').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const wantsErase = btn.dataset.tool === 'erase' && doodleState.tool !== 'erase';
+      if (wantsErase) {
+        doodleState.tool = 'erase';
+        btn.classList.add('is-active');
+        board.querySelectorAll('.db-color').forEach(b => b.classList.remove('is-active'));
+      } else {
+        // Turn the eraser off → return to the previous pen color
+        doodleState.tool = 'pen';
+        doodleState.color = doodleState.prevColor;
+        btn.classList.remove('is-active');
+        board.querySelectorAll('.db-color').forEach(b => {
+          b.classList.toggle('is-active', b.dataset.color === doodleState.color);
+        });
+      }
     });
   });
   // Clear all
@@ -4229,9 +4332,17 @@ function drawStroke(s) {
   const w = doodleState.canvas.width;
   const h = doodleState.canvas.height;
   const lineW = Math.max(0.5, (s.width || 3)) * doodleState.dpr;
+  const isErase = s.color === DOODLE_ERASE;
   ctx.save();
-  ctx.strokeStyle = s.color || '#ffffff';
-  ctx.fillStyle = s.color || '#ffffff';
+  if (isErase) {
+    // Carve out previously drawn pixels so the stage background shows through.
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.strokeStyle = '#000';
+    ctx.fillStyle = '#000';
+  } else {
+    ctx.strokeStyle = s.color || '#ffffff';
+    ctx.fillStyle = s.color || '#ffffff';
+  }
   ctx.lineWidth = lineW;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
@@ -4262,10 +4373,12 @@ function onDoodlePointerDown(e) {
   e.preventDefault();
   try { doodleState.canvas.setPointerCapture(e.pointerId); } catch {}
   const pt = doodleEventToNormalized(e);
+  const isErase = doodleState.tool === 'erase';
   doodleState.current = {
     author: state.currentUser,
-    color: doodleState.color,
-    width: doodleState.width,
+    color: isErase ? DOODLE_ERASE : doodleState.color,
+    // Eraser is a bit chunkier than the matching pen size for usability
+    width: isErase ? Math.max(doodleState.width * 3, 14) : doodleState.width,
     points: [pt],
   };
   redrawDoodles();
@@ -4308,32 +4421,6 @@ async function onDoodlePointerUp(e) {
     console.error('doodle save', err);
     // Leave the pending stroke visible so the user doesn't lose their drawing.
   }
-}
-
-// ============================================================
-// Light / Dark mode toggle
-// ============================================================
-function setupThemeToggle() {
-  const btn = $('#lightmode-toggle');
-  if (!btn) return;
-  if (btn.dataset.wired) return;
-  btn.dataset.wired = '1';
-  // Reflect current state on initial render
-  syncThemeUI();
-  btn.addEventListener('click', () => {
-    const current = document.documentElement.dataset.theme || 'dark';
-    const next = current === 'light' ? 'dark' : 'light';
-    document.documentElement.dataset.theme = next;
-    try { localStorage.setItem('medusas:theme', next); } catch {}
-    syncThemeUI();
-  });
-}
-function syncThemeUI() {
-  const t = document.documentElement.dataset.theme || 'dark';
-  const icon = $('#lightmode-icon');
-  const label = document.querySelector('#lightmode-toggle .lm-label');
-  if (icon) icon.textContent = t === 'light' ? 'light_mode' : 'dark_mode';
-  if (label) label.textContent = t === 'light' ? 'Dark mode' : 'Light mode';
 }
 
 // ============================================================
