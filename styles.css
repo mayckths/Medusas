@@ -612,15 +612,18 @@ button.btn.pin-toggle.is-pinned { background: var(--accent); color: var(--on-acc
 }
 .dashboard-cols .col-left { gap: 24px; }
 
-/* Sticky right column: follows the scroll and fills the visible viewport */
+/* Sticky right column: follows the scroll and fills the visible viewport.
+   JS (fitColRightToViewport) sets a precise inline height based on the
+   actual top offset; this CSS fallback uses a conservative estimate that
+   accounts for the page-head (~140px) so the chat never overflows even
+   before JS runs. */
 .dashboard-cols .col-right {
   position: sticky;
   top: 16px;
-  /* Constrain to viewport height — never overflow downward */
-  height: calc(100vh - 32px);
-  max-height: calc(100vh - 32px);
-  align-self: start; /* don't let the grid stretch us to the row height */
-  overflow: hidden; /* clip anything that doesn't fit */
+  height: calc(100dvh - 160px);
+  max-height: calc(100dvh - 160px);
+  align-self: start;
+  overflow: hidden;
 }
 @media (max-width: 980px) {
   .dashboard-cols { grid-template-columns: 1fr; }

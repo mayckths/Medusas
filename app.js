@@ -714,7 +714,8 @@ function renderInicio(root) {
   setupPhotoWidget();
   setupChatWidget();
   setupNotifBell();
-  fitColRightToViewport();
+  // Defer to next paint so layout is committed before we measure.
+  requestAnimationFrame(() => fitColRightToViewport());
 }
 
 // ============================================================
@@ -727,15 +728,20 @@ function renderInicio(root) {
 function fitColRightToViewport() {
   const col = document.querySelector('.col-right');
   if (!col) return;
+  // On narrow viewports the columns stack — let CSS handle sizing.
+  if (window.innerWidth <= 980) {
+    col.style.height = '';
+    col.style.maxHeight = '';
+    return;
+  }
   // Clear our previous inline values so we can re-measure cleanly
   col.style.height = '';
   col.style.maxHeight = '';
-  // Compute the column's top relative to the document, then convert
-  // back to viewport coords assuming scroll = 0. This represents the
-  // worst-case top offset for the sticky element.
+  // Compute the column's top relative to the document. This represents
+  // the worst-case top offset for the sticky element (at scroll = 0).
   const rect = col.getBoundingClientRect();
   const docTop = rect.top + window.scrollY;
-  const visibleTop = Math.max(16, docTop - 0); // worst case at scroll 0
+  const visibleTop = Math.max(16, docTop);
   const fitH = Math.max(280, window.innerHeight - visibleTop - 16);
   col.style.height = `${fitH}px`;
   col.style.maxHeight = `${fitH}px`;
