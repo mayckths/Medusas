@@ -714,6 +714,37 @@ function renderInicio(root) {
   setupPhotoWidget();
   setupChatWidget();
   setupNotifBell();
+  fitColRightToViewport();
+}
+
+// ============================================================
+// Right column sizing: dynamically fit to visible viewport so the
+// chat widget never extends past the fold. We compute the natural
+// top offset (worst case at scroll = 0) and set the height to
+// viewport - that top - 16px breathing room. After scrolling, the
+// sticky positioning keeps the column at top:16 which leaves some
+// unused space at the bottom — acceptable tradeoff for always-fits.
+function fitColRightToViewport() {
+  const col = document.querySelector('.col-right');
+  if (!col) return;
+  // Clear our previous inline values so we can re-measure cleanly
+  col.style.height = '';
+  col.style.maxHeight = '';
+  // Compute the column's top relative to the document, then convert
+  // back to viewport coords assuming scroll = 0. This represents the
+  // worst-case top offset for the sticky element.
+  const rect = col.getBoundingClientRect();
+  const docTop = rect.top + window.scrollY;
+  const visibleTop = Math.max(16, docTop - 0); // worst case at scroll 0
+  const fitH = Math.max(280, window.innerHeight - visibleTop - 16);
+  col.style.height = `${fitH}px`;
+  col.style.maxHeight = `${fitH}px`;
+}
+if (!window._medusasColResizeWired) {
+  window._medusasColResizeWired = true;
+  window.addEventListener('resize', () => {
+    if (document.querySelector('.col-right')) fitColRightToViewport();
+  });
 }
 
 function totalUnreadCount() {
@@ -893,7 +924,7 @@ function renderNotas(root) {
     </div>
     ${sortedTags.length ? `
       <div class="tag-filter-row" id="tag-filter-row">
-        <button class="tag-chip ${!filterTag ? 'active' : ''}" data-tag="" style="--tag-color: var(--text-dim);">Todas</button>
+        <button class="tag-chip tag-chip-all ${!filterTag ? 'active' : ''}" data-tag="">Todas</button>
         ${sortedTags.map(([tag, count]) => `
           <button class="tag-chip ${filterTag === tag ? 'active' : ''}" data-tag="${escapeHtml(tag)}" style="--tag-color: ${tagColor(tag)};">
             #${escapeHtml(tag)} <span class="count">${count}</span>
@@ -1087,7 +1118,7 @@ function renderMusica(root) {
       <div class="featured-strip" id="featured-media-strip"></div>
     ` : ''}
     <div class="tag-filter-row" id="media-filter">
-      <button class="tag-chip ${filter === 'all' ? 'active' : ''}" data-f="all" style="--tag-color: var(--text-dim);">Todo <span class="count">${filterCounts.all}</span></button>
+      <button class="tag-chip tag-chip-all ${filter === 'all' ? 'active' : ''}" data-f="all">Todo <span class="count">${filterCounts.all}</span></button>
       <button class="tag-chip ${filter === 'musica' ? 'active' : ''}" data-f="musica" style="--tag-color: #1db954;"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:-3px;">music_note</span> Canciones <span class="count">${filterCounts.musica}</span></button>
       <button class="tag-chip ${filter === 'playlists' ? 'active' : ''}" data-f="playlists" style="--tag-color: #6d5be6;"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:-3px;">queue_music</span> Playlists <span class="count">${filterCounts.playlists}</span></button>
       <button class="tag-chip ${filter === 'videos' ? 'active' : ''}" data-f="videos" style="--tag-color: #ff4040;"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:-3px;">play_circle</span> Videos <span class="count">${filterCounts.videos}</span></button>
@@ -1285,17 +1316,19 @@ function renderAlbumDetail(root, slug) {
     <div class="page-head">
       <div class="album-detail-head" style="position:relative;">
         <a class="back-link" href="#/fotos"><span class="material-symbols-outlined">arrow_back</span> Fotos</a>
-        <h1 style="display:flex;align-items:center;gap:.45rem;">
+        <h1>
           ${albumName ? '<span class="material-symbols-outlined" style="font-size:1em;">folder</span>' : ''}
           ${escapeHtml(displayName)}
-          <button class="album-menu-btn" type="button" title="Opciones del álbum">
-            <span class="material-symbols-outlined">more_horiz</span>
-          </button>
-          <div class="album-menu-popover">
-            <button data-action="rename"><span class="material-symbols-outlined">edit</span>${isUnnamed ? 'Asignar nombre…' : 'Renombrar álbum'}</button>
-            <button data-action="move"><span class="material-symbols-outlined">drive_file_move</span>Mover a otro álbum…</button>
-            <button data-action="delete" class="danger"><span class="material-symbols-outlined">delete</span>${isUnnamed ? 'Borrar estas fotos' : 'Borrar álbum'}</button>
-          </div>
+          <span class="album-menu-wrap">
+            <button class="album-menu-btn" type="button" title="Opciones del álbum" aria-label="Opciones del álbum">
+              <span class="material-symbols-outlined">more_horiz</span>
+            </button>
+            <div class="album-menu-popover">
+              <button data-action="rename"><span class="material-symbols-outlined">edit</span>${isUnnamed ? 'Asignar nombre…' : 'Renombrar álbum'}</button>
+              <button data-action="move"><span class="material-symbols-outlined">drive_file_move</span>Mover a otro álbum…</button>
+              <button data-action="delete" class="danger"><span class="material-symbols-outlined">delete</span>${isUnnamed ? 'Borrar estas fotos' : 'Borrar álbum'}</button>
+            </div>
+          </span>
         </h1>
         <div class="sub">${photos.length} foto${photos.length === 1 ? '' : 's'}</div>
       </div>
@@ -1343,15 +1376,17 @@ function renderAlbumSection(name, photos) {
   section.className = 'album-section';
   section.innerHTML = `
     <div class="album-title-row">
-      <h2>${isUnnamed ? '' : '<span class="material-symbols-outlined" style="font-size:1.1em;">folder</span> '}${escapeHtml(displayName)} <span class="count">${photos.length}</span></h2>
-      <button class="album-menu-btn" type="button" title="Opciones del álbum">
-        <span class="material-symbols-outlined">more_horiz</span>
-      </button>
-      <div class="album-menu-popover">
-        <button data-action="rename"><span class="material-symbols-outlined">edit</span>${isUnnamed ? 'Asignar nombre…' : 'Renombrar álbum'}</button>
-        <button data-action="move"><span class="material-symbols-outlined">drive_file_move</span>Mover a otro álbum…</button>
-        <button data-action="delete" class="danger"><span class="material-symbols-outlined">delete</span>${isUnnamed ? 'Borrar estas fotos' : 'Borrar álbum'}</button>
-      </div>
+      <h2>${isUnnamed ? '' : '<span class="material-symbols-outlined" style="font-size:1.1em;">folder</span> '}${escapeHtml(displayName)}</h2>
+      <span class="album-menu-wrap">
+        <button class="album-menu-btn" type="button" title="Opciones del álbum" aria-label="Opciones del álbum">
+          <span class="material-symbols-outlined">more_horiz</span>
+        </button>
+        <div class="album-menu-popover">
+          <button data-action="rename"><span class="material-symbols-outlined">edit</span>${isUnnamed ? 'Asignar nombre…' : 'Renombrar álbum'}</button>
+          <button data-action="move"><span class="material-symbols-outlined">drive_file_move</span>Mover a otro álbum…</button>
+          <button data-action="delete" class="danger"><span class="material-symbols-outlined">delete</span>${isUnnamed ? 'Borrar estas fotos' : 'Borrar álbum'}</button>
+        </div>
+      </span>
     </div>
     <div class="album-strip"></div>
   `;
@@ -1375,12 +1410,23 @@ function wireAlbumMenu(rootEl, name, photos) {
   const menu = rootEl.querySelector('.album-menu-popover');
   if (!menuBtn || !menu) return;
   const isUnnamed = !name;
+  const syncOpenClass = () => menuBtn.classList.toggle('is-open', menu.classList.contains('open'));
   menuBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    document.querySelectorAll('.album-menu-popover.open').forEach(el => el !== menu && el.classList.remove('open'));
+    document.querySelectorAll('.album-menu-popover.open').forEach(el => {
+      if (el !== menu) {
+        el.classList.remove('open');
+        const sib = el.parentElement && el.parentElement.querySelector('.album-menu-btn');
+        if (sib) sib.classList.remove('is-open');
+      }
+    });
     menu.classList.toggle('open');
+    syncOpenClass();
   });
-  document.addEventListener('click', () => menu.classList.remove('open'));
+  document.addEventListener('click', () => {
+    menu.classList.remove('open');
+    syncOpenClass();
+  });
 
   menu.addEventListener('click', async (e) => {
     const btn = e.target.closest('button[data-action]');
@@ -1555,11 +1601,35 @@ function renderPhoto(p, list, index) {
   tile.innerHTML = `<img src="${escapeHtml(src)}" alt="${escapeHtml(p.caption || '')}" loading="lazy" />` +
     (p.caption ? `<div class="photo-caption">${escapeHtml(p.caption)}</div>` : '');
 
-  const indicator = document.createElement('div');
-  indicator.className = 'photo-indicator';
-  if (p.pinned) indicator.innerHTML += `<span title="Anclada"><span class="material-symbols-outlined" style="font-size:14px;">keep</span></span>`;
-  if (p.featured) indicator.innerHTML += `<span title="Destacada"><span class="material-symbols-outlined" style="font-size:14px;">star</span></span>`;
-  if (indicator.children.length) tile.appendChild(indicator);
+  // Quick-feature star button (top-right). Visible on hover; persistent when featured.
+  const star = document.createElement('button');
+  star.type = 'button';
+  star.className = `photo-star ${p.featured ? 'is-on' : ''}`;
+  star.title = p.featured ? 'Quitar de destacadas' : 'Destacar';
+  star.setAttribute('aria-label', star.title);
+  star.innerHTML = `<span class="material-symbols-outlined ${p.featured ? 'filled' : ''}">star</span>`;
+  star.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    p.featured = !p.featured;
+    star.classList.toggle('is-on', p.featured);
+    const icon = star.querySelector('.material-symbols-outlined');
+    if (icon) icon.classList.toggle('filled', p.featured);
+    star.title = p.featured ? 'Quitar de destacadas' : 'Destacar';
+    star.setAttribute('aria-label', star.title);
+    try {
+      await supabase.from('photos').update({ featured: p.featured }).eq('id', p.id);
+    } catch (err) { console.error('toggle featured', err); }
+  });
+  tile.appendChild(star);
+
+  // Other indicators (pinned). The featured state is now reflected on the star itself.
+  if (p.pinned) {
+    const indicator = document.createElement('div');
+    indicator.className = 'photo-indicator';
+    indicator.innerHTML = `<span title="Anclada"><span class="material-symbols-outlined" style="font-size:14px;">keep</span></span>`;
+    tile.appendChild(indicator);
+  }
 
   if (isUnread(p)) {
     const dot = document.createElement('span');
@@ -1608,7 +1678,7 @@ function renderLugares(root) {
     </div>
     ${sortedTags.length ? `
       <div class="tag-filter-row" id="places-tag-filter">
-        <button class="tag-chip ${!filterTag ? 'active' : ''}" data-tag="" style="--tag-color: var(--text-dim);">Todos</button>
+        <button class="tag-chip tag-chip-all ${!filterTag ? 'active' : ''}" data-tag="">Todos</button>
         ${sortedTags.map(([tag, count]) => `
           <button class="tag-chip ${filterTag === tag ? 'active' : ''}" data-tag="${escapeHtml(tag)}" style="--tag-color: ${tagColor(tag)};">
             #${escapeHtml(tag)} <span class="count">${count}</span>
@@ -3681,6 +3751,15 @@ const POSTIT_COLORS = ['cyan', 'yellow', 'green', 'pink'];
 const POSTIT_W = 130;
 const POSTIT_H = 130;
 let postitDragState = null;
+let postitTopZ = 10;
+// Per-postit z-index map so re-renders (from polling) keep the relative
+// stacking the user established by dragging/creating.
+const postitZMap = new Map();
+function bringPostitToFront(el, id) {
+  postitTopZ += 1;
+  if (id != null) postitZMap.set(id, postitTopZ);
+  el.style.zIndex = String(postitTopZ);
+}
 
 function setupPostitBoard() {
   const board = $('#postit-board');
@@ -3703,6 +3782,9 @@ function setupPostitBoard() {
       if (error) throw error;
       state.postits.unshift(data);
       renderPostits();
+      // Bring the newly-created postit to the front so it sits above the rest
+      const newPostit = board.querySelector(`.postit[data-id="${data.id}"]`);
+      if (newPostit) bringPostitToFront(newPostit, data.id);
       // Focus the new one for immediate typing
       const newEl = board.querySelector(`[data-id="${data.id}"] .pi-body`);
       if (newEl) newEl.focus();
@@ -3752,6 +3834,9 @@ function renderPostitEl(p) {
   el.style.left = `${p.x}px`;
   el.style.top = `${p.y}px`;
   el.style.transform = `rotate(${p.rotation || 0}deg)`;
+  // Restore stacking order assigned via drag/create across re-renders
+  const z = postitZMap.get(p.id);
+  if (z) el.style.zIndex = String(z);
 
   el.innerHTML = `
     <div class="pi-author">${escapeHtml(p.author || '?')}</div>
@@ -3817,6 +3902,8 @@ function startDrag(el, p, evt) {
   const offsetY = evt.clientY - elRect.top;
 
   el.classList.add('dragging');
+  // Bring this postit to the very front and keep it there after release.
+  bringPostitToFront(el, p.id);
 
   const onMove = (e) => {
     const pos = e.touches ? e.touches[0] : e;

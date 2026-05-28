@@ -82,14 +82,12 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
 /* Text that sits directly on the ambient backdrop (not on cards) — always
    white so it stays readable on top of the dark scrim, regardless of theme */
 .page-head h1,
-.section-block > .section-head h2,
-.album-section .album-title-row h2 {
-  color: #ffffff;
-}
 .page-head .sub,
+.section-block > .section-head h2,
 .section-block > .section-head .count,
+.album-section .album-title-row h2,
 .album-section .album-title-row .count {
-  color: rgba(255, 255, 255, 0.72);
+  color: #ffffff;
 }
 
 /* App shell sits on top of the backdrop */
@@ -430,7 +428,7 @@ nav.menu a .m-icon { font-size: 20px; width: 22px; text-align: center; }
   flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;
 }
 .page-head h1 { margin: 0; font-size: 1.6rem; letter-spacing: -0.02em; }
-.page-head .sub { color: var(--text-dim); font-size: 0.88rem; }
+.page-head .sub { font-size: 0.88rem; }
 .page-head .actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
 
 @media (max-width: 760px) {
@@ -514,7 +512,10 @@ button.btn.pin-toggle.is-pinned { background: var(--accent); color: var(--on-acc
   position: relative; transition: transform 0.08s ease, border-color 0.15s ease;
 }
 .card.clickable { cursor: pointer; }
-.card.clickable:hover { border-color: var(--border-strong); }
+.card.clickable:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow), 0 0 0 1px var(--accent), 0 8px 20px rgba(214, 255, 58, 0.15);
+}
 .card.with-stripe { border-left: 4px solid var(--stripe, var(--border)); }
 .card h3 { margin: 0; font-size: 1.02rem; letter-spacing: -0.01em; word-wrap: break-word; }
 .card .preview {
@@ -631,23 +632,29 @@ button.btn.pin-toggle.is-pinned { background: var(--accent); color: var(--on-acc
 .postit-board {
   position: relative;
   height: 360px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow);
-  overflow: hidden;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
 }
 .postit-board .pb-new {
-  position: absolute; top: 12px; right: 14px;
-  background: transparent; border: 0; cursor: pointer;
-  color: var(--accent); font-size: 0.85rem; font-weight: 600;
+  position: absolute; top: 4px; right: 6px;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  color: var(--accent); font-size: 0.82rem; font-weight: 600;
+  padding: 0.35rem 0.7rem; border-radius: 999px;
   display: inline-flex; align-items: center; gap: 0.3rem;
   z-index: 2;
+  transition: background 0.15s ease, color 0.15s ease;
 }
-.postit-board .pb-new:hover { color: var(--accent-hover); }
+.postit-board .pb-new:hover { color: var(--accent-hover); background: rgba(0, 0, 0, 0.5); }
 .postit-board .pb-empty {
   position: absolute; inset: 0; display: grid; place-items: center;
-  color: var(--text-dim); font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.75); font-size: 0.88rem;
 }
 
 .postit {
@@ -836,14 +843,36 @@ button.btn.pin-toggle.is-pinned { background: var(--accent); color: var(--on-acc
 /* ======== Tags filter row ======== */
 .tag-filter-row { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .tag-filter-row .tag-chip {
-  background: var(--surface-alt); border: 1px solid var(--border); color: var(--text-dim);
-  padding: 0.2rem 0.7rem; border-radius: 999px; font-size: 0.78rem; cursor: pointer;
-  display: inline-flex; align-items: center; gap: 0.3rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 0.28rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
-.tag-filter-row .tag-chip:hover { color: var(--text); }
-.tag-filter-row .tag-chip.active { color: white; background: var(--tag-color, var(--accent)); border-color: transparent; }
-.tag-filter-row .tag-chip.active[style*="text-dim"] { color: var(--on-accent); }
-.tag-filter-row .tag-chip .count { font-size: 0.7rem; opacity: 0.7; }
+.tag-filter-row .tag-chip:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.tag-filter-row .tag-chip.active {
+  color: white;
+  background: var(--tag-color, var(--accent));
+  border-color: transparent;
+}
+/* "Todas/Todos/Todo" chip uses the brand accent when active */
+.tag-filter-row .tag-chip.tag-chip-all.active {
+  color: var(--on-accent);
+  background: var(--accent);
+  border-color: transparent;
+  font-weight: 600;
+}
+.tag-filter-row .tag-chip .count { font-size: 0.7rem; opacity: 0.8; }
 
 /* ======== Music ======== */
 .media-card { padding: 0; overflow: hidden; }
@@ -925,12 +954,41 @@ dialog.theater::backdrop { background: rgba(0,0,0,0.85); }
 }
 .photo:hover .photo-caption { opacity: 1; }
 .photo .photo-indicator {
-  position: absolute; top: 8px; right: 8px; display: flex; gap: 4px;
+  position: absolute; top: 8px; left: 32px; display: flex; gap: 4px;
 }
 .photo .photo-indicator span {
   width: 22px; height: 22px; border-radius: 999px; background: rgba(0,0,0,0.55);
   color: white; display: grid; place-items: center; font-size: 0.72rem;
 }
+/* Quick-feature star button — sits in the top-right corner of a photo tile.
+   Visible on hover, OR always when the photo is already featured. */
+.photo .photo-star {
+  position: absolute; top: 6px; right: 6px;
+  width: 30px; height: 30px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.92);
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+  display: grid; place-items: center;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+  z-index: 2;
+}
+.photo:hover .photo-star,
+.photo:focus-within .photo-star,
+.photo .photo-star.is-on { opacity: 1; }
+.photo .photo-star:hover {
+  background: rgba(0, 0, 0, 0.75);
+  color: #f9b233;
+  transform: scale(1.08);
+}
+.photo .photo-star.is-on {
+  background: rgba(0, 0, 0, 0.7);
+  color: #f9b233;
+}
+.photo .photo-star .material-symbols-outlined { font-size: 18px; }
 .photo .unread-dot {
   position: absolute; top: 8px; left: 8px; width: 9px; height: 9px; border-radius: 999px;
   background: var(--accent); box-shadow: 0 0 0 3px rgba(0,0,0,0.4);
@@ -1272,13 +1330,13 @@ dialog.lightbox .lightbox-cap {
 .chat-widget.chat-widget-tall { height: auto; max-height: none; flex: 1; min-height: 0; }
 .col-right { min-height: 0; }
 .col-right .photo-widget {
-  flex-shrink: 0;
-  /* The photo widget keeps a fixed-ish aspect: it takes ~360px when there's
-     room, but shrinks gracefully on shorter viewports */
-  height: clamp(220px, 38vh, 360px);
-  min-height: 220px;
+  /* The photo widget gets a flexible base size; the chat gets the rest.
+     Flex-shrink allows it to make room for the chat on short viewports. */
+  flex: 0 1 auto;
+  height: clamp(200px, 36vh, 320px);
+  min-height: 180px;
 }
-.col-right .chat-widget-tall { flex: 1 1 auto; min-height: 240px; }
+.col-right .chat-widget-tall { flex: 1 1 auto; min-height: 180px; }
 
 @media (max-width: 760px) {
   .chat-widget { height: 320px; max-height: 320px; }
@@ -1489,7 +1547,8 @@ dialog.lightbox .lightbox-cap {
   position: relative;
 }
 .album-section .album-link {
-  color: var(--accent); text-decoration: none; font-size: 0.82rem; margin-left: auto;
+  color: var(--accent); text-decoration: none; font-size: 0.82rem;
+  margin-left: auto;
 }
 .album-section .album-link:hover { text-decoration: underline; }
 
@@ -1535,26 +1594,33 @@ dialog.lightbox .lightbox-cap {
   margin: 0; font-size: 1.05rem; letter-spacing: -0.01em;
   display: inline-flex; align-items: center; gap: 0.4rem;
 }
-.album-section .album-title-row h2 .count {
-  color: var(--text-dim); font-size: 0.78rem; font-weight: 400; margin-left: 0.25rem;
-}
 .back-link {
   display: inline-flex; align-items: center; gap: 0.25rem;
-  color: var(--text-dim); text-decoration: none; font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7); text-decoration: none; font-size: 0.85rem;
   margin-bottom: 0.4rem;
 }
-.back-link:hover { color: var(--text); }
+.back-link:hover { color: #ffffff; }
 .back-link .material-symbols-outlined { font-size: 18px; }
-.album-section .album-title-row .count { color: var(--text-dim); font-size: 0.78rem; }
+/* Ellipsis button — lives right next to the album title (no longer floated
+   to the right edge). Subtle by default, brand-accent on hover. */
+.album-menu-wrap { position: relative; display: inline-flex; align-items: center; }
 .album-menu-btn {
-  background: var(--surface-alt); border: 1px solid var(--border); border-radius: 8px;
-  width: 30px; height: 30px; cursor: pointer; color: var(--text-dim);
-  display: inline-grid; place-items: center; padding: 0;
-  margin-left: auto;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  width: 28px; height: 28px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.65);
+  display: inline-grid; place-items: center;
+  padding: 0;
+  transition: background 0.15s ease, color 0.15s ease;
 }
-.album-menu-btn:hover { color: var(--text); background: var(--border); }
+.album-menu-btn:hover, .album-menu-btn.is-open {
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.12);
+}
 .album-menu-popover {
-  position: absolute; top: calc(100% + 6px); right: 0;
+  position: absolute; top: calc(100% + 6px); left: 0;
   background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
   box-shadow: 0 12px 36px rgba(0,0,0,0.4);
   min-width: 220px; padding: 0.35rem;
@@ -1564,15 +1630,17 @@ dialog.lightbox .lightbox-cap {
 .album-menu-popover button {
   background: transparent; border: 0; cursor: pointer; padding: 0.55rem 0.7rem;
   border-radius: 8px; text-align: left; font-size: 0.88rem; color: var(--text);
-  display: flex; align-items: center; gap: 0.5rem; font-weight: 400;
+  display: flex; align-items: center; gap: 0.55rem; font-weight: 500;
+  transition: background 0.12s ease, color 0.12s ease;
 }
-.album-menu-popover button:hover { background: var(--surface-alt); }
+.album-menu-popover button:hover { background: var(--surface-alt); color: var(--accent); }
 .album-menu-popover button.danger { color: var(--danger); }
+.album-menu-popover button.danger:hover { background: rgba(255, 107, 107, 0.12); color: var(--danger); }
 .album-menu-popover button .material-symbols-outlined { font-size: 18px; }
 
 /* Album detail page: the menu lives inside the h1, give it positioning context */
-.album-detail-head h1 { position: relative; }
-.album-detail-head h1 .album-menu-btn { font-size: 0.6em; vertical-align: middle; }
+.album-detail-head h1 { position: relative; display: inline-flex; align-items: center; gap: 0.45rem; }
+.album-detail-head h1 .album-menu-btn { font-size: 1rem; }
 
 .album-picker {
   display: flex; gap: 0.4rem; align-items: center;
