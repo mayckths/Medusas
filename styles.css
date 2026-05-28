@@ -722,19 +722,27 @@ button.btn.pin-toggle.is-pinned {
   overflow: visible;
 }
 .postit-board .pb-new {
+  /* Matches the rest of our glass pill buttons — same vars as .btn so
+     "+ Nuevo post-it" looks identical to "Ver todas →" etc. */
   position: absolute; top: 4px; right: 6px;
-  background: rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  cursor: pointer;
-  color: var(--accent); font-size: 0.82rem; font-weight: 600;
-  padding: 0.35rem 0.7rem; border-radius: 999px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--glass-text);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: 30px;
   display: inline-flex; align-items: center; gap: 0.3rem;
+  cursor: pointer;
   z-index: 2;
-  transition: background 0.15s ease, color 0.15s ease;
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
-.postit-board .pb-new:hover { color: var(--accent-hover); background: rgba(0, 0, 0, 0.5); }
+.postit-board .pb-new:hover {
+  background: var(--glass-bg-hover);
+  border-color: rgba(255, 255, 255, 0.18);
+}
 .postit-board .pb-empty {
   position: absolute; inset: 0; display: grid; place-items: center;
   color: rgba(255, 255, 255, 0.75); font-size: 0.88rem;
@@ -1888,24 +1896,53 @@ dialog.lightbox .lightbox-cap {
 .album-menu-popover button.danger:hover { background: rgba(255, 107, 107, 0.12); color: var(--danger); }
 .album-menu-popover button .material-symbols-outlined { font-size: 18px; }
 
-/* Album detail page: back arrow sits on its own row above; the title is
-   centered on the page with the chevron menu next to it. */
-.album-detail-head { align-items: center; }
+/* Album detail header: a single row, vertically centered. Back link
+   sits on the left, the album title is centered, and icon-only
+   actions sit on the right. */
+.album-detail-head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+.album-detail-head > .back-link {
+  justify-self: start;
+  margin: 0;
+}
 .album-detail-title {
-  flex: 1;
-  display: flex; flex-direction: column; align-items: center;
+  display: inline-flex; align-items: center; justify-content: center;
   text-align: center;
 }
 .album-detail-title h1 {
   margin: 0;
+  font-size: 1.6rem; letter-spacing: -0.02em;
   position: relative;
   display: inline-flex; align-items: center; gap: 0.45rem;
 }
 .album-detail-title h1 .album-menu-btn { font-size: 1rem; }
-.album-detail-title .sub { margin-top: 0.25rem; }
+.album-detail-head .actions {
+  justify-self: end;
+  display: inline-flex; gap: 0.4rem; align-items: center;
+}
+
+/* Icon-only pill variant of .btn — square-ish circle, same glass look. */
+button.btn.icon-pill, a.btn.icon-pill {
+  width: 38px; height: 38px;
+  padding: 0;
+  border-radius: 999px;
+  display: inline-grid; place-items: center;
+  gap: 0;
+}
+button.btn.icon-pill .material-symbols-outlined,
+a.btn.icon-pill .material-symbols-outlined { font-size: 20px; }
+
 @media (max-width: 760px) {
-  .album-detail-head { flex-direction: column; align-items: stretch; gap: 0.6rem; }
-  .album-detail-head .actions { justify-content: center; }
+  .album-detail-head {
+    grid-template-columns: auto 1fr auto;
+    gap: 0.5rem;
+  }
+  .album-detail-title h1 { font-size: 1.25rem; }
 }
 
 .album-picker {

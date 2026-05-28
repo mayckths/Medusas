@@ -1390,8 +1390,8 @@ function renderAlbumDetail(root, slug) {
   const isUnnamed = !albumName;
 
   root.innerHTML = `
-    <a class="back-link" href="#/fotos"><span class="material-symbols-outlined">arrow_back</span> Fotos</a>
-    <div class="page-head album-detail-head">
+    <div class="album-detail-head">
+      <a class="back-link" href="#/fotos"><span class="material-symbols-outlined">arrow_back</span> Fotos</a>
       <div class="album-detail-title">
         <h1>
           ${escapeHtml(displayName)}
@@ -1406,11 +1406,10 @@ function renderAlbumDetail(root, slug) {
             </div>
           </span>
         </h1>
-        <div class="sub">${photos.length} foto${photos.length === 1 ? '' : 's'}</div>
       </div>
       <div class="actions">
-        ${photos.length ? `<button class="btn" id="view-all-btn">Ver en presentación</button>` : ''}
-        <button class="btn primary" id="upload-btn">+ Subir fotos</button>
+        ${photos.length ? `<button class="btn icon-pill" id="view-all-btn" type="button" title="Ver en presentación" aria-label="Ver en presentación"><span class="material-symbols-outlined">slideshow</span></button>` : ''}
+        <button class="btn icon-pill primary" id="upload-btn" type="button" title="Subir fotos" aria-label="Subir fotos"><span class="material-symbols-outlined">add</span></button>
       </div>
     </div>
     <div class="photo-grid" id="photo-grid"></div>
