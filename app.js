@@ -653,17 +653,31 @@ function renderInicio(root) {
         <div class="photo-widget" id="photo-widget">
           <div class="pw-empty">Aún no hay fotos para mostrar aquí.</div>
         </div>
-        <div class="chat-widget chat-widget-tall" id="chat-widget">
-          <div class="chat-head">
-            <span class="dot"></span>
-            Instantáneos
+        <div class="doodle-board" id="doodle-board">
+          <div class="db-head">
+            <span class="db-title">
+              <span class="material-symbols-outlined">draw</span>
+              Garabatos
+            </span>
+            <div class="db-tools" role="toolbar" aria-label="Herramientas de dibujo">
+              <button class="db-color is-active" type="button" data-color="#d6ff3a" title="Lima"></button>
+              <button class="db-color" type="button" data-color="#ff8db5" title="Rosa"></button>
+              <button class="db-color" type="button" data-color="#6fd9d2" title="Cian"></button>
+              <button class="db-color" type="button" data-color="#ffd94a" title="Amarillo"></button>
+              <button class="db-color" type="button" data-color="#ffffff" title="Blanco"></button>
+              <button class="db-color" type="button" data-color="#7a4ed8" title="Morado"></button>
+              <span class="db-divider"></span>
+              <button class="db-size" type="button" data-w="2" title="Pluma fina"><span class="db-dot db-dot-sm"></span></button>
+              <button class="db-size is-active" type="button" data-w="4" title="Pluma media"><span class="db-dot db-dot-md"></span></button>
+              <button class="db-size" type="button" data-w="8" title="Pluma gruesa"><span class="db-dot db-dot-lg"></span></button>
+              <span class="db-divider"></span>
+              <button class="db-clear" type="button" title="Borrar todo">
+                <span class="material-symbols-outlined">delete</span>
+              </button>
+            </div>
           </div>
-          <div class="chat-body" id="chat-body">
-            <div class="chat-empty">Cargando…</div>
-          </div>
-          <div class="chat-input">
-            <input type="text" id="chat-input-field" placeholder="Un mensajito…" maxlength="500" />
-            <button id="chat-send" type="button">Enviar</button>
+          <div class="db-stage">
+            <canvas id="doodle-canvas"></canvas>
           </div>
         </div>
       </div>
@@ -712,7 +726,7 @@ function renderInicio(root) {
 
   setupPostitBoard();
   setupPhotoWidget();
-  setupChatWidget();
+  setupDoodleBoard();
   setupNotifBell();
   // Defer to next paint so layout is committed before we measure.
   requestAnimationFrame(() => fitColRightToViewport());
@@ -3937,6 +3951,256 @@ function startDrag(el, p, evt) {
   document.addEventListener('mouseup', onEnd);
   document.addEventListener('touchmove', onMove, { passive: false });
   document.addEventListener('touchend', onEnd);
+}
+
+// ============================================================
+// Garabatos — collaborative drawing board (dashboard right column)
+// ============================================================
+const doodleState = {
+  strokes: [],     // persisted strokes from DB (oldest → newest)
+  pending: [],     // strokes we drew locally that haven't been confirmed
+  current: null,   // the stroke currently being drawn (live)
+  color: '#d6ff3a',
+  width: 4,
+  canvas: null,
+  ctx: null,
+  dpr: 1,
+  pollTimer: null,
+  resizeObs: null,
+  authorTagTimer: null,
+  lastRemoteCount: 0,
+};
+
+function setupDoodleBoard() {
+  const board = document.getElementById('doodle-board');
+  if (!board) return;
+  const canvas = document.getElementById('doodle-canvas');
+  if (!canvas) return;
+
+  // Tear down any prior session (e.g., re-render of dashboard)
+  if (doodleState.pollTimer) { clearInterval(doodleState.pollTimer); doodleState.pollTimer = null; }
+  if (doodleState.resizeObs) { try { doodleState.resizeObs.disconnect(); } catch {} doodleState.resizeObs = null; }
+
+  doodleState.canvas = canvas;
+  doodleState.ctx = canvas.getContext('2d');
+  doodleState.current = null;
+  doodleState.pending = [];
+  doodleState.strokes = [];
+
+  // Author tag: shown briefly when remote strokes arrive
+  const stage = board.querySelector('.db-stage');
+  if (stage && !stage.querySelector('.db-author')) {
+    const tag = document.createElement('div');
+    tag.className = 'db-author';
+    stage.appendChild(tag);
+  }
+
+  // Size canvas to its CSS box (high-DPI aware) and redraw whenever it changes
+  resizeDoodleCanvas();
+  redrawDoodles();
+  if (typeof ResizeObserver !== 'undefined') {
+    doodleState.resizeObs = new ResizeObserver(() => {
+      resizeDoodleCanvas();
+      redrawDoodles();
+    });
+    doodleState.resizeObs.observe(canvas);
+  }
+
+  // Tool wiring — colors
+  board.querySelectorAll('.db-color').forEach(btn => {
+    btn.style.setProperty('--c', btn.dataset.color);
+    btn.addEventListener('click', () => {
+      doodleState.color = btn.dataset.color;
+      board.querySelectorAll('.db-color').forEach(b => b.classList.toggle('is-active', b === btn));
+    });
+  });
+  // Sizes
+  board.querySelectorAll('.db-size').forEach(btn => {
+    btn.addEventListener('click', () => {
+      doodleState.width = parseFloat(btn.dataset.w);
+      board.querySelectorAll('.db-size').forEach(b => b.classList.toggle('is-active', b === btn));
+    });
+  });
+  // Clear all
+  const clearBtn = board.querySelector('.db-clear');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', async () => {
+      if (!confirm('¿Borrar todo el dibujo? Esta acción no se puede deshacer.')) return;
+      try {
+        await supabase.from('doodles').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+        doodleState.strokes = [];
+        doodleState.pending = [];
+        redrawDoodles();
+      } catch (e) {
+        console.error('doodle clear', e);
+        alert('No se pudo borrar el dibujo: ' + (e.message || e));
+      }
+    });
+  }
+
+  // Pointer events. Use Pointer Events API for unified mouse/touch/pen.
+  canvas.addEventListener('pointerdown', onDoodlePointerDown);
+  canvas.addEventListener('pointermove', onDoodlePointerMove);
+  canvas.addEventListener('pointerup', onDoodlePointerUp);
+  canvas.addEventListener('pointercancel', onDoodlePointerUp);
+
+  // Initial load + light polling so the other person's strokes show up
+  loadDoodles();
+  doodleState.pollTimer = setInterval(loadDoodles, 2500);
+}
+
+function resizeDoodleCanvas() {
+  const c = doodleState.canvas;
+  if (!c) return;
+  const dpr = window.devicePixelRatio || 1;
+  const rect = c.getBoundingClientRect();
+  const w = Math.max(1, Math.floor(rect.width * dpr));
+  const h = Math.max(1, Math.floor(rect.height * dpr));
+  if (c.width !== w) c.width = w;
+  if (c.height !== h) c.height = h;
+  doodleState.dpr = dpr;
+}
+
+async function loadDoodles() {
+  try {
+    const { data, error } = await supabase
+      .from('doodles')
+      .select('*')
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+    if (!data) return;
+    // Only redraw if the set changed (compare ids)
+    const old = doodleState.strokes;
+    let changed = data.length !== old.length;
+    if (!changed) {
+      for (let i = 0; i < data.length; i++) {
+        if (data[i].id !== old[i].id) { changed = true; break; }
+      }
+    }
+    if (changed) {
+      // Flash the author tag if a new stroke arrived from the OTHER user
+      const newLast = data[data.length - 1];
+      const prevLast = old[old.length - 1];
+      if (newLast && (!prevLast || prevLast.id !== newLast.id) && newLast.author !== state.currentUser) {
+        flashDoodleAuthor(newLast.author);
+      }
+      doodleState.strokes = data;
+      // Drop any pending strokes that have now been confirmed by the server
+      const confirmedKeys = new Set(data.map(s => `${s.author}|${s.created_at}`));
+      doodleState.pending = doodleState.pending.filter(p => !confirmedKeys.has(`${p.author}|${p.created_at}`));
+      redrawDoodles();
+    }
+  } catch (e) { console.error('doodle load', e); }
+}
+
+function flashDoodleAuthor(name) {
+  const tag = document.querySelector('#doodle-board .db-author');
+  if (!tag) return;
+  tag.textContent = `${name} dibujando`;
+  tag.classList.add('show');
+  if (doodleState.authorTagTimer) clearTimeout(doodleState.authorTagTimer);
+  doodleState.authorTagTimer = setTimeout(() => tag.classList.remove('show'), 1800);
+}
+
+function redrawDoodles() {
+  const ctx = doodleState.ctx;
+  const c = doodleState.canvas;
+  if (!ctx || !c) return;
+  ctx.clearRect(0, 0, c.width, c.height);
+  // Persisted strokes
+  for (const s of doodleState.strokes) drawStroke(s);
+  // Local optimistic strokes (not yet confirmed)
+  for (const s of doodleState.pending) drawStroke(s);
+  // Stroke currently being drawn
+  if (doodleState.current) drawStroke(doodleState.current);
+}
+
+function drawStroke(s) {
+  const pts = s.points;
+  if (!pts || pts.length === 0) return;
+  const ctx = doodleState.ctx;
+  const w = doodleState.canvas.width;
+  const h = doodleState.canvas.height;
+  const lineW = Math.max(0.5, (s.width || 3)) * doodleState.dpr;
+  ctx.save();
+  ctx.strokeStyle = s.color || '#ffffff';
+  ctx.fillStyle = s.color || '#ffffff';
+  ctx.lineWidth = lineW;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  if (pts.length === 1) {
+    // Single tap → small dot
+    ctx.beginPath();
+    ctx.arc(pts[0][0] * w, pts[0][1] * h, lineW / 2, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0] * w, pts[0][1] * h);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0] * w, pts[i][1] * h);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function doodleEventToNormalized(e) {
+  const rect = doodleState.canvas.getBoundingClientRect();
+  return [
+    (e.clientX - rect.left) / rect.width,
+    (e.clientY - rect.top) / rect.height,
+  ];
+}
+
+function onDoodlePointerDown(e) {
+  if (!doodleState.canvas) return;
+  e.preventDefault();
+  try { doodleState.canvas.setPointerCapture(e.pointerId); } catch {}
+  const pt = doodleEventToNormalized(e);
+  doodleState.current = {
+    author: state.currentUser,
+    color: doodleState.color,
+    width: doodleState.width,
+    points: [pt],
+  };
+  redrawDoodles();
+}
+
+function onDoodlePointerMove(e) {
+  if (!doodleState.current) return;
+  e.preventDefault();
+  const pt = doodleEventToNormalized(e);
+  const last = doodleState.current.points[doodleState.current.points.length - 1];
+  // Skip near-duplicate points to keep payload small
+  if (last && Math.abs(pt[0] - last[0]) < 0.001 && Math.abs(pt[1] - last[1]) < 0.001) return;
+  doodleState.current.points.push(pt);
+  redrawDoodles();
+}
+
+async function onDoodlePointerUp(e) {
+  if (!doodleState.current) return;
+  try { doodleState.canvas.releasePointerCapture(e.pointerId); } catch {}
+  const stroke = doodleState.current;
+  doodleState.current = null;
+  // Tag with a timestamp so we can match against the DB row when polling
+  stroke.created_at = new Date().toISOString();
+  // Optimistic local rendering until the insert confirms
+  doodleState.pending.push(stroke);
+  redrawDoodles();
+  try {
+    const { data, error } = await supabase.from('doodles').insert({
+      author: stroke.author,
+      color: stroke.color,
+      width: stroke.width,
+      points: stroke.points,
+    }).select().single();
+    if (error) throw error;
+    // Append directly to strokes so we don't wait for the next poll
+    doodleState.strokes.push(data);
+    doodleState.pending = doodleState.pending.filter(p => p !== stroke);
+    redrawDoodles();
+  } catch (err) {
+    console.error('doodle save', err);
+    // Leave the pending stroke visible so the user doesn't lose their drawing.
+  }
 }
 
 // ============================================================

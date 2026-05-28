@@ -1432,6 +1432,118 @@ dialog.lightbox .lightbox-cap {
 .chat-widget .chat-input button:hover { background: var(--accent-hover); }
 .chat-widget .chat-input button:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* ======== Garabatos (collaborative drawing board) ======== */
+.doodle-board {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  flex: 1 1 auto; min-height: 0;
+}
+.col-right .doodle-board {
+  /* Same sizing tactic as the chat — fills the remaining viewport space */
+  flex: 1 1 auto; min-height: 180px;
+}
+.doodle-board .db-head {
+  padding: 0.45rem 0.55rem 0.45rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 0.5rem;
+  flex-shrink: 0; flex-wrap: wrap;
+}
+.doodle-board .db-title {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  font-size: 0.9rem; font-weight: 600;
+}
+.doodle-board .db-title .material-symbols-outlined {
+  font-size: 18px; color: var(--accent);
+}
+.doodle-board .db-tools {
+  margin-left: auto;
+  display: inline-flex; align-items: center; gap: 0.22rem;
+  flex-wrap: wrap;
+}
+.doodle-board .db-color {
+  width: 20px; height: 20px;
+  border-radius: 999px;
+  background: var(--c, var(--accent));
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+}
+.doodle-board .db-color:hover { transform: scale(1.1); }
+.doodle-board .db-color.is-active {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--text);
+}
+.doodle-board .db-divider {
+  width: 1px; height: 18px;
+  background: var(--border);
+  margin: 0 0.2rem;
+}
+.doodle-board .db-size {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  width: 26px; height: 26px;
+  border-radius: 6px;
+  display: grid; place-items: center;
+  padding: 0;
+  color: var(--text);
+}
+.doodle-board .db-size:hover { background: var(--surface-alt); }
+.doodle-board .db-size.is-active { background: var(--surface-alt); }
+.doodle-board .db-size .db-dot {
+  display: inline-block; border-radius: 999px; background: currentColor;
+}
+.doodle-board .db-size .db-dot-sm { width: 4px; height: 4px; }
+.doodle-board .db-size .db-dot-md { width: 7px; height: 7px; }
+.doodle-board .db-size .db-dot-lg { width: 11px; height: 11px; }
+.doodle-board .db-clear {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  width: 26px; height: 26px;
+  border-radius: 6px;
+  display: grid; place-items: center;
+  color: var(--text-dim);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.doodle-board .db-clear:hover {
+  color: var(--danger);
+  background: rgba(255, 107, 107, 0.12);
+}
+.doodle-board .db-clear .material-symbols-outlined { font-size: 18px; }
+/* Stage: holds the canvas. The canvas fills the stage exactly so we
+   can measure its CSS dimensions in JS. */
+.doodle-board .db-stage {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  background:
+    radial-gradient(at 30% 20%, rgba(214, 255, 58, 0.05), transparent 50%),
+    radial-gradient(at 80% 80%, rgba(122, 78, 216, 0.05), transparent 50%),
+    var(--surface);
+}
+.doodle-board .db-stage canvas {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  display: block;
+  cursor: crosshair;
+  touch-action: none;
+}
+/* Tiny author tag that fades in when someone else is drawing */
+.doodle-board .db-author {
+  position: absolute; left: 10px; bottom: 10px;
+  background: rgba(0, 0, 0, 0.55); color: white;
+  padding: 0.15rem 0.55rem; border-radius: 999px;
+  font-size: 0.7rem; pointer-events: none;
+  opacity: 0; transition: opacity 0.3s ease;
+}
+.doodle-board .db-author.show { opacity: 1; }
+
 /* ======== Movie card / stars ======== */
 .movie-card { padding: 0; overflow: hidden; }
 .movie-card .poster-wrap {
