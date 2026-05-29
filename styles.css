@@ -450,6 +450,10 @@ nav.menu a .m-icon { font-size: 20px; width: 22px; text-align: center; }
 .card.note-card .pin-card-btn:hover { color: var(--text); background: var(--border); }
 .card.note-card.pinned .pin-card-btn { background: var(--accent); color: var(--on-accent); border-color: transparent; opacity: 1; }
 .card.note-card .pin-card-btn .material-symbols-outlined { font-size: 18px; }
+/* Reserve room for the absolutely-positioned pin button so the tag row
+   doesn't scroll under it. The button is 30px + 8px right inset + a
+   small gap. */
+.card.note-card .body .tag-row { padding-right: 42px; }
 .page-head {
   display: flex; align-items: baseline; justify-content: space-between;
   flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;
@@ -1285,12 +1289,31 @@ textarea.content-plain:focus { border-color: var(--accent); background: var(--su
 }
 .note-checklist:empty { margin: 0; }
 .note-checklist .cl-row {
-  display: flex; align-items: center; gap: 0.5rem;
+  display: flex; align-items: center; gap: 0.45rem;
   padding: 0.3rem 0.45rem;
   border-radius: 8px;
-  transition: background 0.12s ease;
+  transition: background 0.12s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
 .note-checklist .cl-row:hover { background: var(--surface-alt); }
+.note-checklist .cl-row.cl-dragging {
+  opacity: 0.55;
+  background: var(--surface-alt);
+}
+.note-checklist .cl-row.cl-drop-target {
+  background: var(--surface-alt);
+  box-shadow: 0 -2px 0 var(--accent) inset;
+}
+.note-checklist .cl-grip {
+  cursor: grab;
+  color: var(--text-dim);
+  display: grid; place-items: center;
+  width: 22px; height: 28px;
+  flex-shrink: 0;
+  touch-action: none;
+}
+.note-checklist .cl-grip:hover { color: var(--text); }
+.note-checklist .cl-grip:active { cursor: grabbing; }
+.note-checklist .cl-grip .material-symbols-outlined { font-size: 18px; }
 .note-checklist .cl-check {
   background: transparent; border: 0; cursor: pointer;
   color: var(--text-dim);

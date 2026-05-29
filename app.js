@@ -2873,7 +2873,12 @@ function renderNoteChecklist() {
   noteDraft.checklist.forEach((item, i) => {
     const row = document.createElement('div');
     row.className = 'cl-row';
+    row.draggable = true;
+    row.dataset.index = String(i);
     row.innerHTML = `
+      <span class="cl-grip" aria-label="Arrastrar para reordenar" title="Arrastrar para reordenar">
+        <span class="material-symbols-outlined">drag_indicator</span>
+      </span>
       <button class="cl-check ${item.done ? 'is-done' : ''}" type="button" aria-label="${item.done ? 'Marcar como pendiente' : 'Marcar como hecho'}">
         <span class="material-symbols-outlined">${item.done ? 'check_box' : 'check_box_outline_blank'}</span>
       </button>
@@ -2885,6 +2890,67 @@ function renderNoteChecklist() {
     const check = row.querySelector('.cl-check');
     const text = row.querySelector('.cl-text');
     const del = row.querySelector('.cl-del');
+    const grip = row.querySelector('.cl-grip');
+    // Only the grip should initiate native HTML5 drag — otherwise the
+    // user can't select text inside the input.
+    row.addEventListener('dragstart', (e) => {
+      if (!grip.contains(e.target)) { e.preventDefault(); return; }
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(i));
+      row.classList.add('cl-dragging');
+    });
+    row.addEventListener('dragend', () => row.classList.remove('cl-dragging'));
+    row.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      row.classList.add('cl-drop-target');
+    });
+    row.addEventListener('dragleave', () => row.classList.remove('cl-drop-target'));
+    row.addEventListener('drop', (e) => {
+      e.preventDefault();
+      row.classList.remove('cl-drop-target');
+      const from = Number(e.dataTransfer.getData('text/plain'));
+      const to = Number(row.dataset.index);
+      if (Number.isNaN(from) || Number.isNaN(to) || from === to) return;
+      const [moved] = noteDraft.checklist.splice(from, 1);
+      noteDraft.checklist.splice(to, 0, moved);
+      renderNoteChecklist();
+    });
+    // Touch reordering: long-press on the grip starts a drag-like move.
+    let touchDragFrom = null;
+    grip.addEventListener('touchstart', (e) => {
+      e.stopPropagation();
+      touchDragFrom = i;
+      row.classList.add('cl-dragging');
+    }, { passive: true });
+    grip.addEventListener('touchmove', (e) => {
+      if (touchDragFrom == null) return;
+      e.preventDefault();
+      const t = e.touches[0];
+      // Find the row under the touch
+      const el = document.elementFromPoint(t.clientX, t.clientY);
+      const target = el?.closest('.cl-row');
+      $$('#note-checklist .cl-row').forEach(r => r.classList.toggle('cl-drop-target', r === target && r !== row));
+    }, { passive: false });
+    grip.addEventListener('touchend', (e) => {
+      if (touchDragFrom == null) return;
+      const t = (e.changedTouches && e.changedTouches[0]) || null;
+      $$('#note-checklist .cl-row').forEach(r => r.classList.remove('cl-drop-target'));
+      row.classList.remove('cl-dragging');
+      if (t) {
+        const el = document.elementFromPoint(t.clientX, t.clientY);
+        const target = el?.closest('.cl-row');
+        if (target && target !== row) {
+          const to = Number(target.dataset.index);
+          if (!Number.isNaN(to)) {
+            const [moved] = noteDraft.checklist.splice(touchDragFrom, 1);
+            noteDraft.checklist.splice(to, 0, moved);
+            renderNoteChecklist();
+          }
+        }
+      }
+      touchDragFrom = null;
+    });
     check.addEventListener('click', () => {
       noteDraft.checklist[i].done = !noteDraft.checklist[i].done;
       renderNoteChecklist();
@@ -3701,7 +3767,10 @@ $('#place-delete').addEventListener('click', async () => {
 $$('dialog.modal').forEach(dlg => {
   dlg.addEventListener('click', (e) => {
     if (e.target === dlg) dlg.close();
-    if (e.target.matches('[data-close]')) dlg.close();
+    // Use closest() instead of matches() so clicks on the icon inside
+    // the close button (e.g. <span class="material-symbols-outlined">)
+    // still trigger the close.
+    if (e.target.closest('[data-close]')) dlg.close();
   });
 });
 
