@@ -317,7 +317,9 @@ function parseMediaUrl(rawUrl) {
   return null;
 }
 
-// Try to fetch a title via oEmbed (best-effort)
+// Try to fetch a title via oEmbed (best-effort). For Spotify, we
+// additionally hit our `spotify-info` edge function because Spotify's
+// own oEmbed doesn't return the artist.
 async function fetchOembedTitle(parsed) {
   if (!parsed) return null;
   try {
@@ -327,13 +329,24 @@ async function fetchOembedTitle(parsed) {
     const res = await fetch(target);
     if (!res.ok) return null;
     const json = await res.json();
-    return {
+    const result = {
       title: json.title || null,
       thumbnail: json.thumbnail_url || null,
-      // For YouTube this is the channel name (usually the artist). For
-      // Spotify the oembed doesn't return author info, so this is null.
+      // For YouTube this is the channel name (usually the artist).
       author: json.author_name || null,
     };
+    if (parsed.kind === 'spotify') {
+      // Fall back to the edge function for the artist
+      try {
+        const u = `https://vmdsibzivcugjidtkhzt.supabase.co/functions/v1/spotify-info?url=${encodeURIComponent(parsed.normalizedUrl)}`;
+        const sres = await fetch(u);
+        if (sres.ok) {
+          const sjson = await sres.json();
+          if (sjson?.artist && !result.author) result.author = sjson.artist;
+        }
+      } catch {}
+    }
+    return result;
   } catch {
     return null;
   }
@@ -645,6 +658,12 @@ let backfillRan = false;
 async function backfillMediaThumbnails() {
   if (backfillRan) return;
   backfillRan = true;
+  // Bump this when the backfill logic changes (e.g., new sources for
+  // missing artists) so it re-runs once per client.
+  const BACKFILL_VERSION = 'v2-spotify-artist';
+  try {
+    if (localStorage.getItem('medusas:media-backfill') === BACKFILL_VERSION) return;
+  } catch {}
   // Anything that's missing a thumbnail OR an artist gets a fetch.
   const needs = state.media.filter(m => !m.thumbnail_url || !m.artist);
   if (!needs.length) return;
@@ -670,6 +689,7 @@ async function backfillMediaThumbnails() {
       anyChanged = true;
     }
   }
+  try { localStorage.setItem('medusas:media-backfill', BACKFILL_VERSION); } catch {}
   // Re-render current view to show the new thumbnails / titles
   if (anyChanged && (state.route === '#/musica' || state.route === '#/inicio')) {
     router();
@@ -4296,14 +4316,28 @@ function renderNotifList() {
 // ============================================================
 function renderPelis(root) {
   const filterTag = state.filterTag.pelis;
+  // A filter chip can be either a tag ("serie", "peli", "documental"…)
+  // or a platform ("Netflix", "HBO Max"…). We prefix platforms with
+  // "p:" internally so the two namespaces don't collide.
+  const isPlatformFilter = filterTag && filterTag.startsWith('p:');
+  const activePlatform = isPlatformFilter ? filterTag.slice(2) : null;
+  const activeTag = !isPlatformFilter ? filterTag : null;
   const items = filterTag
-    ? state.movies.filter(m => Array.isArray(m.tags) && m.tags.includes(filterTag))
+    ? state.movies.filter(m => activePlatform
+        ? (m.platform || '').trim() === activePlatform
+        : (Array.isArray(m.tags) && m.tags.includes(activeTag)))
     : state.movies;
 
-  // Tags across all movies for the filter row
+  // Build counts for tags + platforms combined into a single ordered list
   const tagCounts = new Map();
   state.movies.forEach(m => (m.tags || []).forEach(t => tagCounts.set(t, (tagCounts.get(t) || 0) + 1)));
   const sortedTags = Array.from(tagCounts.entries()).sort((a, b) => b[1] - a[1]);
+  const platformCounts = new Map();
+  state.movies.forEach(m => {
+    const pl = (m.platform || '').trim();
+    if (pl) platformCounts.set(pl, (platformCounts.get(pl) || 0) + 1);
+  });
+  const sortedPlatforms = Array.from(platformCounts.entries()).sort((a, b) => b[1] - a[1]);
 
   root.innerHTML = `
     <div class="page-head">
@@ -4315,12 +4349,17 @@ function renderPelis(root) {
         <button class="btn primary" id="new-movie-btn">+ Nueva peli</button>
       </div>
     </div>
-    ${sortedTags.length ? `
+    ${(sortedTags.length || sortedPlatforms.length) ? `
       <div class="tag-filter-row" id="pelis-tag-filter">
         <button class="tag-chip tag-chip-all ${!filterTag ? 'active' : ''}" data-tag="">Todas</button>
         ${sortedTags.map(([tag, count]) => `
-          <button class="tag-chip ${filterTag === tag ? 'active' : ''}" data-tag="${escapeHtml(tag)}" style="--tag-color: ${tagColor(tag)};">
+          <button class="tag-chip ${activeTag === tag ? 'active' : ''}" data-tag="${escapeHtml(tag)}" style="--tag-color: ${tagColor(tag)};">
             #${escapeHtml(tag)} <span class="count">${count}</span>
+          </button>
+        `).join('')}
+        ${sortedPlatforms.map(([pl, count]) => `
+          <button class="tag-chip ${activePlatform === pl ? 'active' : ''}" data-tag="p:${escapeHtml(pl)}" style="--tag-color: ${tagColor(pl)};">
+            ${escapeHtml(pl)} <span class="count">${count}</span>
           </button>
         `).join('')}
       </div>
@@ -4339,8 +4378,9 @@ function renderPelis(root) {
   }
   const grid = $('#movies-grid');
   if (!items.length) {
+    const label = activePlatform || (activeTag ? `#${activeTag}` : '');
     grid.innerHTML = filterTag
-      ? `<div class="empty">Nada con la etiqueta #${escapeHtml(filterTag)}.</div>`
+      ? `<div class="empty">Nada para ${escapeHtml(label)}.</div>`
       : '<div class="empty">Aún no hay pelis. Añade la primera con el botón.</div>';
     return;
   }
