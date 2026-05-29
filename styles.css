@@ -740,14 +740,19 @@ button.btn.pin-toggle.is-pinned {
 .postit-board-wrap {
   width: 100%;
   overflow: hidden;
-  height: calc(360px * var(--pb-scale, 1));
+  /* Wrapper height = design height × Y scale. JS sets both vars. */
+  height: calc(360px * var(--pb-scale-y, var(--pb-scale, 1)));
 }
 .postit-board-wrap > .postit-board {
   position: relative;
   width: 520px;
   height: 360px;
   transform-origin: top left;
-  transform: scale(var(--pb-scale, 1));
+  /* Non-uniform on mobile (Y squished a touch); uniform on desktop. */
+  transform: scale(
+    var(--pb-scale-x, var(--pb-scale, 1)),
+    var(--pb-scale-y, var(--pb-scale, 1))
+  );
   background: transparent;
   border: 0;
   border-radius: 0;

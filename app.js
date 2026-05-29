@@ -3446,6 +3446,14 @@ function lbNav(delta) {
 $('#lb-prev').addEventListener('click', (e) => { e.stopPropagation(); lbNav(-1); });
 $('#lb-next').addEventListener('click', (e) => { e.stopPropagation(); lbNav(1); });
 $('#lb-close').addEventListener('click', (e) => { e.stopPropagation(); dlgLightbox.close(); });
+// Click anywhere outside the photo (the dim backdrop or the empty stage
+// area) to close. Clicks on the img itself or the toolbar buttons keep
+// the lightbox open thanks to their stopPropagation handlers.
+dlgLightbox.addEventListener('click', (e) => {
+  if (e.target === dlgLightbox || e.target.id === 'lb-stage') {
+    dlgLightbox.close();
+  }
+});
 
 $('#lb-pin').addEventListener('click', async (e) => {
   e.stopPropagation();
@@ -4316,13 +4324,16 @@ function setupPostitBoardScale() {
   const apply = () => {
     const w = wrap.clientWidth || wrap.offsetWidth || 0;
     if (!w) return;
-    // On mobile we apply an extra shrink factor so the board takes up
-    // less vertical space (per user request — easier to fit alongside
-    // the photo widget + the rest of the dashboard).
+    // X-axis fills the container at every breakpoint (no width shrink).
+    // Y-axis takes the same scale on desktop but is squished a bit on
+    // mobile so the board takes less vertical real estate. Non-uniform
+    // scale slightly squishes postits vertically — acceptable trade-off
+    // for the user (they want full width but shorter board).
+    const scaleX = Math.min(1, w / POSTIT_DESIGN_W);
     const isMobile = window.innerWidth <= 760;
-    const shrink = isMobile ? 0.67 : 1;
-    const scale = Math.min(1, w / POSTIT_DESIGN_W) * shrink;
-    wrap.style.setProperty('--pb-scale', String(scale));
+    const scaleY = isMobile ? scaleX * 0.72 : scaleX;
+    wrap.style.setProperty('--pb-scale-x', String(scaleX));
+    wrap.style.setProperty('--pb-scale-y', String(scaleY));
   };
   apply();
   if (postitScaleObserver) { try { postitScaleObserver.disconnect(); } catch {} postitScaleObserver = null; }
@@ -4333,18 +4344,7 @@ function setupPostitBoardScale() {
   // Re-apply on viewport breakpoint changes (mobile ↔ desktop)
   if (!window._pbBreakpointWired) {
     window._pbBreakpointWired = true;
-    window.addEventListener('resize', () => {
-      const w = document.querySelector('.postit-board-wrap');
-      if (w) {
-        const wpx = w.clientWidth || w.offsetWidth || 0;
-        if (wpx) {
-          const isMobile = window.innerWidth <= 760;
-          const shrink = isMobile ? 0.67 : 1;
-          const scale = Math.min(1, wpx / POSTIT_DESIGN_W) * shrink;
-          w.style.setProperty('--pb-scale', String(scale));
-        }
-      }
-    });
+    window.addEventListener('resize', apply);
   }
 }
 // Bring this post-it to the top of the stacking order. We bump a local
@@ -4560,9 +4560,10 @@ function startDrag(el, p, evt) {
   const renderedRect = board.getBoundingClientRect(); // post-transform screen coords
   const layoutW = board.offsetWidth;                  // pre-transform (unscaled)
   const layoutH = board.offsetHeight;
-  // If the board is scaled (e.g. on mobile), we need to map screen-px
-  // mouse movement back to layout-px positions for el.style.left/top.
-  const scale = layoutW > 0 ? renderedRect.width / layoutW : 1;
+  // Independent X/Y scale factors — on mobile the Y axis is squished a
+  // bit. Translate screen-px deltas to layout-px via each axis.
+  const scaleX = layoutW > 0 ? renderedRect.width / layoutW : 1;
+  const scaleY = layoutH > 0 ? renderedRect.height / layoutH : 1;
   const elRect = el.getBoundingClientRect();
   const offsetX = evt.clientX - elRect.left;
   const offsetY = evt.clientY - elRect.top;
@@ -4575,9 +4576,9 @@ function startDrag(el, p, evt) {
     const pos = e.touches ? e.touches[0] : e;
     const newXScreen = pos.clientX - renderedRect.left - offsetX;
     const newYScreen = pos.clientY - renderedRect.top - offsetY;
-    // Convert to layout pixels
-    const newX = newXScreen / scale;
-    const newY = newYScreen / scale;
+    // Convert to layout pixels (each axis independent)
+    const newX = newXScreen / scaleX;
+    const newY = newYScreen / scaleY;
     // Clamp inside the board (layout coords)
     const clampedX = Math.max(0, Math.min(layoutW - POSTIT_W, newX));
     const clampedY = Math.max(0, Math.min(layoutH - POSTIT_H, newY));
