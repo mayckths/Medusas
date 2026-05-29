@@ -2799,6 +2799,9 @@ function openNoteEditor(note) {
   $('#note-delete').hidden = !note;
   dlgNote.showModal();
   setTimeout(() => $('#note-title-input').focus(), 0);
+  // Size the body textarea to fit its content. Capped to ~70vh via CSS
+  // so long notes don't force a tiny textbox with internal scroll.
+  requestAnimationFrame(() => autoGrowTextarea($('#note-plain')));
 
   if (note && isUnread(note)) markSeen('notes', note);
 }
@@ -2825,6 +2828,26 @@ function renderNoteLinkChips() {
     root.appendChild(chip);
   });
 }
+
+// Resize a <textarea> so its visible height matches the content height
+// (CSS max-height still caps it). Called when the note editor opens and
+// on every keystroke so long notes don't trap the user in a small box.
+function autoGrowTextarea(textarea) {
+  if (!textarea) return;
+  textarea.style.height = 'auto';
+  const target = textarea.scrollHeight;
+  // Add a tiny buffer to avoid an unnecessary scrollbar on browsers
+  // that round scrollHeight oddly.
+  textarea.style.height = (target + 2) + 'px';
+}
+
+// Wire the auto-grow listener once on the live textarea (idempotent).
+(function wireNoteTextareaAutoGrow() {
+  const ta = document.getElementById('note-plain');
+  if (!ta || ta.dataset.autogrow) return;
+  ta.dataset.autogrow = '1';
+  ta.addEventListener('input', () => autoGrowTextarea(ta));
+})();
 
 function renderNoteImagePreviews() {
   const root = $('#note-images');

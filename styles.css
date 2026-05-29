@@ -1206,10 +1206,22 @@ dialog.ui-dialog .ui-prompt-input:focus {
 }
 .modal-inner input.title::placeholder { color: var(--text-dim); }
 textarea.content-plain {
-  width: 100%; min-height: 120px; max-height: 50vh; resize: vertical;
-  border: 1px solid var(--border); background: var(--surface-alt); color: var(--text);
-  font-family: inherit; font-size: 0.95rem; padding: 0.5rem 0.65rem; outline: none;
+  width: 100%;
+  /* Auto-grows via JS to fit content. The CSS bounds cap it: bigger
+     minimum so even an empty note doesn't feel cramped, and a generous
+     max so long notes don't force scrolling inside a tiny textbox. */
+  min-height: 140px;
+  max-height: 70vh;
+  resize: vertical;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.95rem;
+  padding: 0.5rem 0.65rem;
+  outline: none;
   border-radius: 8px;
+  line-height: 1.5;
 }
 textarea.content-plain:focus { border-color: var(--accent); background: var(--surface); }
 
