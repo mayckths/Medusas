@@ -924,7 +924,7 @@ if (!window._medusasColResizeWired) {
 // Relationship stats widget — 4 little cards above the dashboard
 // columns that show photos, notes, months together and shared movies.
 // ============================================================
-const RELATIONSHIP_START = new Date(2025, 3, 25); // April 25, 2025
+const RELATIONSHIP_START = new Date(2026, 3, 25); // April 25, 2026
 
 function monthsSince(start) {
   const now = new Date();
@@ -949,16 +949,23 @@ function moviesWatchedTogether() {
   }).length;
 }
 
+function countCheckedItems() {
+  return state.notes.reduce((sum, n) => {
+    if (!Array.isArray(n.checklist)) return sum;
+    return sum + n.checklist.filter(it => it && it.done).length;
+  }, 0);
+}
+
 function renderRelationshipStats() {
-  const photos = state.photos.length;
-  const notes = state.notes.length;
+  const featuredPhotos = state.photos.filter(p => p.featured).length;
+  const checkedGoals = countCheckedItems();
+  const seenTogether = moviesWatchedTogether();
   const months = monthsSince(RELATIONSHIP_START);
-  const seen = moviesWatchedTogether();
   const cards = [
-    { icon: 'image', label: 'Fotos', value: photos },
-    { icon: 'edit_note', label: 'Notas', value: notes },
+    { icon: 'star', label: 'Fotos destacadas', value: featuredPhotos },
+    { icon: 'check_circle', label: 'Metas checkeadas', value: checkedGoals },
+    { icon: 'movie', label: 'Pelis vistas por ambos', value: seenTogether },
     { icon: 'favorite', label: 'Meses juntos', value: months },
-    { icon: 'movie', label: 'Pelis vistas', value: seen },
   ];
   return `
     <div class="stats-widget">
@@ -1117,7 +1124,7 @@ function setupPhotoWidget() {
       ${pool.map((p, i) =>
         `<img src="${escapeHtml(publicImageUrl(p.storage_path))}" alt="${escapeHtml(p.caption || '')}" class="${i === 0 ? 'active' : ''}" loading="lazy" />`
       ).join('')}
-      <div class="pw-dots">${modeLabel} · ${pool.length}</div>
+      <div class="pw-dots">${modeLabel}</div>
       ${pool[0].caption ? `<div class="pw-cap" id="pw-cap">${escapeHtml(pool[0].caption)}</div>` : '<div class="pw-cap" id="pw-cap" hidden></div>'}
     </div>
     ${menuHtml}
