@@ -423,24 +423,18 @@ nav.menu a .m-icon { font-size: 20px; width: 22px; text-align: center; }
 }
 .note-icon-row .status { margin-left: auto; }
 
-/* Pin/unpin micro-animation: the source card shrinks + fades out, then
-   on the next render the new card "arrives" with a scale-in. */
-@keyframes pin-shrink {
-  from { transform: scale(1); opacity: 1; }
-  to   { transform: scale(0.72); opacity: 0; }
+/* Pin/unpin animation now uses the browser's View Transitions API
+   (see togglePinWithTransition in app.js). Cards glide between their
+   old and new positions without disappearing. */
+::view-transition-group(*) { animation-duration: 320ms; }
+::view-transition-old(*) {
+  animation: ui-fade-out 220ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
-@keyframes pin-arrive {
-  from { transform: scale(0.72); opacity: 0; }
-  to   { transform: scale(1); opacity: 1; }
+::view-transition-new(*) {
+  animation: ui-fade-in 280ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
-.card.note-card.is-pinning {
-  animation: pin-shrink 220ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
-  pointer-events: none;
-}
-.card.note-card.just-pinned {
-  animation: pin-arrive 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
-  transform-origin: center;
-}
+@keyframes ui-fade-out { to { opacity: 0; } }
+@keyframes ui-fade-in { from { opacity: 0; } }
 
 /* Pin icon overlay on note cards */
 .card.note-card .pin-card-btn {
@@ -450,7 +444,9 @@ nav.menu a .m-icon { font-size: 20px; width: 22px; text-align: center; }
   display: grid; place-items: center; padding: 0;
   opacity: 0; transition: opacity 0.12s ease;
 }
+.card.note-card .pin-card-btn { opacity: 0.7; }
 .card.note-card:hover .pin-card-btn, .card.note-card.pinned .pin-card-btn { opacity: 1; }
+@media (hover: none) { .card.note-card .pin-card-btn { opacity: 1; } }
 .card.note-card .pin-card-btn:hover { color: var(--text); background: var(--border); }
 .card.note-card.pinned .pin-card-btn { background: var(--accent); color: var(--on-accent); border-color: transparent; opacity: 1; }
 .card.note-card .pin-card-btn .material-symbols-outlined { font-size: 18px; }
@@ -629,9 +625,11 @@ button.btn.pin-toggle.is-pinned {
 }
 .card .card-actions {
   position: absolute; top: 8px; right: 8px; display: flex; gap: 0.2rem;
-  opacity: 0; transition: opacity 0.12s ease;
+  opacity: 0.7;
+  transition: opacity 0.12s ease;
 }
 .card:hover .card-actions, .card.pinned .card-actions { opacity: 1; }
+@media (hover: none) { .card .card-actions { opacity: 1; } }
 .card .card-actions button {
   background: var(--surface-alt); border: 1px solid var(--border); border-radius: 6px;
   width: 28px; height: 28px; padding: 0; cursor: pointer; color: var(--text-dim);
@@ -1228,6 +1226,94 @@ textarea.content-plain:focus { border-color: var(--accent); background: var(--su
 .chip a { color: var(--accent-2); text-decoration: none; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip button { background: transparent; border: 0; color: var(--text-dim); cursor: pointer; font-size: 0.9rem; padding: 0 0.1rem; }
 .chip button:hover { color: var(--danger); }
+/* ======== Note checklist editor (inside dlg-note) ======== */
+.note-checklist {
+  display: flex; flex-direction: column; gap: 0.25rem;
+  margin: 0.4rem 0;
+}
+.note-checklist:empty { margin: 0; }
+.note-checklist .cl-row {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.3rem 0.45rem;
+  border-radius: 8px;
+  transition: background 0.12s ease;
+}
+.note-checklist .cl-row:hover { background: var(--surface-alt); }
+.note-checklist .cl-check {
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--text-dim);
+  display: grid; place-items: center;
+  width: 28px; height: 28px;
+  padding: 0; border-radius: 6px;
+}
+.note-checklist .cl-check:hover { color: var(--text); background: var(--border); }
+.note-checklist .cl-check.is-done { color: var(--accent); }
+.note-checklist .cl-check .material-symbols-outlined { font-size: 22px; }
+.note-checklist .cl-text {
+  flex: 1; min-width: 0;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font-size: 0.95rem;
+  font-family: inherit;
+  outline: none;
+  padding: 0.2rem 0;
+}
+.note-checklist .cl-row.is-done .cl-text {
+  color: var(--text-dim);
+  text-decoration: line-through;
+}
+.note-checklist .cl-del {
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--text-dim);
+  width: 24px; height: 24px;
+  display: grid; place-items: center;
+  border-radius: 6px;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.note-checklist .cl-row:hover .cl-del { opacity: 1; }
+.note-checklist .cl-del:hover { color: var(--danger); background: rgba(255, 107, 107, 0.1); }
+.note-checklist .cl-del .material-symbols-outlined { font-size: 16px; }
+
+/* Checklist preview rendered on the note card */
+.card-checklist {
+  display: flex; flex-direction: column; gap: 0.15rem;
+  margin-top: 0.1rem;
+}
+.card-checklist .cl-pv {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-size: 0.85rem;
+}
+.card-checklist .cl-pv .cl-check {
+  background: transparent; border: 0; cursor: pointer;
+  color: var(--text-dim);
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  border-radius: 5px;
+  padding: 0;
+  flex-shrink: 0;
+}
+.card-checklist .cl-pv .cl-check:hover { background: var(--border); color: var(--text); }
+.card-checklist .cl-pv .cl-check.is-done { color: var(--accent); }
+.card-checklist .cl-pv .cl-check .material-symbols-outlined { font-size: 18px; }
+.card-checklist .cl-pv-text {
+  flex: 1; min-width: 0;
+  color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.card-checklist .cl-pv.is-done .cl-pv-text {
+  color: var(--text-dim);
+  text-decoration: line-through;
+}
+.card-checklist .cl-pv-more {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  padding-left: 1.6rem;
+  margin-top: 0.1rem;
+}
+
 .images-preview { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0; }
 .images-preview .thumb {
   position: relative; width: 80px; height: 80px; border-radius: 8px; overflow: hidden;
@@ -2117,18 +2203,31 @@ a.btn.icon-pill .material-symbols-outlined { font-size: 20px; }
 .bg-image-empty .material-symbols-outlined { font-size: 28px; }
 .bg-image-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 
-.tag-color-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
+.tag-color-list { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.5rem; }
+/* Tag pill on the left, controls on the right. No nested chip frame —
+   just a row with a hairline separator below. */
 .tag-color-row {
-  display: flex; align-items: center; gap: 0.6rem;
-  padding: 0.4rem 0.55rem; border: 1px solid var(--border); border-radius: 8px;
-  background: var(--surface-alt);
+  display: flex; align-items: center; gap: 0.55rem;
+  padding: 0.55rem 0.3rem;
+  border-bottom: 1px solid var(--border);
 }
-.tag-color-row .tag-chip-selected { padding: 0.2rem 0.7rem; }
+.tag-color-row:last-child { border-bottom: 0; }
+.tag-color-row .tag-chip-selected { padding: 0.25rem 0.75rem; }
+.tag-color-row .reset-tag { margin-left: 0; }
 .tag-color-row input[type=color] {
-  width: 38px; height: 32px; border-radius: 6px; border: 1px solid var(--border);
-  cursor: pointer; padding: 0; background: transparent;
+  margin-left: auto;
+  width: 30px; height: 30px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  cursor: pointer;
+  padding: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
 }
-.tag-color-row .btn { margin-left: auto; }
+.tag-color-row input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+.tag-color-row input[type=color]::-webkit-color-swatch { border-radius: 4px; border: 0; }
+.tag-color-row input[type=color]::-moz-color-swatch { border-radius: 4px; border: 0; }
 
 .asset-row {
   display: flex; gap: 1rem; align-items: center;

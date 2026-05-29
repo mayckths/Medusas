@@ -17,7 +17,7 @@
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
 
-    <link rel="stylesheet" href="./styles.css?v=20260528e" />
+    <link rel="stylesheet" href="./styles.css?v=20260528f" />
 
     <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>
@@ -148,12 +148,14 @@
         <div class="note-icon-row">
           <button class="icon-btn" id="note-add-link" title="Añadir enlace" type="button"><span class="material-symbols-outlined">link</span></button>
           <button class="icon-btn" id="note-add-image" title="Añadir imagen" type="button"><span class="material-symbols-outlined">image</span></button>
+          <button class="icon-btn" id="note-add-checklist" title="Añadir lista" type="button"><span class="material-symbols-outlined">check_box</span></button>
           <input type="file" id="note-image-input" accept="image/*" multiple hidden />
           <span class="status" id="note-status"></span>
         </div>
 
         <div class="chips" id="note-links"></div>
         <div class="images-preview" id="note-images"></div>
+        <div class="note-checklist" id="note-checklist"></div>
 
         <div class="tag-section">
           <div class="tags-selected" id="note-tags"></div>
@@ -431,6 +433,6 @@
       <div class="notif-list" id="notif-list"></div>
     </div>
 
-    <script type="module" src="./app.js?v=20260528e"></script>
+    <script type="module" src="./app.js?v=20260528f"></script>
   </body>
 </html>

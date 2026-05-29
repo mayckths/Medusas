@@ -38,6 +38,21 @@ function setStatus(el, msg, isError = false) {
   if (msg && !isError) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 2500);
 }
 
+// Make a UUID safe to use as a view-transition-name token (must be a CSS ident).
+function cssSafeId(id) { return String(id).replace(/[^a-zA-Z0-9_-]/g, '-'); }
+
+// Wrap a DOM mutation in the Browser's View Transitions API so list
+// reorders (e.g., pinning) animate smoothly instead of jumping. Cards
+// using `view-transition-name` will glide between their old and new
+// positions; cards that disappear/appear cross-fade.
+function togglePinWithTransition(mutator) {
+  if (typeof document.startViewTransition !== 'function') {
+    return mutator();
+  }
+  const t = document.startViewTransition(() => mutator());
+  return t.finished.catch(() => {});
+}
+
 // ============================================================
 // Custom alert / confirm modals (no native browser dialogs).
 // Both are async and return a promise — uiAlert resolves with no
@@ -1216,13 +1231,10 @@ function renderNoteCard(note) {
   const card = document.createElement('article');
   card.className = 'card clickable with-stripe note-card';
   card.dataset.id = note.id;
+  // Unique transition name so the browser can morph this card between
+  // positions when the list re-renders (e.g., on pin/unpin).
+  card.style.viewTransitionName = `note-${cssSafeId(note.id)}`;
   if (note.pinned) card.classList.add('pinned');
-  // If this card was just pinned (animation handoff from previous render),
-  // play the arrival animation.
-  if (state._justPinnedNoteId === note.id) {
-    card.classList.add('just-pinned');
-    delete state._justPinnedNoteId;
-  }
   const stripeColor = (note.tags && note.tags.length) ? tagColor(note.tags[0]) : 'var(--border)';
   card.style.setProperty('--stripe', stripeColor);
   card.setAttribute('role', 'button');
@@ -1243,15 +1255,11 @@ function renderNoteCard(note) {
   pinBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
     const next = !note.pinned;
-    note.pinned = next;
-    // Animate the shrink-out, then re-render with the just-pinned card
-    // playing the arrival animation at its new position.
-    card.classList.add('is-pinning');
-    if (next) state._justPinnedNoteId = note.id;
-    const persist = supabase.from('notes').update({ pinned: next }).eq('id', note.id);
-    await new Promise(r => setTimeout(r, 220));
-    await persist;
-    await router();
+    await togglePinWithTransition(async () => {
+      note.pinned = next;
+      await supabase.from('notes').update({ pinned: next }).eq('id', note.id);
+      await router();
+    });
   });
   card.appendChild(pinBtn);
 
@@ -1280,6 +1288,42 @@ function renderNoteCard(note) {
     p.className = 'preview';
     p.textContent = note.content;
     body.appendChild(p);
+  }
+
+  if (Array.isArray(note.checklist) && note.checklist.length) {
+    const cl = document.createElement('div');
+    cl.className = 'card-checklist';
+    note.checklist.slice(0, 4).forEach((it, idx) => {
+      const row = document.createElement('div');
+      row.className = `cl-pv ${it.done ? 'is-done' : ''}`;
+      row.innerHTML = `
+        <button class="cl-check ${it.done ? 'is-done' : ''}" type="button" aria-label="${it.done ? 'Marcar como pendiente' : 'Marcar como hecho'}">
+          <span class="material-symbols-outlined">${it.done ? 'check_box' : 'check_box_outline_blank'}</span>
+        </button>
+        <span class="cl-pv-text">${escapeHtml(it.text)}</span>
+      `;
+      const checkBtn = row.querySelector('.cl-check');
+      checkBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const updated = (note.checklist || []).map((x, i) => i === idx ? { ...x, done: !x.done } : x);
+        note.checklist = updated;
+        try { await supabase.from('notes').update({ checklist: updated }).eq('id', note.id); } catch (err) { console.error('toggle checklist', err); }
+        // Update icon in-place without re-rendering everything
+        const nowDone = updated[idx].done;
+        checkBtn.classList.toggle('is-done', nowDone);
+        row.classList.toggle('is-done', nowDone);
+        const span = checkBtn.querySelector('.material-symbols-outlined');
+        if (span) span.textContent = nowDone ? 'check_box' : 'check_box_outline_blank';
+      });
+      cl.appendChild(row);
+    });
+    if (note.checklist.length > 4) {
+      const more = document.createElement('div');
+      more.className = 'cl-pv-more';
+      more.textContent = `+${note.checklist.length - 4} más`;
+      cl.appendChild(more);
+    }
+    body.appendChild(cl);
   }
 
   if (Array.isArray(note.images) && note.images.length) {
@@ -1398,6 +1442,7 @@ function renderMusica(root) {
 function renderMediaCard(m) {
   const card = document.createElement('article');
   card.className = `card clickable media-card ${m.kind}`;
+  card.style.viewTransitionName = `media-${cssSafeId(m.id)}`;
   if (m.pinned) card.classList.add('pinned');
   card.setAttribute('role', 'button');
   card.setAttribute('tabindex', '0');
@@ -1422,9 +1467,11 @@ function renderMediaCard(m) {
     if (btn.dataset.action === 'edit') openMediaEditor(m);
     if (btn.dataset.action === 'pin') {
       const next = !m.pinned;
-      m.pinned = next;
-      await supabase.from('media').update({ pinned: next }).eq('id', m.id);
-      await router();
+      await togglePinWithTransition(async () => {
+        m.pinned = next;
+        await supabase.from('media').update({ pinned: next }).eq('id', m.id);
+        await router();
+      });
     }
   });
   card.appendChild(actions);
@@ -2315,7 +2362,6 @@ function renderConfigLogout(body) {
 }
 
 function renderConfigDashboard(body) {
-  const cfg = state.settings.photo_widget || { mode: 'featured', interval_ms: 6000 };
   const bg = getBgSetting();
   const order = getDashboardOrder();
   const presets = ['#0a0a0c', '#15151a', '#1a1142', '#1e3a5f', '#3a1d4a', '#0d2616', '#f5f4ee'];
@@ -2370,24 +2416,6 @@ function renderConfigDashboard(body) {
         </div>
       </div>
       <span class="status" id="cfg-bg-status" style="margin-top:.5rem;display:inline-block;"></span>
-    </div>
-
-    <div class="settings-card">
-      <h3>Widget de fotos en el inicio</h3>
-      <div class="sub" style="color:var(--text-dim);font-size:.82rem;">También puedes cambiarlo desde el icono ⋯ del widget.</div>
-      <div class="opts" id="cfg-widget-mode">
-        <button data-mode="featured" class="${cfg.mode === 'featured' ? 'active' : ''}"><span class="material-symbols-outlined">star</span> Solo destacadas</button>
-        <button data-mode="all" class="${cfg.mode === 'all' ? 'active' : ''}"><span class="material-symbols-outlined">photo_library</span> Todas las fotos</button>
-      </div>
-      <div class="row" style="margin-top:.7rem;">
-        <label style="font-size:.8rem;color:var(--text-dim);">Intervalo (segundos)</label>
-        <input type="number" min="2" max="60" step="1" value="${(cfg.interval_ms || 6000)/1000}" id="cfg-widget-interval" style="width:80px;padding:.35rem .5rem;border-radius:6px;border:1px solid var(--border);background:var(--surface-alt);color:var(--text);" />
-        <button class="btn" id="cfg-widget-save">Guardar</button>
-        <span class="status" id="cfg-widget-status"></span>
-      </div>
-      <div class="sub" style="color:var(--text-dim);font-size:.78rem;margin-top:.5rem;">
-        Para destacar fotos, abre cualquier foto y pulsa ⭐.
-      </div>
     </div>
   `;
 
@@ -2476,20 +2504,6 @@ function renderConfigDashboard(body) {
       renderConfigTab(body);
     });
   }
-
-  // ----- Photo widget settings -----
-  $('#cfg-widget-mode').addEventListener('click', (e) => {
-    const b = e.target.closest('button[data-mode]');
-    if (!b) return;
-    $$('#cfg-widget-mode button').forEach(x => x.classList.toggle('active', x === b));
-  });
-  $('#cfg-widget-save').addEventListener('click', async () => {
-    const mode = $('#cfg-widget-mode button.active').dataset.mode;
-    const sec = Math.max(2, Math.min(60, Number($('#cfg-widget-interval').value) || 6));
-    setStatus($('#cfg-widget-status'), 'Guardando…');
-    await saveSetting('photo_widget', { mode, interval_ms: sec * 1000 });
-    setStatus($('#cfg-widget-status'), 'Guardado ✓');
-  });
 
   setupReorder();
 }
@@ -2784,7 +2798,7 @@ function setupReorder() {
 const dlgNote = $('#dlg-note');
 const noteDraft = {
   id: null, title: '', content: '', visibility: 'public',
-  links: [], images: [], tags: [], pinned: false,
+  links: [], images: [], tags: [], pinned: false, checklist: [],
 };
 
 function openNoteEditor(note) {
@@ -2796,11 +2810,15 @@ function openNoteEditor(note) {
   noteDraft.images = Array.isArray(note?.images) ? [...note.images] : [];
   noteDraft.tags = Array.isArray(note?.tags) ? [...note.tags] : [];
   noteDraft.pinned = !!note?.pinned;
+  noteDraft.checklist = Array.isArray(note?.checklist)
+    ? note.checklist.map(it => ({ text: String(it.text || ''), done: !!it.done }))
+    : [];
 
   $('#note-title-input').value = noteDraft.title;
   $('#note-plain').value = noteDraft.content;
   renderNoteLinkChips();
   renderNoteImagePreviews();
+  renderNoteChecklist();
   renderNoteTags();
   renderNoteTagSuggestions('');
   $('#note-tag-input').value = '';
@@ -2849,6 +2867,56 @@ function renderNoteImagePreviews() {
       noteDraft.images.splice(i, 1); renderNoteImagePreviews();
     });
     root.appendChild(thumb);
+  });
+}
+
+// ---- Checklist editor inside the note dialog -----------------------------
+function renderNoteChecklist() {
+  const root = $('#note-checklist');
+  if (!root) return;
+  root.innerHTML = '';
+  if (!noteDraft.checklist.length) return;
+  noteDraft.checklist.forEach((item, i) => {
+    const row = document.createElement('div');
+    row.className = 'cl-row';
+    row.innerHTML = `
+      <button class="cl-check ${item.done ? 'is-done' : ''}" type="button" aria-label="${item.done ? 'Marcar como pendiente' : 'Marcar como hecho'}">
+        <span class="material-symbols-outlined">${item.done ? 'check_box' : 'check_box_outline_blank'}</span>
+      </button>
+      <input class="cl-text" type="text" value="${escapeHtml(item.text)}" placeholder="Elemento de la lista" maxlength="200" />
+      <button class="cl-del" type="button" aria-label="Quitar">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    `;
+    const check = row.querySelector('.cl-check');
+    const text = row.querySelector('.cl-text');
+    const del = row.querySelector('.cl-del');
+    check.addEventListener('click', () => {
+      noteDraft.checklist[i].done = !noteDraft.checklist[i].done;
+      renderNoteChecklist();
+    });
+    text.addEventListener('input', () => { noteDraft.checklist[i].text = text.value; });
+    text.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        noteDraft.checklist.splice(i + 1, 0, { text: '', done: false });
+        renderNoteChecklist();
+        const next = $$('#note-checklist .cl-text')[i + 1];
+        if (next) next.focus();
+      } else if (e.key === 'Backspace' && !text.value && noteDraft.checklist.length > 0) {
+        e.preventDefault();
+        noteDraft.checklist.splice(i, 1);
+        renderNoteChecklist();
+        const prev = $$('#note-checklist .cl-text')[Math.max(0, i - 1)];
+        if (prev) { prev.focus(); prev.setSelectionRange(prev.value.length, prev.value.length); }
+      }
+    });
+    del.addEventListener('click', () => {
+      noteDraft.checklist.splice(i, 1);
+      renderNoteChecklist();
+    });
+    if (item.done) row.classList.add('is-done');
+    root.appendChild(row);
   });
 }
 
@@ -2921,6 +2989,19 @@ $('#note-add-link').addEventListener('click', async () => {
 
 $('#note-add-image').addEventListener('click', () => $('#note-image-input').click());
 
+$('#note-add-checklist').addEventListener('click', () => {
+  // If the list is empty, seed it with one row; otherwise append a fresh item.
+  if (!noteDraft.checklist.length) {
+    noteDraft.checklist.push({ text: '', done: false });
+  } else {
+    noteDraft.checklist.push({ text: '', done: false });
+  }
+  renderNoteChecklist();
+  const rows = $$('#note-checklist .cl-text');
+  const last = rows[rows.length - 1];
+  if (last) last.focus();
+});
+
 $('#note-image-input').addEventListener('change', async () => {
   const files = Array.from($('#note-image-input').files || []);
   $('#note-image-input').value = '';
@@ -2950,6 +3031,10 @@ $('#note-save').addEventListener('click', async () => {
     addNoteTag(pendingTag);
     $('#note-tag-input').value = '';
   }
+  // Drop entirely-blank checklist items so we don't persist stray rows
+  const cleanedChecklist = noteDraft.checklist
+    .map(it => ({ text: String(it.text || '').trim(), done: !!it.done }))
+    .filter(it => it.text);
   const payload = {
     title,
     content: $('#note-plain').value,
@@ -2959,6 +3044,7 @@ $('#note-save').addEventListener('click', async () => {
     images: noteDraft.images,
     tags: noteDraft.tags,
     pinned: noteDraft.pinned,
+    checklist: cleanedChecklist,
   };
   setStatus($('#note-status'), 'Guardando…');
   try {
@@ -3957,6 +4043,7 @@ function renderPelis(root) {
 function renderMovieCard(m) {
   const card = document.createElement('article');
   card.className = 'card clickable movie-card';
+  card.style.viewTransitionName = `movie-${cssSafeId(m.id)}`;
   if (m.pinned) card.classList.add('pinned');
   card.setAttribute('role', 'button');
   card.setAttribute('tabindex', '0');
@@ -3974,9 +4061,11 @@ function renderMovieCard(m) {
     e.stopPropagation();
     if (!e.target.closest('button[data-action="pin"]')) return;
     const next = !m.pinned;
-    m.pinned = next;
-    await supabase.from('movies').update({ pinned: next }).eq('id', m.id);
-    await router();
+    await togglePinWithTransition(async () => {
+      m.pinned = next;
+      await supabase.from('movies').update({ pinned: next }).eq('id', m.id);
+      await router();
+    });
   });
   card.appendChild(actions);
 
