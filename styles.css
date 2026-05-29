@@ -587,7 +587,12 @@ button.btn.pin-toggle.is-pinned {
 .grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.6rem; }
 .grid-list { display: flex; flex-direction: column; gap: 0.5rem; }
 .card {
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  /* Semi-transparent so the blurred photo / chosen bg color shows
+     through, giving a glass-like depth instead of a solid plate. */
+  background: rgba(0, 0, 0, 0.52);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
   padding: 0.9rem 1rem; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 0.5rem;
   position: relative; transition: transform 0.08s ease, border-color 0.15s ease;
 }
@@ -697,7 +702,9 @@ button.btn.pin-toggle.is-pinned {
   margin-bottom: 1.5rem;
 }
 .stats-widget .stat-card {
-  background: var(--surface);
+  background: rgba(0, 0, 0, 0.52);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
