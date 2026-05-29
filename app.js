@@ -831,9 +831,11 @@ function renderInicio(root) {
 
     <div class="dashboard-cols">
       <div class="col-left">
-        <div class="postit-board" id="postit-board">
-          <button class="pb-new" id="pb-new" type="button">+ Nuevo post-it</button>
-          <div class="pb-empty" id="pb-empty" hidden>Toca <strong>+ Nuevo post-it</strong> para empezar el tablero.</div>
+        <div class="postit-board-wrap">
+          <div class="postit-board" id="postit-board">
+            <button class="pb-new" id="pb-new" type="button">+ Nuevo post-it</button>
+            <div class="pb-empty" id="pb-empty" hidden>Toca <strong>+ Nuevo post-it</strong> para empezar el tablero.</div>
+          </div>
         </div>
         ${order.map(s => sectionTemplates[s] || '').join('')}
       </div>
@@ -4341,11 +4343,14 @@ function setupPostitBoard() {
 
   // Add post-it button
   $('#pb-new').addEventListener('click', async () => {
-    const rect = board.getBoundingClientRect();
+    // Use offsetWidth/Height to read the LAYOUT size (unscaled), since
+    // on mobile the board is rendered with a CSS transform: scale(...).
+    const w = board.offsetWidth;
+    const h = board.offsetHeight;
     // Pick a random color and a position roughly in the visible area
     const color = POSTIT_COLORS[Math.floor(Math.random() * POSTIT_COLORS.length)];
-    const x = Math.max(20, Math.floor(Math.random() * (rect.width - POSTIT_W - 40)) + 20);
-    const y = Math.max(20, Math.floor(Math.random() * (rect.height - POSTIT_H - 40)) + 20);
+    const x = Math.max(20, Math.floor(Math.random() * (w - POSTIT_W - 40)) + 20);
+    const y = Math.max(20, Math.floor(Math.random() * (h - POSTIT_H - 40)) + 20);
     const rotation = (Math.random() - 0.5) * 8; // -4° to +4°
     try {
       const { data, error } = await supabase.from('postits').insert({
@@ -4467,7 +4472,12 @@ function renderPostitEl(p) {
 
 function startDrag(el, p, evt) {
   const board = $('#postit-board');
-  const boardRect = board.getBoundingClientRect();
+  const renderedRect = board.getBoundingClientRect(); // post-transform screen coords
+  const layoutW = board.offsetWidth;                  // pre-transform (unscaled)
+  const layoutH = board.offsetHeight;
+  // If the board is scaled (e.g. on mobile), we need to map screen-px
+  // mouse movement back to layout-px positions for el.style.left/top.
+  const scale = layoutW > 0 ? renderedRect.width / layoutW : 1;
   const elRect = el.getBoundingClientRect();
   const offsetX = evt.clientX - elRect.left;
   const offsetY = evt.clientY - elRect.top;
@@ -4478,11 +4488,14 @@ function startDrag(el, p, evt) {
 
   const onMove = (e) => {
     const pos = e.touches ? e.touches[0] : e;
-    const newX = pos.clientX - boardRect.left - offsetX;
-    const newY = pos.clientY - boardRect.top - offsetY;
-    // Clamp inside the board
-    const clampedX = Math.max(0, Math.min(boardRect.width - POSTIT_W, newX));
-    const clampedY = Math.max(0, Math.min(boardRect.height - POSTIT_H, newY));
+    const newXScreen = pos.clientX - renderedRect.left - offsetX;
+    const newYScreen = pos.clientY - renderedRect.top - offsetY;
+    // Convert to layout pixels
+    const newX = newXScreen / scale;
+    const newY = newYScreen / scale;
+    // Clamp inside the board (layout coords)
+    const clampedX = Math.max(0, Math.min(layoutW - POSTIT_W, newX));
+    const clampedY = Math.max(0, Math.min(layoutH - POSTIT_H, newY));
     el.style.left = `${clampedX}px`;
     el.style.top = `${clampedY}px`;
     p.x = clampedX;

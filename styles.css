@@ -617,8 +617,25 @@ button.btn.pin-toggle.is-pinned {
   background: var(--surface-alt); border: 1px solid var(--border); color: var(--text-dim);
 }
 .card .badge.private { color: var(--accent); }
-.card .tag-row { display: flex; gap: 0.3rem; flex-wrap: wrap; }
-.card .tag-row .tag { font-size: 0.7rem; padding: 0.1rem 0.55rem; border-radius: 999px; color: white; background: var(--tag-color, var(--text-dim)); }
+/* Tag row inside cards: single-line horizontal scroll instead of wrapping
+   into multiple rows. Lets the user swipe through tags on mobile. */
+.card .tag-row {
+  display: flex; gap: 0.3rem;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  max-width: 100%;
+}
+.card .tag-row::-webkit-scrollbar { display: none; }
+.card .tag-row .tag {
+  flex-shrink: 0;
+  font-size: 0.7rem; padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  color: white;
+  background: var(--tag-color, var(--text-dim));
+  white-space: nowrap;
+}
 .card .unread-dot {
   position: absolute; top: 10px; left: 10px; width: 8px; height: 8px; border-radius: 999px;
   background: var(--accent); box-shadow: 0 0 0 3px var(--surface);
@@ -709,9 +726,17 @@ button.btn.pin-toggle.is-pinned {
   .dashboard-cols { grid-template-columns: 1fr; }
   /* On mobile / narrow screens the columns stack — un-sticky the right column */
   .dashboard-cols .col-right { position: static; height: auto; }
+  /* Show the right column (photo widget + Garabatos) FIRST on mobile so
+     the at-a-glance photo is the first thing the user sees. */
+  .dashboard-cols .col-right { order: 0; }
+  .dashboard-cols .col-left { order: 1; }
 }
 
 /* ======== Post-it board ======== */
+/* The board renders at its natural width on desktop. On mobile we wrap
+   it and scale the whole thing down so the post-its stay where the
+   user placed them but the visual fits the viewport. */
+.postit-board-wrap { width: 100%; }
 .postit-board {
   position: relative;
   height: 360px;
@@ -720,6 +745,20 @@ button.btn.pin-toggle.is-pinned {
   border-radius: 0;
   box-shadow: none;
   overflow: visible;
+}
+@media (max-width: 760px) {
+  .postit-board-wrap {
+    --pb-design-w: 520px;
+    --pb-scale: calc((100vw - 32px) / var(--pb-design-w));
+    overflow: hidden;
+    height: calc(360px * var(--pb-scale));
+  }
+  .postit-board-wrap > .postit-board {
+    width: var(--pb-design-w);
+    height: 360px;
+    transform-origin: top left;
+    transform: scale(var(--pb-scale));
+  }
 }
 .postit-board .pb-new {
   /* Matches the rest of our glass pill buttons — same vars as .btn so
@@ -2347,24 +2386,10 @@ a.btn.icon-pill .material-symbols-outlined { font-size: 20px; }
   text-align: center; font-style: italic;
 }
 
-/* ======== Mobile horizontal scroll for dashboard sections ======== */
+/* ======== Mobile: 2-column grid for dashboard sections ======== */
 @media (max-width: 760px) {
-  .section-block .grid-cards,
-  .section-block .photo-grid {
-    grid-template-columns: none !important;
-    display: flex !important; flex-wrap: nowrap;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 0.5rem;
-    margin: 0 -1rem;
-    padding-left: 1rem; padding-right: 1rem;
+  .section-block .grid-cards {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
   }
-  .section-block .grid-cards > *,
-  .section-block .photo-grid > * {
-    flex: 0 0 78%;
-    max-width: 280px;
-    scroll-snap-align: start;
-  }
-  .section-block .photo-grid > * { flex-basis: 160px; }
 }
