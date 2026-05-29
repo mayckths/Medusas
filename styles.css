@@ -698,10 +698,12 @@ button.btn.pin-toggle.is-pinned {
 .dashboard-cols .col-right {
   position: sticky;
   top: 16px;
-  height: calc(100dvh - 160px);
-  max-height: calc(100dvh - 160px);
   align-self: start;
-  overflow: hidden;
+  /* Both children have fixed heights — let the column size to its
+     content and keep overflow visible so box-shadows aren't clipped. */
+  height: auto;
+  max-height: none;
+  overflow: visible;
 }
 @media (max-width: 980px) {
   .dashboard-cols { grid-template-columns: 1fr; }
@@ -1580,13 +1582,6 @@ dialog.lightbox .lightbox-cap {
   min-height: 0;
 }
 .col-right .chat-widget-tall { flex: 1 1 auto; min-height: 180px; }
-/* Both cards now have fixed heights so the column doesn't need an
-   explicit calc — let it size to its content while staying sticky so
-   it follows the scroll. */
-.dashboard-cols .col-right {
-  height: auto;
-  max-height: none;
-}
 
 @media (max-width: 760px) {
   .chat-widget { height: 320px; max-height: 320px; }
