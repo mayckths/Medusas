@@ -330,10 +330,23 @@ async function fetchOembedTitle(parsed) {
     return {
       title: json.title || null,
       thumbnail: json.thumbnail_url || null,
+      // For YouTube this is the channel name (usually the artist). For
+      // Spotify the oembed doesn't return author info, so this is null.
+      author: json.author_name || null,
     };
   } catch {
     return null;
   }
+}
+
+// Helper used everywhere we need to render a media item label: combines
+// title + artist into "Title — Artist" when both exist.
+function displayMediaTitle(m) {
+  if (!m) return '';
+  const t = (m.title || '').trim();
+  const a = (m.artist || '').trim();
+  if (t && a) return `${t} — ${a}`;
+  return t || a || 'Sin título';
 }
 
 // Unread = the other user added it and current user hasn't opened it
@@ -1559,7 +1572,7 @@ function renderMediaCard(m) {
   const body = document.createElement('div');
   body.className = 'body';
   const h = document.createElement('h3');
-  h.textContent = m.title;
+  h.textContent = displayMediaTitle(m);
   body.appendChild(h);
   if (m.note) {
     const p = document.createElement('div');
@@ -3263,7 +3276,7 @@ $('#note-delete').addEventListener('click', async () => {
 // Media editor
 // ============================================================
 const dlgMedia = $('#dlg-media');
-const mediaDraft = { id: null, parsed: null, pinned: false, featured: false, thumbnail_url: null };
+const mediaDraft = { id: null, parsed: null, pinned: false, featured: false, thumbnail_url: null, artist: null };
 
 function setMediaPin(p) {
   mediaDraft.pinned = p;
@@ -3292,11 +3305,18 @@ async function tryAutofillTitle() {
   const parsed = parseMediaUrl($('#media-url').value);
   if (!parsed) return;
   const titleInput = $('#media-title-input');
-  if (titleInput.value.trim()) return;
+  const artistInput = $('#media-artist-input');
+  const alreadyHasTitle = titleInput.value.trim();
+  const alreadyHasArtist = artistInput && artistInput.value.trim();
+  if (alreadyHasTitle && alreadyHasArtist) return;
   $('#media-title-hint').textContent = '· buscando título…';
   const oembed = await fetchOembedTitle(parsed);
   $('#media-title-hint').textContent = '';
-  if (oembed?.title) titleInput.value = oembed.title;
+  if (oembed?.title && !alreadyHasTitle) titleInput.value = oembed.title;
+  if (oembed?.author && !alreadyHasArtist && artistInput) {
+    artistInput.value = oembed.author;
+    mediaDraft.artist = oembed.author;
+  }
   if (oembed?.thumbnail) mediaDraft.thumbnail_url = oembed.thumbnail;
   else if (parsed.thumbnailUrl) mediaDraft.thumbnail_url = parsed.thumbnailUrl;
 }
@@ -3304,8 +3324,10 @@ async function tryAutofillTitle() {
 function openMediaEditor(m) {
   mediaDraft.id = m?.id || null;
   mediaDraft.thumbnail_url = m?.thumbnail_url || null;
+  mediaDraft.artist = m?.artist || null;
   $('#media-url').value = m?.url || '';
   $('#media-title-input').value = m?.title || '';
+  if ($('#media-artist-input')) $('#media-artist-input').value = m?.artist || '';
   $('#media-note-input').value = m?.note || '';
   $('#media-title-hint').textContent = '';
   setMediaPin(!!m?.pinned);
@@ -3329,23 +3351,29 @@ $('#media-pin-toggle').addEventListener('click', () => setMediaPin(!mediaDraft.p
 $('#media-feature-toggle').addEventListener('click', () => setMediaFeatured(!mediaDraft.featured));
 
 $('#media-save').addEventListener('click', async () => {
-  const title = $('#media-title-input').value.trim();
+  let title = $('#media-title-input').value.trim();
+  let artist = ($('#media-artist-input')?.value || '').trim();
   const parsed = parseMediaUrl($('#media-url').value);
   if (!parsed) { setStatus($('#media-status'), 'Pega un enlace válido de Spotify o YouTube', true); $('#media-url').focus(); return; }
-  if (!title) { setStatus($('#media-status'), 'El título es obligatorio', true); $('#media-title-input').focus(); return; }
 
-  // Last-ditch attempt to grab a thumbnail (album cover) before saving
+  // Last-ditch attempt to grab title/artist/thumbnail from oembed before
+  // we save. This means the user doesn't need to type the title — pasting
+  // the URL is enough.
   let thumb = mediaDraft.thumbnail_url || parsed.thumbnailUrl;
-  if (!thumb) {
+  if (!title || !artist || !thumb) {
     try {
       const oe = await fetchOembedTitle(parsed);
-      if (oe?.thumbnail) thumb = oe.thumbnail;
+      if (oe?.title && !title) title = oe.title;
+      if (oe?.author && !artist) artist = oe.author;
+      if (oe?.thumbnail && !thumb) thumb = oe.thumbnail;
     } catch {}
   }
+  if (!title) title = 'Sin título';
 
   const payload = {
     kind: parsed.kind,
     title,
+    artist: artist || null,
     url: parsed.normalizedUrl,
     embed_url: parsed.embedUrl,
     thumbnail_url: thumb,
@@ -3395,7 +3423,7 @@ function openTheater(m) {
   stage.className = `theater-stage ${m.kind}`;
   const src = m.embed_url + (m.embed_url.includes('?') ? '&' : '?') + 'autoplay=1';
   stage.innerHTML = `<iframe loading="eager" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" src="${escapeHtml(src)}"></iframe>`;
-  $('#theater-title').textContent = m.title;
+  $('#theater-title').textContent = displayMediaTitle(m);
   dlgTheater.showModal();
   if (isUnread(m)) markSeen('media', m);
 }
@@ -4187,8 +4215,12 @@ function renderNotifList() {
     ...state.media.map(m => {
       const icon = mi(m.kind === 'spotify' ? 'music_note' : 'play_circle');
       const kindLabel = m.kind === 'spotify' ? 'una canción' : 'un video';
-      return tagItem(m, 'media', icon, '#/musica',
-        `Se añadió ${named(m.title, kindLabel)}`);
+      // Use the combined "Title — Artist" for media so notifs match cards
+      const t = displayMediaTitle(m);
+      const label = (t && t !== 'Sin título')
+        ? `Se añadió “${t}”`
+        : `Se añadió ${kindLabel}`;
+      return tagItem(m, 'media', icon, '#/musica', label);
     }),
     ...groupedPhotos.map(g => {
       const slug = g.album ? albumSlugFor(g.album) : '';
