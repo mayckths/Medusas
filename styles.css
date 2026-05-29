@@ -733,32 +733,26 @@ button.btn.pin-toggle.is-pinned {
 }
 
 /* ======== Post-it board ======== */
-/* The board renders at its natural width on desktop. On mobile we wrap
-   it and scale the whole thing down so the post-its stay where the
-   user placed them but the visual fits the viewport. */
-.postit-board-wrap { width: 100%; }
-.postit-board {
+/* The board renders to a fixed design canvas (520×360) so post-its keep
+   their relative positions, then we scale the whole thing down to fit
+   whatever container width it lives in. JS (setupPostitBoardScale) sets
+   --pb-scale based on the wrapper's actual width via ResizeObserver. */
+.postit-board-wrap {
+  width: 100%;
+  overflow: hidden;
+  height: calc(360px * var(--pb-scale, 1));
+}
+.postit-board-wrap > .postit-board {
   position: relative;
+  width: 520px;
   height: 360px;
+  transform-origin: top left;
+  transform: scale(var(--pb-scale, 1));
   background: transparent;
   border: 0;
   border-radius: 0;
   box-shadow: none;
   overflow: visible;
-}
-@media (max-width: 760px) {
-  .postit-board-wrap {
-    --pb-design-w: 520px;
-    --pb-scale: calc((100vw - 32px) / var(--pb-design-w));
-    overflow: hidden;
-    height: calc(360px * var(--pb-scale));
-  }
-  .postit-board-wrap > .postit-board {
-    width: var(--pb-design-w);
-    height: 360px;
-    transform-origin: top left;
-    transform: scale(var(--pb-scale));
-  }
 }
 .postit-board .pb-new {
   /* Matches the rest of our glass pill buttons — same vars as .btn so

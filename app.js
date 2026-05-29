@@ -831,12 +831,6 @@ function renderInicio(root) {
 
     <div class="dashboard-cols">
       <div class="col-left">
-        <div class="postit-board-wrap">
-          <div class="postit-board" id="postit-board">
-            <button class="pb-new" id="pb-new" type="button">+ Nuevo post-it</button>
-            <div class="pb-empty" id="pb-empty" hidden>Toca <strong>+ Nuevo post-it</strong> para empezar el tablero.</div>
-          </div>
-        </div>
         ${order.map(s => sectionTemplates[s] || '').join('')}
       </div>
 
@@ -844,34 +838,10 @@ function renderInicio(root) {
         <div class="photo-widget" id="photo-widget">
           <div class="pw-empty">Aún no hay fotos para mostrar aquí.</div>
         </div>
-        <div class="doodle-board" id="doodle-board">
-          <div class="db-head">
-            <span class="db-title">
-              <span class="material-symbols-outlined">draw</span>
-              Garabatos
-            </span>
-            <div class="db-tools" role="toolbar" aria-label="Herramientas de dibujo">
-              <button class="db-color is-active" type="button" data-color="#d6ff3a" title="Lima"></button>
-              <button class="db-color" type="button" data-color="#ff8db5" title="Rosa"></button>
-              <button class="db-color" type="button" data-color="#6fd9d2" title="Cian"></button>
-              <button class="db-color" type="button" data-color="#ffd94a" title="Amarillo"></button>
-              <button class="db-color" type="button" data-color="#ffffff" title="Blanco"></button>
-              <button class="db-color" type="button" data-color="#7a4ed8" title="Morado"></button>
-              <span class="db-divider"></span>
-              <button class="db-size" type="button" data-w="2" title="Pluma fina"><span class="db-dot db-dot-sm"></span></button>
-              <button class="db-size is-active" type="button" data-w="4" title="Pluma media"><span class="db-dot db-dot-md"></span></button>
-              <button class="db-size" type="button" data-w="8" title="Pluma gruesa"><span class="db-dot db-dot-lg"></span></button>
-              <span class="db-divider"></span>
-              <button class="db-tool" type="button" data-tool="erase" title="Borrador">
-                <span class="material-symbols-outlined">ink_eraser</span>
-              </button>
-              <button class="db-clear" type="button" title="Borrar todo">
-                <span class="material-symbols-outlined">delete</span>
-              </button>
-            </div>
-          </div>
-          <div class="db-stage">
-            <canvas id="doodle-canvas"></canvas>
+        <div class="postit-board-wrap">
+          <div class="postit-board" id="postit-board">
+            <button class="pb-new" id="pb-new" type="button">+ Nuevo post-it</button>
+            <div class="pb-empty" id="pb-empty" hidden>Toca <strong>+ Nuevo post-it</strong> para empezar el tablero.</div>
           </div>
         </div>
       </div>
@@ -920,7 +890,6 @@ function renderInicio(root) {
 
   setupPostitBoard();
   setupPhotoWidget();
-  setupDoodleBoard();
   setupNotifBell();
   // Defer to next paint so layout is committed before we measure.
   requestAnimationFrame(() => fitColRightToViewport());
@@ -4313,6 +4282,27 @@ const POSTIT_W = 130;
 const POSTIT_H = 130;
 let postitDragState = null;
 let postitTopZ = 10;
+const POSTIT_DESIGN_W = 520;
+// Observer that keeps --pb-scale in sync with the wrapper's actual width
+// so the postit board fits any container — col-right on desktop, full
+// viewport on mobile.
+let postitScaleObserver = null;
+function setupPostitBoardScale() {
+  const wrap = document.querySelector('.postit-board-wrap');
+  if (!wrap) return;
+  const apply = () => {
+    const w = wrap.clientWidth || wrap.offsetWidth || 0;
+    if (!w) return;
+    const scale = Math.min(1, w / POSTIT_DESIGN_W);
+    wrap.style.setProperty('--pb-scale', String(scale));
+  };
+  apply();
+  if (postitScaleObserver) { try { postitScaleObserver.disconnect(); } catch {} postitScaleObserver = null; }
+  if (typeof ResizeObserver !== 'undefined') {
+    postitScaleObserver = new ResizeObserver(apply);
+    postitScaleObserver.observe(wrap);
+  }
+}
 // Bring this post-it to the top of the stacking order. We bump a local
 // counter, set inline z-index, and persist the new z_index to Supabase
 // so it survives refreshes (for both users).
@@ -4338,6 +4328,9 @@ function setupPostitBoard() {
     postitTopZ,
     ...state.postits.map(p => Number(p.z_index) || 0)
   );
+  // Scale the board to fit its container (col-right is narrower than the
+  // design width; mobile is narrower still). Re-runs on resize.
+  setupPostitBoardScale();
   // Render initial post-its
   renderPostits();
 
