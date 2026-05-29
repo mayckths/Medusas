@@ -3035,7 +3035,6 @@ function renderNoteChecklist() {
   noteDraft.checklist.forEach((item, i) => {
     const row = document.createElement('div');
     row.className = 'cl-row';
-    row.draggable = true;
     row.dataset.index = String(i);
     row.innerHTML = `
       <span class="cl-grip" aria-label="Arrastrar para reordenar" title="Arrastrar para reordenar">
@@ -3053,65 +3052,49 @@ function renderNoteChecklist() {
     const text = row.querySelector('.cl-text');
     const del = row.querySelector('.cl-del');
     const grip = row.querySelector('.cl-grip');
-    // Only the grip should initiate native HTML5 drag — otherwise the
-    // user can't select text inside the input.
-    row.addEventListener('dragstart', (e) => {
-      if (!grip.contains(e.target)) { e.preventDefault(); return; }
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', String(i));
-      row.classList.add('cl-dragging');
-    });
-    row.addEventListener('dragend', () => row.classList.remove('cl-dragging'));
-    row.addEventListener('dragover', (e) => {
+
+    // Pointer-events based reorder — works for both mouse and touch.
+    // The grip is the only handle; drag from anywhere else is ignored
+    // so the user can still select text inside the input.
+    let activePointer = null;
+    const root = $('#note-checklist');
+    const onPointerMove = (e) => {
+      if (activePointer == null || e.pointerId !== activePointer) return;
       e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      row.classList.add('cl-drop-target');
-    });
-    row.addEventListener('dragleave', () => row.classList.remove('cl-drop-target'));
-    row.addEventListener('drop', (e) => {
-      e.preventDefault();
-      row.classList.remove('cl-drop-target');
-      const from = Number(e.dataTransfer.getData('text/plain'));
-      const to = Number(row.dataset.index);
-      if (Number.isNaN(from) || Number.isNaN(to) || from === to) return;
-      const [moved] = noteDraft.checklist.splice(from, 1);
-      noteDraft.checklist.splice(to, 0, moved);
-      renderNoteChecklist();
-    });
-    // Touch reordering: long-press on the grip starts a drag-like move.
-    let touchDragFrom = null;
-    grip.addEventListener('touchstart', (e) => {
-      e.stopPropagation();
-      touchDragFrom = i;
-      row.classList.add('cl-dragging');
-    }, { passive: true });
-    grip.addEventListener('touchmove', (e) => {
-      if (touchDragFrom == null) return;
-      e.preventDefault();
-      const t = e.touches[0];
-      // Find the row under the touch
-      const el = document.elementFromPoint(t.clientX, t.clientY);
+      const el = document.elementFromPoint(e.clientX, e.clientY);
       const target = el?.closest('.cl-row');
+      // Highlight the row under the pointer (skip the source itself)
       $$('#note-checklist .cl-row').forEach(r => r.classList.toggle('cl-drop-target', r === target && r !== row));
-    }, { passive: false });
-    grip.addEventListener('touchend', (e) => {
-      if (touchDragFrom == null) return;
-      const t = (e.changedTouches && e.changedTouches[0]) || null;
+    };
+    const onPointerUp = (e) => {
+      if (activePointer == null || e.pointerId !== activePointer) return;
+      try { grip.releasePointerCapture(activePointer); } catch {}
       $$('#note-checklist .cl-row').forEach(r => r.classList.remove('cl-drop-target'));
       row.classList.remove('cl-dragging');
-      if (t) {
-        const el = document.elementFromPoint(t.clientX, t.clientY);
-        const target = el?.closest('.cl-row');
-        if (target && target !== row) {
-          const to = Number(target.dataset.index);
-          if (!Number.isNaN(to)) {
-            const [moved] = noteDraft.checklist.splice(touchDragFrom, 1);
-            noteDraft.checklist.splice(to, 0, moved);
-            renderNoteChecklist();
-          }
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const target = el?.closest('.cl-row');
+      if (target && target !== row && root.contains(target)) {
+        const to = Number(target.dataset.index);
+        const from = Number(row.dataset.index);
+        if (!Number.isNaN(to) && !Number.isNaN(from) && from !== to) {
+          const [moved] = noteDraft.checklist.splice(from, 1);
+          noteDraft.checklist.splice(to, 0, moved);
+          renderNoteChecklist();
         }
       }
-      touchDragFrom = null;
+      grip.removeEventListener('pointermove', onPointerMove);
+      grip.removeEventListener('pointerup', onPointerUp);
+      grip.removeEventListener('pointercancel', onPointerUp);
+      activePointer = null;
+    };
+    grip.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      activePointer = e.pointerId;
+      row.classList.add('cl-dragging');
+      try { grip.setPointerCapture(e.pointerId); } catch {}
+      grip.addEventListener('pointermove', onPointerMove);
+      grip.addEventListener('pointerup', onPointerUp);
+      grip.addEventListener('pointercancel', onPointerUp);
     });
     check.addEventListener('click', () => {
       noteDraft.checklist[i].done = !noteDraft.checklist[i].done;
@@ -4807,16 +4790,15 @@ function setupPostitBoardScale() {
   const apply = () => {
     const w = wrap.clientWidth || wrap.offsetWidth || 0;
     if (!w) return;
-    // X-axis fills the container at every breakpoint (no width shrink).
-    // Y-axis takes the same scale on desktop but is squished a bit on
-    // mobile so the board takes less vertical real estate. Non-uniform
-    // scale slightly squishes postits vertically — acceptable trade-off
-    // for the user (they want full width but shorter board).
-    const scaleX = Math.min(1, w / POSTIT_DESIGN_W);
+    // Uniform scale — postits keep their natural square proportions.
+    // On mobile we apply an extra shrink factor so the whole board
+    // takes less vertical (and horizontal) space; the wrapper centers
+    // the scaled board horizontally so it doesn't hug the left edge.
+    const fitScale = Math.min(1, w / POSTIT_DESIGN_W);
     const isMobile = window.innerWidth <= 760;
-    const scaleY = isMobile ? scaleX * 0.72 : scaleX;
-    wrap.style.setProperty('--pb-scale-x', String(scaleX));
-    wrap.style.setProperty('--pb-scale-y', String(scaleY));
+    const shrink = isMobile ? 0.7 : 1;
+    const scale = fitScale * shrink;
+    wrap.style.setProperty('--pb-scale', String(scale));
   };
   apply();
   if (postitScaleObserver) { try { postitScaleObserver.disconnect(); } catch {} postitScaleObserver = null; }
@@ -5043,10 +5025,8 @@ function startDrag(el, p, evt) {
   const renderedRect = board.getBoundingClientRect(); // post-transform screen coords
   const layoutW = board.offsetWidth;                  // pre-transform (unscaled)
   const layoutH = board.offsetHeight;
-  // Independent X/Y scale factors — on mobile the Y axis is squished a
-  // bit. Translate screen-px deltas to layout-px via each axis.
-  const scaleX = layoutW > 0 ? renderedRect.width / layoutW : 1;
-  const scaleY = layoutH > 0 ? renderedRect.height / layoutH : 1;
+  // Uniform scale — same factor on both axes.
+  const scale = layoutW > 0 ? renderedRect.width / layoutW : 1;
   const elRect = el.getBoundingClientRect();
   const offsetX = evt.clientX - elRect.left;
   const offsetY = evt.clientY - elRect.top;
@@ -5059,9 +5039,9 @@ function startDrag(el, p, evt) {
     const pos = e.touches ? e.touches[0] : e;
     const newXScreen = pos.clientX - renderedRect.left - offsetX;
     const newYScreen = pos.clientY - renderedRect.top - offsetY;
-    // Convert to layout pixels (each axis independent)
-    const newX = newXScreen / scaleX;
-    const newY = newYScreen / scaleY;
+    // Convert to layout pixels (uniform scale on both axes)
+    const newX = newXScreen / scale;
+    const newY = newYScreen / scale;
     // Clamp inside the board (layout coords)
     const clampedX = Math.max(0, Math.min(layoutW - POSTIT_W, newX));
     const clampedY = Math.max(0, Math.min(layoutH - POSTIT_H, newY));

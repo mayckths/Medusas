@@ -813,19 +813,20 @@ button.btn.pin-toggle.is-pinned {
 .postit-board-wrap {
   width: 100%;
   overflow: hidden;
-  /* Wrapper height = design height × Y scale. JS sets both vars. */
-  height: calc(360px * var(--pb-scale-y, var(--pb-scale, 1)));
+  /* Wrapper height matches the rendered (scaled) board height. */
+  height: calc(360px * var(--pb-scale, 1));
 }
 .postit-board-wrap > .postit-board {
   position: relative;
   width: 520px;
   height: 360px;
   transform-origin: top left;
-  /* Non-uniform on mobile (Y squished a touch); uniform on desktop. */
-  transform: scale(
-    var(--pb-scale-x, var(--pb-scale, 1)),
-    var(--pb-scale-y, var(--pb-scale, 1))
-  );
+  /* Uniform scale preserves postit proportions. */
+  transform: scale(var(--pb-scale, 1));
+  /* Center the scaled board horizontally inside the wrapper. The calc
+     pushes the unscaled box left by half the empty space (parent width
+     minus rendered width). */
+  margin-left: calc(50% - (520px * var(--pb-scale, 1)) / 2);
   background: transparent;
   border: 0;
   border-radius: 0;
