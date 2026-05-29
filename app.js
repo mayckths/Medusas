@@ -3850,31 +3850,52 @@ function renderNotifList() {
   // of each other into a single "[user] subió N fotos a [álbum]" entry.
   const groupedPhotos = groupPhotoUploads(state.photos);
 
+  // Helper — wraps the title in quotes (with a fallback when empty) so all
+  // notification labels follow the same "Se añadió '…'" pattern.
+  const named = (title, fallback) => {
+    const t = (title || '').trim();
+    return t ? `“${t}”` : fallback;
+  };
+
   const all = [
-    ...state.notes.filter(n => n.visibility !== 'private').map(n => tagItem(n, 'note', mi('edit_note'), '#/notas', n.title)),
-    ...state.media.map(m => tagItem(m, 'media', mi(m.kind === 'spotify' ? 'music_note' : 'play_circle'), '#/musica', m.title)),
-    ...groupedPhotos.map(g => {
-      if (g.photos.length > 1) {
-        const slug = g.album ? albumSlugFor(g.album) : '';
-        const route = g.album ? `#/fotos/album/${slug}` : '#/fotos';
-        const label = g.album
-          ? `${g.photos.length} fotos se añadieron a ${g.album}`
-          : `${g.photos.length} fotos se añadieron`;
-        return {
-          _kind: 'photo',
-          _icon: mi('photo_library'),
-          _route: route,
-          _label: label,
-          created_by: g.created_by,
-          created_at: g.created_at,
-          read_by: g.photos.every(p => (p.read_by || []).includes(state.currentUser)) ? [state.currentUser] : [],
-          id: 'group-' + g.photos[0].id,
-          _group: g,
-        };
-      }
-      return tagItem(g.photos[0], 'photo', mi('photo_library'), '#/fotos', g.photos[0].caption || 'Foto sin título');
+    ...state.notes
+      .filter(n => n.visibility !== 'private')
+      .map(n => tagItem(n, 'note', mi('edit_note'), '#/notas',
+        `Se añadió ${named(n.title, 'una nueva nota')}`)),
+    ...state.media.map(m => {
+      const icon = mi(m.kind === 'spotify' ? 'music_note' : 'play_circle');
+      const kindLabel = m.kind === 'spotify' ? 'una canción' : 'un video';
+      return tagItem(m, 'media', icon, '#/musica',
+        `Se añadió ${named(m.title, kindLabel)}`);
     }),
-    ...state.movies.map(m => tagItem(m, 'movie', mi('movie'), '#/pelis', m.title)),
+    ...groupedPhotos.map(g => {
+      const slug = g.album ? albumSlugFor(g.album) : '';
+      const route = g.album ? `#/fotos/album/${slug}` : '#/fotos';
+      const n = g.photos.length;
+      let label;
+      if (n > 1) {
+        label = g.album
+          ? `Se añadieron ${n} fotos a ${g.album}`
+          : `Se añadieron ${n} fotos`;
+      } else {
+        label = g.album
+          ? `Se añadió una foto a ${g.album}`
+          : `Se añadió una foto`;
+      }
+      return {
+        _kind: 'photo',
+        _icon: mi('photo_library'),
+        _route: route,
+        _label: label,
+        created_by: g.created_by,
+        created_at: g.created_at,
+        read_by: g.photos.every(p => (p.read_by || []).includes(state.currentUser)) ? [state.currentUser] : [],
+        id: n > 1 ? 'group-' + g.photos[0].id : g.photos[0].id,
+        _group: g,
+      };
+    }),
+    ...state.movies.map(m => tagItem(m, 'movie', mi('movie'), '#/pelis',
+      `Se añadió ${named(m.title, 'una peli')}`)),
   ];
 
   const unread = all.filter(it => isUnread(it));
