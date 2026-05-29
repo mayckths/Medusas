@@ -1608,6 +1608,13 @@ dialog.lightbox .lightbox-cap {
   flex: 0 0 auto;
   height: clamp(220px, 38vh, 340px);
 }
+@media (max-width: 760px) {
+  .col-right .photo-widget {
+    /* Roughly half the desktop size — leaves more room for the post-its
+       and the rest of the dashboard on a short mobile screen. */
+    height: clamp(140px, 22vh, 200px);
+  }
+}
 .col-right .doodle-board {
   /* Same height as the photo widget for visual symmetry. */
   flex: 0 0 auto;

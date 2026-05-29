@@ -4293,7 +4293,12 @@ function setupPostitBoardScale() {
   const apply = () => {
     const w = wrap.clientWidth || wrap.offsetWidth || 0;
     if (!w) return;
-    const scale = Math.min(1, w / POSTIT_DESIGN_W);
+    // On mobile we apply an extra shrink factor so the board takes up
+    // less vertical space (per user request — easier to fit alongside
+    // the photo widget + the rest of the dashboard).
+    const isMobile = window.innerWidth <= 760;
+    const shrink = isMobile ? 0.67 : 1;
+    const scale = Math.min(1, w / POSTIT_DESIGN_W) * shrink;
     wrap.style.setProperty('--pb-scale', String(scale));
   };
   apply();
@@ -4301,6 +4306,22 @@ function setupPostitBoardScale() {
   if (typeof ResizeObserver !== 'undefined') {
     postitScaleObserver = new ResizeObserver(apply);
     postitScaleObserver.observe(wrap);
+  }
+  // Re-apply on viewport breakpoint changes (mobile ↔ desktop)
+  if (!window._pbBreakpointWired) {
+    window._pbBreakpointWired = true;
+    window.addEventListener('resize', () => {
+      const w = document.querySelector('.postit-board-wrap');
+      if (w) {
+        const wpx = w.clientWidth || w.offsetWidth || 0;
+        if (wpx) {
+          const isMobile = window.innerWidth <= 760;
+          const shrink = isMobile ? 0.67 : 1;
+          const scale = Math.min(1, wpx / POSTIT_DESIGN_W) * shrink;
+          w.style.setProperty('--pb-scale', String(scale));
+        }
+      }
+    });
   }
 }
 // Bring this post-it to the top of the stacking order. We bump a local
@@ -4416,15 +4437,63 @@ function renderPostitEl(p) {
     </div>
   `;
 
-  // Drag — only when starting drag on the post-it body (not the textarea/buttons)
+  // Drag — desktop: grab the edge (not the textarea/tools) to drag.
   el.addEventListener('mousedown', (e) => {
     if (e.target.closest('.pi-body, .pi-tools')) return;
     startDrag(el, p, e);
   });
+
+  // Touch (mobile): drag from ANYWHERE on the postit. A short tap that
+  // doesn't move past the threshold focuses the textarea + shows the
+  // tools. This avoids the user having to target the tiny top edge.
+  let touchAnchor = null;
+  let touchDragStarted = false;
+  const DRAG_THRESHOLD = 8; // px
+
   el.addEventListener('touchstart', (e) => {
-    if (e.target.closest('.pi-body, .pi-tools')) return;
-    startDrag(el, p, e.touches[0]);
+    // Let tool buttons handle their own taps
+    if (e.target.closest('.pi-tools button')) return;
+    const t = e.touches[0];
+    touchAnchor = { x: t.clientX, y: t.clientY, target: e.target };
+    touchDragStarted = false;
   }, { passive: true });
+
+  el.addEventListener('touchmove', (e) => {
+    if (!touchAnchor) return;
+    const t = e.touches[0];
+    if (!touchDragStarted) {
+      const dx = t.clientX - touchAnchor.x;
+      const dy = t.clientY - touchAnchor.y;
+      if (Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+        touchDragStarted = true;
+        // Don't pop the keyboard mid-drag
+        try { el.querySelector('.pi-body')?.blur(); } catch {}
+        // Hand off to the regular drag flow, starting from the original
+        // touch point so the postit doesn't jump.
+        startDrag(el, p, { clientX: touchAnchor.x, clientY: touchAnchor.y });
+        e.preventDefault();
+      }
+    } else {
+      // While dragging keep the page from scrolling under us
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  el.addEventListener('touchend', () => {
+    if (!touchAnchor) return;
+    const wasTap = !touchDragStarted;
+    touchAnchor = null;
+    touchDragStarted = false;
+    if (wasTap) {
+      // Show the tools row briefly so colors + delete are reachable
+      // without a hover (mobile has no hover).
+      el.classList.add('tools-open');
+      clearTimeout(el._toolsTimer);
+      el._toolsTimer = setTimeout(() => el.classList.remove('tools-open'), 3000);
+      // Focus the textarea so the keyboard pops for editing
+      try { el.querySelector('.pi-body')?.focus(); } catch {}
+    }
+  });
 
   // Body edit — debounced save
   const body = el.querySelector('.pi-body');
