@@ -883,9 +883,11 @@ function renderInicio(root) {
         </div>
         <div class="postit-board-wrap">
           <div class="postit-board" id="postit-board">
-            <button class="pb-new" id="pb-new" type="button">+ Nuevo post-it</button>
             <div class="pb-empty" id="pb-empty" hidden>Toca <strong>+ Nuevo post-it</strong> para empezar el tablero.</div>
           </div>
+          <!-- Sits outside the scaled board so it renders at the same size
+               as the rest of the glass pill buttons (Ver todas, etc.). -->
+          <button class="btn pb-new" id="pb-new" type="button">+ Nuevo post-it</button>
         </div>
       </div>
     </div>

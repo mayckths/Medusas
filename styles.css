@@ -812,9 +812,18 @@ button.btn.pin-toggle.is-pinned {
    --pb-scale based on the wrapper's actual width via ResizeObserver. */
 .postit-board-wrap {
   width: 100%;
+  position: relative;
   overflow: hidden;
   /* Wrapper height matches the rendered (scaled) board height. */
   height: calc(360px * var(--pb-scale, 1));
+}
+/* "+ Nuevo post-it" pill — uses .btn base styles. Positioned at the
+   wrap's top-right so it lives OUTSIDE the scaled board and renders
+   at full size, matching the rest of the glass pill buttons. */
+.postit-board-wrap > .pb-new.btn {
+  position: absolute;
+  top: 4px; right: 6px;
+  z-index: 3;
 }
 .postit-board-wrap > .postit-board {
   position: relative;
@@ -832,28 +841,6 @@ button.btn.pin-toggle.is-pinned {
   border-radius: 0;
   box-shadow: none;
   overflow: visible;
-}
-.postit-board .pb-new {
-  /* Matches the rest of our glass pill buttons — same vars as .btn so
-     "+ Nuevo post-it" looks identical to "Ver todas →" etc. */
-  position: absolute; top: 4px; right: 6px;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  color: var(--glass-text);
-  font-size: 13px;
-  font-weight: 500;
-  padding: 6px 14px;
-  border-radius: 30px;
-  display: inline-flex; align-items: center; gap: 0.3rem;
-  cursor: pointer;
-  z-index: 2;
-  backdrop-filter: blur(10px) saturate(140%);
-  -webkit-backdrop-filter: blur(10px) saturate(140%);
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-.postit-board .pb-new:hover {
-  background: var(--glass-bg-hover);
-  border-color: rgba(255, 255, 255, 0.18);
 }
 .postit-board .pb-empty {
   position: absolute; inset: 0; display: grid; place-items: center;
