@@ -3858,8 +3858,8 @@ function renderNotifList() {
         const slug = g.album ? albumSlugFor(g.album) : '';
         const route = g.album ? `#/fotos/album/${slug}` : '#/fotos';
         const label = g.album
-          ? `${g.photos.length} fotos en ${g.album}`
-          : `${g.photos.length} fotos nuevas`;
+          ? `${g.photos.length} fotos se añadieron a ${g.album}`
+          : `${g.photos.length} fotos se añadieron`;
         return {
           _kind: 'photo',
           _icon: mi('photo_library'),
