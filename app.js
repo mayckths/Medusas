@@ -388,7 +388,7 @@ const state = {
     photo_widget: { mode: 'featured', interval_ms: 6000 },
   },
   view: { notas: 'cards', musica: 'cards' },
-  filterTag: { notas: null, lugares: null, fotos: null },
+  filterTag: { notas: null, lugares: null, fotos: null, pelis: null },
 };
 
 // ============================================================
@@ -4295,7 +4295,16 @@ function renderNotifList() {
 // Page: Pelis (movies)
 // ============================================================
 function renderPelis(root) {
-  const featured = state.movies.filter(m => m.score && m.score >= 4); // 4+ stars as informal "destacadas"
+  const filterTag = state.filterTag.pelis;
+  const items = filterTag
+    ? state.movies.filter(m => Array.isArray(m.tags) && m.tags.includes(filterTag))
+    : state.movies;
+
+  // Tags across all movies for the filter row
+  const tagCounts = new Map();
+  state.movies.forEach(m => (m.tags || []).forEach(t => tagCounts.set(t, (tagCounts.get(t) || 0) + 1)));
+  const sortedTags = Array.from(tagCounts.entries()).sort((a, b) => b[1] - a[1]);
+
   root.innerHTML = `
     <div class="page-head">
       <div>
@@ -4306,15 +4315,36 @@ function renderPelis(root) {
         <button class="btn primary" id="new-movie-btn">+ Nueva peli</button>
       </div>
     </div>
+    ${sortedTags.length ? `
+      <div class="tag-filter-row" id="pelis-tag-filter">
+        <button class="tag-chip tag-chip-all ${!filterTag ? 'active' : ''}" data-tag="">Todas</button>
+        ${sortedTags.map(([tag, count]) => `
+          <button class="tag-chip ${filterTag === tag ? 'active' : ''}" data-tag="${escapeHtml(tag)}" style="--tag-color: ${tagColor(tag)};">
+            #${escapeHtml(tag)} <span class="count">${count}</span>
+          </button>
+        `).join('')}
+      </div>
+    ` : ''}
     <div class="grid-cards" id="movies-grid"></div>
   `;
   $('#new-movie-btn').addEventListener('click', () => openMovieEditor(null));
+  const tagRow = $('#pelis-tag-filter');
+  if (tagRow) {
+    tagRow.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-tag]');
+      if (!b) return;
+      state.filterTag.pelis = b.dataset.tag || null;
+      renderPelis(root);
+    });
+  }
   const grid = $('#movies-grid');
-  if (!state.movies.length) {
-    grid.innerHTML = '<div class="empty">Aún no hay pelis. Añade la primera con el botón.</div>';
+  if (!items.length) {
+    grid.innerHTML = filterTag
+      ? `<div class="empty">Nada con la etiqueta #${escapeHtml(filterTag)}.</div>`
+      : '<div class="empty">Aún no hay pelis. Añade la primera con el botón.</div>';
     return;
   }
-  state.movies.forEach(m => grid.appendChild(renderMovieCard(m)));
+  items.forEach(m => grid.appendChild(renderMovieCard(m)));
 }
 
 function renderMovieCard(m) {
@@ -4381,6 +4411,20 @@ function renderMovieCard(m) {
   const body = document.createElement('div');
   body.className = 'body';
 
+  // Tags above the title so the kind (peli/serie/etc.) is the first thing seen
+  if (Array.isArray(m.tags) && m.tags.length) {
+    const tr = document.createElement('div');
+    tr.className = 'tag-row';
+    m.tags.forEach(t => {
+      const tEl = document.createElement('span');
+      tEl.className = 'tag';
+      tEl.style.setProperty('--tag-color', tagColor(t));
+      tEl.textContent = '#' + t;
+      tr.appendChild(tEl);
+    });
+    body.appendChild(tr);
+  }
+
   const h = document.createElement('h3');
   h.textContent = m.title;
   body.appendChild(h);
@@ -4412,7 +4456,7 @@ function renderMovieCard(m) {
 
 // ---------- Movie editor ----------
 const dlgMovie = $('#dlg-movie');
-const movieDraft = { id: null, score: null, watched_by: [], pinned: false, image_path: null };
+const movieDraft = { id: null, score: null, watched_by: [], pinned: false, image_path: null, tags: [] };
 
 function setMovieStars(score) {
   movieDraft.score = score;
@@ -4427,6 +4471,49 @@ function setMoviePin(p) {
   const b = $('#movie-pin-toggle');
   b.classList.toggle('is-pinned', p);
   b.innerHTML = `<span class="material-symbols-outlined">keep</span> ${p ? 'Anclada' : 'Anclar'}`;
+}
+
+const MOVIE_TAG_SUGGESTIONS = ['peli', 'serie', 'documental', 'favorita', 'pendiente'];
+function renderMovieTags() {
+  const root = $('#movie-tags');
+  if (!root) return;
+  root.innerHTML = '';
+  movieDraft.tags.forEach((t, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'tag-chip-selected';
+    chip.style.setProperty('--tag-color', tagColor(t));
+    chip.innerHTML = `#${escapeHtml(t)} <button type="button" aria-label="Quitar">×</button>`;
+    chip.querySelector('button').addEventListener('click', () => { movieDraft.tags.splice(i, 1); renderMovieTags(); });
+    root.appendChild(chip);
+  });
+}
+function renderMovieTagSuggestions(query) {
+  const root = $('#movie-tag-suggestions');
+  if (!root) return;
+  root.innerHTML = '';
+  const existing = new Set(MOVIE_TAG_SUGGESTIONS);
+  state.movies.forEach(m => (m.tags || []).forEach(t => existing.add(t)));
+  let all = Array.from(existing).filter(t => !movieDraft.tags.includes(t));
+  if (query) {
+    const q = query.toLowerCase();
+    all = all.filter(t => t.toLowerCase().includes(q));
+  }
+  all.slice(0, 10).forEach(t => {
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = 'tag-sugg';
+    el.textContent = '#' + t;
+    el.addEventListener('click', () => addMovieTag(t));
+    root.appendChild(el);
+  });
+}
+function addMovieTag(raw) {
+  const t = raw.replace(/^#/, '').trim();
+  if (!t) return;
+  if (movieDraft.tags.some(x => x.toLowerCase() === t.toLowerCase())) return;
+  movieDraft.tags.push(t);
+  renderMovieTags();
+  renderMovieTagSuggestions($('#movie-tag-input').value);
 }
 
 function renderMovieImage() {
@@ -4471,10 +4558,14 @@ async function openMovieEditor(m) {
   movieDraft.watched_by = Array.isArray(m?.watched_by) ? [...m.watched_by] : [];
   movieDraft.pinned = !!m?.pinned;
   movieDraft.image_path = m?.image_path || null;
+  movieDraft.tags = Array.isArray(m?.tags) ? [...m.tags] : [];
 
   $('#movie-title-input').value = m?.title || '';
   $('#movie-platform').value = m?.platform || '';
   $('#movie-notes').value = m?.notes || '';
+  $('#movie-tag-input').value = '';
+  renderMovieTags();
+  renderMovieTagSuggestions('');
   setMovieStars(movieDraft.score);
   setMoviePin(movieDraft.pinned);
   renderMovieImage();
@@ -4504,6 +4595,21 @@ $('#movie-stars').addEventListener('click', (e) => {
 $('#movie-stars-clear').addEventListener('click', () => setMovieStars(null));
 
 $('#movie-pin-toggle').addEventListener('click', () => setMoviePin(!movieDraft.pinned));
+
+// Movie tag input wiring (mirrors the note tag input)
+$('#movie-tag-input').addEventListener('input', (e) => renderMovieTagSuggestions(e.target.value));
+$('#movie-tag-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    addMovieTag(e.target.value);
+    e.target.value = '';
+    renderMovieTagSuggestions('');
+  } else if (e.key === 'Backspace' && !e.target.value && movieDraft.tags.length) {
+    movieDraft.tags.pop();
+    renderMovieTags();
+    renderMovieTagSuggestions('');
+  }
+});
 
 $('#movie-image-pick').addEventListener('click', () => $('#movie-image-input').click());
 
@@ -4538,6 +4644,12 @@ $('#movie-image-clear').addEventListener('click', () => {
 $('#movie-save').addEventListener('click', async () => {
   const title = $('#movie-title-input').value.trim();
   if (!title) { setStatus($('#movie-status'), 'El título es obligatorio', true); $('#movie-title-input').focus(); return; }
+  // Auto-pickup any tag the user typed but didn't press Enter on
+  const pendingTag = $('#movie-tag-input').value.trim();
+  if (pendingTag) {
+    addMovieTag(pendingTag);
+    $('#movie-tag-input').value = '';
+  }
   const payload = {
     title,
     score: movieDraft.score || null,
@@ -4546,6 +4658,7 @@ $('#movie-save').addEventListener('click', async () => {
     image_path: movieDraft.image_path,
     watched_by: movieDraft.watched_by,
     pinned: movieDraft.pinned,
+    tags: movieDraft.tags,
   };
   setStatus($('#movie-status'), 'Guardando…');
   try {

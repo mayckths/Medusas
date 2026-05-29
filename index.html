@@ -17,7 +17,7 @@
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
 
-    <link rel="stylesheet" href="./styles.css?v=20260528r" />
+    <link rel="stylesheet" href="./styles.css?v=20260528s" />
 
     <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>
@@ -405,6 +405,18 @@
         </div>
 
         <div class="field">
+          <label>Etiquetas</label>
+          <div class="tag-section">
+            <div class="tags-selected" id="movie-tags"></div>
+            <input type="text" id="movie-tag-input" placeholder="Añadir etiqueta… (Enter)" list="movie-tag-list" maxlength="40" />
+            <datalist id="movie-tag-list">
+              <option value="peli"><option value="serie"><option value="documental"><option value="favorita"><option value="pendiente">
+            </datalist>
+            <div class="tag-suggestions" id="movie-tag-suggestions"></div>
+          </div>
+        </div>
+
+        <div class="field">
           <label for="movie-notes">Notas (opcional)</label>
           <textarea id="movie-notes" placeholder="Por qué quieres verla, alguien la recomendó, etc."></textarea>
         </div>
@@ -440,6 +452,6 @@
       <div class="notif-list" id="notif-list"></div>
     </div>
 
-    <script type="module" src="./app.js?v=20260528r"></script>
+    <script type="module" src="./app.js?v=20260528s"></script>
   </body>
 </html>
