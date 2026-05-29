@@ -4356,17 +4356,27 @@ function renderNotifList() {
 // ============================================================
 function renderPelis(root) {
   const filterTag = state.filterTag.pelis;
-  // A filter chip can be either a tag ("serie", "peli", "documental"…)
-  // or a platform ("Netflix", "HBO Max"…). We prefix platforms with
-  // "p:" internally so the two namespaces don't collide.
+  // A filter chip can be either a tag ("serie", "peli", "documental"…),
+  // a platform (prefixed "p:Netflix"), or a watched-by chip (prefixed
+  // "w:Mayck" / "w:Jaime" / "w:both"). The prefix is the namespace.
   const isPlatformFilter = filterTag && filterTag.startsWith('p:');
+  const isWatchedFilter = filterTag && filterTag.startsWith('w:');
   const activePlatform = isPlatformFilter ? filterTag.slice(2) : null;
-  const activeTag = !isPlatformFilter ? filterTag : null;
-  const items = filterTag
-    ? state.movies.filter(m => activePlatform
-        ? (m.platform || '').trim() === activePlatform
-        : (Array.isArray(m.tags) && m.tags.includes(activeTag)))
-    : state.movies;
+  const activeWatched = isWatchedFilter ? filterTag.slice(2) : null;
+  const activeTag = (!isPlatformFilter && !isWatchedFilter) ? filterTag : null;
+
+  // The two users (used for the watched filter chips)
+  const userNames = state._userAssets ? Object.keys(state._userAssets) : ['Jaime', 'Mayck'];
+
+  const items = !filterTag ? state.movies : state.movies.filter(m => {
+    if (activePlatform) return (m.platform || '').trim() === activePlatform;
+    if (activeWatched) {
+      const wb = Array.isArray(m.watched_by) ? m.watched_by : [];
+      if (activeWatched === 'both') return userNames.every(u => wb.includes(u));
+      return wb.includes(activeWatched);
+    }
+    return Array.isArray(m.tags) && m.tags.includes(activeTag);
+  });
 
   // Build counts for tags + platforms combined into a single ordered list
   const tagCounts = new Map();
@@ -4378,6 +4388,15 @@ function renderPelis(root) {
     if (pl) platformCounts.set(pl, (platformCounts.get(pl) || 0) + 1);
   });
   const sortedPlatforms = Array.from(platformCounts.entries()).sort((a, b) => b[1] - a[1]);
+  // Watched-by counts: per-user + "ambos"
+  const watchedCounts = {};
+  state.movies.forEach(m => {
+    const wb = Array.isArray(m.watched_by) ? m.watched_by : [];
+    userNames.forEach(u => { if (wb.includes(u)) watchedCounts[u] = (watchedCounts[u] || 0) + 1; });
+    if (userNames.length >= 2 && userNames.every(u => wb.includes(u))) {
+      watchedCounts.both = (watchedCounts.both || 0) + 1;
+    }
+  });
 
   root.innerHTML = `
     <div class="page-head">
@@ -4389,9 +4408,19 @@ function renderPelis(root) {
         <button class="btn primary" id="new-movie-btn">+ Nueva peli</button>
       </div>
     </div>
-    ${(sortedTags.length || sortedPlatforms.length) ? `
+    ${(sortedTags.length || sortedPlatforms.length || Object.keys(watchedCounts).length) ? `
       <div class="tag-filter-row" id="pelis-tag-filter">
         <button class="tag-chip tag-chip-all ${!filterTag ? 'active' : ''}" data-tag="">Todas</button>
+        ${userNames.map(u => watchedCounts[u] ? `
+          <button class="tag-chip ${activeWatched === u ? 'active' : ''}" data-tag="w:${escapeHtml(u)}" style="--tag-color: #4caf50;">
+            <span class="material-symbols-outlined" style="font-size:14px;vertical-align:-3px;">visibility</span> Vistas por ${escapeHtml(u)} <span class="count">${watchedCounts[u]}</span>
+          </button>
+        ` : '').join('')}
+        ${watchedCounts.both ? `
+          <button class="tag-chip ${activeWatched === 'both' ? 'active' : ''}" data-tag="w:both" style="--tag-color: #2e7d32;">
+            <span class="material-symbols-outlined" style="font-size:14px;vertical-align:-3px;">groups</span> Vistas por ambos <span class="count">${watchedCounts.both}</span>
+          </button>
+        ` : ''}
         ${sortedTags.map(([tag, count]) => `
           <button class="tag-chip ${activeTag === tag ? 'active' : ''}" data-tag="${escapeHtml(tag)}" style="--tag-color: ${tagColor(tag)};">
             #${escapeHtml(tag)} <span class="count">${count}</span>
@@ -4418,7 +4447,12 @@ function renderPelis(root) {
   }
   const grid = $('#movies-grid');
   if (!items.length) {
-    const label = activePlatform || (activeTag ? `#${activeTag}` : '');
+    let label;
+    if (activeWatched === 'both') label = 'pelis vistas por ambos';
+    else if (activeWatched) label = `pelis vistas por ${activeWatched}`;
+    else if (activePlatform) label = activePlatform;
+    else if (activeTag) label = `#${activeTag}`;
+    else label = '';
     grid.innerHTML = filterTag
       ? `<div class="empty">Nada para ${escapeHtml(label)}.</div>`
       : '<div class="empty">Aún no hay pelis. Añade la primera con el botón.</div>';
