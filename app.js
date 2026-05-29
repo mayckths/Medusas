@@ -829,6 +829,8 @@ function renderInicio(root) {
       </div>
     </div>
 
+    ${renderRelationshipStats()}
+
     <div class="dashboard-cols">
       <div class="col-left">
         ${order.map(s => sectionTemplates[s] || '').join('')}
@@ -916,6 +918,61 @@ if (!window._medusasColResizeWired) {
   window.addEventListener('resize', () => {
     if (document.querySelector('.col-right')) fitColRightToViewport();
   });
+}
+
+// ============================================================
+// Relationship stats widget — 4 little cards above the dashboard
+// columns that show photos, notes, months together and shared movies.
+// ============================================================
+const RELATIONSHIP_START = new Date(2025, 3, 25); // April 25, 2025
+
+function monthsSince(start) {
+  const now = new Date();
+  let months = (now.getFullYear() - start.getFullYear()) * 12
+             + (now.getMonth() - start.getMonth());
+  // Subtract a month if we haven't reached the same day-of-month yet
+  if (now.getDate() < start.getDate()) months -= 1;
+  return Math.max(0, months);
+}
+
+function moviesWatchedTogether() {
+  // The user names live in state._userAssets after login (set in
+  // refreshUserAssetsLocal). Fall back to the two known users if the
+  // map isn't populated yet for some reason.
+  const all = state._userAssets
+    ? Object.keys(state._userAssets)
+    : ['Jaime', 'Mayck'];
+  if (all.length < 2) return 0;
+  return state.movies.filter(m => {
+    const wb = Array.isArray(m.watched_by) ? m.watched_by : [];
+    return all.every(u => wb.includes(u));
+  }).length;
+}
+
+function renderRelationshipStats() {
+  const photos = state.photos.length;
+  const notes = state.notes.length;
+  const months = monthsSince(RELATIONSHIP_START);
+  const seen = moviesWatchedTogether();
+  const cards = [
+    { icon: 'image', label: 'Fotos', value: photos },
+    { icon: 'edit_note', label: 'Notas', value: notes },
+    { icon: 'favorite', label: 'Meses juntos', value: months },
+    { icon: 'movie', label: 'Pelis vistas', value: seen },
+  ];
+  return `
+    <div class="stats-widget">
+      ${cards.map(c => `
+        <div class="stat-card">
+          <div class="stat-top">
+            <span class="stat-icon"><span class="material-symbols-outlined">${c.icon}</span></span>
+            <span class="stat-label">${escapeHtml(c.label)}</span>
+          </div>
+          <div class="stat-value">${c.value}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
 }
 
 function totalUnreadCount() {
