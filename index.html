@@ -17,7 +17,7 @@
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
 
-    <link rel="stylesheet" href="./styles.css?v=20260528t" />
+    <link rel="stylesheet" href="./styles.css?v=20260528u" />
 
     <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>
@@ -238,19 +238,11 @@
           <button class="close-x" data-close><span class="material-symbols-outlined">close</span></button>
         </div>
 
-        <div class="dropzone" id="photo-dropzone">
-          <div class="dz-inner">
-            <div class="dz-icon"><span class="material-symbols-outlined" style="font-size:2rem;">cloud_upload</span></div>
-            <div class="dz-text">Arrastra fotos aquí o <button type="button" class="link-btn" id="photo-pick-btn">selecciónalas</button></div>
-            <div class="dz-sub">PNG · JPG · GIF · WebP · SVG · hasta 5MB</div>
-          </div>
-          <input type="file" id="photo-input" accept="image/*" multiple hidden />
-        </div>
-
         <div class="field">
           <label for="photo-album">Álbum <span style="color:var(--danger)">*</span></label>
           <div class="album-picker">
             <select id="photo-album-select">
+              <option value="">— Elige un álbum —</option>
               <option value="__new__">+ Nuevo álbum</option>
             </select>
             <input type="text" id="photo-album" placeholder="Nombre del álbum (ej: Europa)" maxlength="100" />
@@ -261,6 +253,15 @@
           <input type="text" id="photo-caption" placeholder="Se aplica a las nuevas que añadas" maxlength="200" />
         </div>
 
+        <div class="dropzone" id="photo-dropzone">
+          <div class="dz-inner">
+            <div class="dz-icon"><span class="material-symbols-outlined" style="font-size:2rem;">cloud_upload</span></div>
+            <div class="dz-text">Arrastra fotos aquí o <button type="button" class="link-btn" id="photo-pick-btn">añade más</button></div>
+            <div class="dz-sub">PNG · JPG · GIF · WebP · SVG · hasta 5MB</div>
+          </div>
+          <input type="file" id="photo-input" accept="image/*" multiple hidden />
+        </div>
+
         <div class="upload-list" id="upload-list"></div>
 
         <div class="modal-actions">
@@ -268,7 +269,8 @@
             <span class="status" id="photo-status"></span>
           </div>
           <div class="right">
-            <button class="btn primary" data-close>Listo</button>
+            <button class="btn ghost" data-close>Cancelar</button>
+            <button class="btn primary" id="photo-confirm-upload" type="button">Subir</button>
           </div>
         </div>
       </div>
@@ -452,6 +454,6 @@
       <div class="notif-list" id="notif-list"></div>
     </div>
 
-    <script type="module" src="./app.js?v=20260528t"></script>
+    <script type="module" src="./app.js?v=20260528u"></script>
   </body>
 </html>

@@ -3473,17 +3473,32 @@ dlgTheater.addEventListener('click', (e) => { if (e.target === dlgTheater) close
 const dlgPhoto = $('#dlg-photo');
 const dz = $('#photo-dropzone');
 const uploadList = $('#upload-list');
+// Files the user picked but hasn't uploaded yet. Held here until they
+// confirm the album in the modal.
+let pendingPhotos = [];
 
+// "Subir fotos" button entry-point. On mobile this means: open the
+// device's photo picker directly instead of a modal. After the user
+// selects something, we open the modal asking for the album.
 function openPhotoUpload() {
+  // Reset the input so picking the same set again still fires change
+  $('#photo-input').value = '';
+  $('#photo-input').click();
+}
+
+function resetUploadDialog() {
   $('#photo-caption').value = '';
   $('#photo-album').value = '';
-
   const select = $('#photo-album-select');
   const albums = Array.from(new Set(state.photos.map(p => p.album || '').filter(Boolean))).sort();
-  select.innerHTML = `<option value="__new__">+ Nuevo álbum</option>` +
-    albums.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
-
-  // When selecting an existing album, hide the free text input
+  select.innerHTML = `
+    <option value="">— Elige un álbum —</option>
+    <option value="__new__">+ Nuevo álbum</option>
+    ${albums.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('')}
+  `;
+  // No default — force the user to choose so we don't silently dump
+  // photos into the first existing album.
+  select.value = '';
   function syncAlbumInput() {
     const v = select.value;
     if (v === '__new__') {
@@ -3492,27 +3507,43 @@ function openPhotoUpload() {
       $('#photo-album').value = '';
     } else {
       $('#photo-album').style.display = 'none';
-      $('#photo-album').value = v;
+      $('#photo-album').value = v || '';
     }
   }
   select.onchange = syncAlbumInput;
-  // Default: pick the most recent album if any (otherwise force new)
-  if (albums.length) {
-    select.value = albums[0];
-  } else {
-    select.value = '__new__';
-  }
   syncAlbumInput();
-
   uploadList.innerHTML = '';
   $('#photo-status').textContent = '';
-  $('#photo-input').value = '';
-  // Reset queue + counters for a fresh dialog session
   uploadQueue.length = 0;
   uploadTotal = 0;
   uploadDone = 0;
   uploadProcessing = false;
-  dlgPhoto.showModal();
+  pendingPhotos = [];
+}
+
+// Opens the modal AFTER files have been picked. Pre-populates the
+// pending list with previews of what was selected.
+function openPhotoConfirmModal(files) {
+  resetUploadDialog();
+  pendingPhotos = Array.from(files || []).filter(f => f.type.startsWith('image/'));
+  renderPendingUploadList();
+  if (!dlgPhoto.open) dlgPhoto.showModal();
+}
+
+function renderPendingUploadList() {
+  uploadList.innerHTML = '';
+  for (const f of pendingPhotos) {
+    pushUploadRow(f, '· por subir');
+  }
+  updatePhotoConfirmButton();
+}
+
+function updatePhotoConfirmButton() {
+  const btn = $('#photo-confirm-upload');
+  if (!btn) return;
+  const n = pendingPhotos.length;
+  btn.textContent = n > 1 ? `Subir ${n} fotos` : 'Subir';
+  btn.disabled = !n;
 }
 
 // Upload queue state (lives across multiple handleFiles calls within the
@@ -3593,27 +3624,46 @@ async function uploadOne(item) {
   }
 }
 
-async function handleFiles(fileList) {
+// Add files to pendingPhotos (doesn't upload yet). If the modal isn't
+// open, open it with the picked files. If it is, append to the current
+// list so the user can add more before confirming.
+function addPendingFiles(fileList) {
   const files = Array.from(fileList || []).filter(f => f.type.startsWith('image/'));
   if (!files.length) return;
-  // Snapshot album + caption right now — if user changes them mid-upload,
-  // these queued items will still go where the user intended at pick time.
+  if (!dlgPhoto.open) {
+    openPhotoConfirmModal(files);
+  } else {
+    pendingPhotos = pendingPhotos.concat(files);
+    renderPendingUploadList();
+  }
+}
+
+// Actually starts the upload. Called by the modal's "Subir" button.
+async function startConfirmedUpload() {
   const album = currentAlbumSelection();
   if (!album) {
-    setStatus($('#photo-status'), 'Elige o crea un álbum antes de subir', true);
+    setStatus($('#photo-status'), 'Elige o crea un álbum primero', true);
+    const select = $('#photo-album-select');
+    if (select) select.focus();
+    return;
+  }
+  if (!pendingPhotos.length) {
+    setStatus($('#photo-status'), 'Elige al menos una foto', true);
     return;
   }
   const caption = $('#photo-caption').value;
-
-  // Enqueue ALL files upfront — user sees the full list with progress bars.
-  for (const file of files) {
+  // Wipe the preview rows; we'll re-add with the chosen album label.
+  uploadList.innerHTML = '';
+  const filesToUpload = pendingPhotos.slice();
+  pendingPhotos = [];
+  updatePhotoConfirmButton();
+  for (const file of filesToUpload) {
     const row = pushUploadRow(file, album);
     uploadQueue.push({ file, row, album, caption });
     uploadTotal++;
   }
   updateUploadStatus();
-
-  if (uploadProcessing) return; // another handleFiles call is already draining the queue
+  if (uploadProcessing) return;
   uploadProcessing = true;
   try {
     while (uploadQueue.length > 0) {
@@ -3629,10 +3679,12 @@ async function handleFiles(fileList) {
 
 $('#photo-pick-btn').addEventListener('click', () => $('#photo-input').click());
 dz.addEventListener('click', (e) => { if (e.target.tagName !== 'BUTTON') $('#photo-input').click(); });
-$('#photo-input').addEventListener('change', async (e) => {
-  await handleFiles(e.target.files);
+$('#photo-input').addEventListener('change', (e) => {
+  addPendingFiles(e.target.files);
+  // Allow picking the same files again later
   e.target.value = '';
 });
+$('#photo-confirm-upload').addEventListener('click', startConfirmedUpload);
 
 ;['dragenter', 'dragover'].forEach(ev => {
   dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add('drag-over'); });
@@ -3640,11 +3692,14 @@ $('#photo-input').addEventListener('change', async (e) => {
 ;['dragleave', 'drop'].forEach(ev => {
   dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove('drag-over'); });
 });
-dz.addEventListener('drop', async (e) => {
-  await handleFiles(e.dataTransfer.files);
+dz.addEventListener('drop', (e) => {
+  addPendingFiles(e.dataTransfer.files);
 });
 
-dlgPhoto.addEventListener('close', () => router());
+dlgPhoto.addEventListener('close', () => {
+  pendingPhotos = [];
+  router();
+});
 
 // ============================================================
 // Lightbox (with prev/next and keyboard nav)
