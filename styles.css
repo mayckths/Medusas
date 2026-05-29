@@ -1546,6 +1546,60 @@ dialog.lightbox .lightbox-cap {
   color: white; text-align: center; font-size: 0.9rem;
 }
 
+/* Tag chips overlay near the bottom of the lightbox, above the caption */
+dialog.lightbox .lb-tags {
+  position: absolute;
+  left: 50%; bottom: 4.5rem;
+  transform: translateX(-50%);
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 0.4rem;
+  max-width: min(90%, 720px);
+  z-index: 3;
+  padding: 0;
+}
+dialog.lightbox .lb-tag-chip {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: white;
+  background: var(--tag-color, rgba(0,0,0,0.55));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+dialog.lightbox .lb-tag-chip button {
+  background: transparent;
+  border: 0;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0 0.05rem;
+}
+dialog.lightbox .lb-tag-chip button:hover { color: white; }
+dialog.lightbox .lb-tag-add {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: white;
+  cursor: pointer;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+dialog.lightbox .lb-tag-add:hover {
+  background: rgba(0, 0, 0, 0.75);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
+@media (max-width: 760px) {
+  dialog.lightbox .lb-tags { bottom: 5rem; }
+}
+
 .lb-nav, .lb-close, .lb-pin, .lb-feature, .lb-move, .lb-delete {
   position: absolute;
   background: rgba(0, 0, 0, 0.5);
@@ -2472,7 +2526,7 @@ a.btn.icon-pill .material-symbols-outlined { font-size: 20px; }
   flex: 0 0 220px; width: 220px;
   scroll-snap-align: start;
 }
-.featured-label { font-size: 0.85rem; color: var(--text-dim); margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.4rem; }
+.featured-label { font-size: 0.95rem; color: #ffffff; font-weight: 600; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem; }
 
 /* ======== Stat cards rework: unread-focused ======== */
 .stats.unread-only { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }

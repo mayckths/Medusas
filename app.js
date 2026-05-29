@@ -375,7 +375,7 @@ const state = {
     photo_widget: { mode: 'featured', interval_ms: 6000 },
   },
   view: { notas: 'cards', musica: 'cards' },
-  filterTag: { notas: null, lugares: null },
+  filterTag: { notas: null, lugares: null, fotos: null },
 };
 
 // ============================================================
@@ -776,7 +776,7 @@ function renderInicio(root) {
     media: `
       <section class="section-block" data-sec="media">
         <div class="section-head">
-          <h2>Música reciente</h2>
+          <h2>Música y podcasts recientes</h2>
           <a href="#/musica">Ver toda →</a>
         </div>
         <div class="grid-cards" id="dash-media-grid"></div>
@@ -792,7 +792,7 @@ function renderInicio(root) {
     movies: `
       <section class="section-block" data-sec="movies">
         <div class="section-head">
-          <h2>Pelis recientes</h2>
+          <h2>Pelis y Series recientes</h2>
           <a href="#/pelis">Ver todas →</a>
         </div>
         <div class="grid-cards" id="dash-movies-grid"></div>
@@ -954,6 +954,23 @@ function countCheckedItems() {
     if (!Array.isArray(n.checklist)) return sum;
     return sum + n.checklist.filter(it => it && it.done).length;
   }, 0);
+}
+
+// Update the "Metas checkeadas" tile in the dashboard stats widget
+// without re-rendering the whole page. Called whenever a checklist
+// item is toggled (from a card preview or from inside the editor).
+function refreshChecklistStat() {
+  const cards = document.querySelectorAll('.stats-widget .stat-card');
+  // The card with the check_circle icon is the metas tile (index 1 in
+  // the current order, but find it by icon to be safe).
+  for (const card of cards) {
+    const icon = card.querySelector('.stat-icon .material-symbols-outlined');
+    if (icon && icon.textContent === 'check_circle') {
+      const valueEl = card.querySelector('.stat-value');
+      if (valueEl) valueEl.textContent = String(countCheckedItems());
+      return;
+    }
+  }
 }
 
 function renderRelationshipStats() {
@@ -1349,6 +1366,8 @@ function renderNoteCard(note) {
         row.classList.toggle('is-done', nowDone);
         const span = checkBtn.querySelector('.material-symbols-outlined');
         if (span) span.textContent = nowDone ? 'check_box' : 'check_box_outline_blank';
+        // Keep the "Metas checkeadas" stat card in sync
+        refreshChecklistStat();
       });
       cl.appendChild(row);
     });
@@ -1436,7 +1455,7 @@ function renderMusica(root) {
   root.innerHTML = `
     <div class="page-head">
       <div>
-        <h1>Música</h1>
+        <h1>Música y podcasts</h1>
         <div class="sub">Canciones, playlists y videos</div>
       </div>
       <div class="actions">
@@ -1587,27 +1606,51 @@ function albumNameFromSlug(slug) {
 }
 
 function renderFotos(root) {
-  const featured = state.photos.filter(p => p.featured);
+  const filterTag = state.filterTag.fotos;
+  // If a tag is active, scope all the views (featured + albums) to photos
+  // that include the tag. Untagged photos use state.photos.
+  const scoped = filterTag
+    ? state.photos.filter(p => Array.isArray(p.tags) && p.tags.includes(filterTag))
+    : state.photos;
+  const featured = scoped.filter(p => p.featured);
 
   // Group photos by album. '' (empty string) is the "Sin álbum" bucket, treated as a regular album.
   const byAlbum = new Map();
-  for (const p of state.photos) {
+  for (const p of scoped) {
     const key = p.album || '';
     if (!byAlbum.has(key)) byAlbum.set(key, []);
     byAlbum.get(key).push(p);
   }
   const totalAlbums = byAlbum.size;
 
+  // Build the unique tag set across ALL photos (so the filter row stays
+  // consistent regardless of the current filter).
+  const tagCounts = new Map();
+  state.photos.forEach(p => (p.tags || []).forEach(t => {
+    tagCounts.set(t, (tagCounts.get(t) || 0) + 1);
+  }));
+  const sortedTags = Array.from(tagCounts.entries()).sort((a, b) => b[1] - a[1]);
+
   root.innerHTML = `
     <div class="page-head">
       <div>
         <h1>Fotos</h1>
-        <div class="sub">${state.photos.length} foto${state.photos.length === 1 ? '' : 's'} · ${totalAlbums} álbum${totalAlbums === 1 ? '' : 'es'}</div>
+        <div class="sub">${scoped.length} foto${scoped.length === 1 ? '' : 's'} · ${totalAlbums} álbum${totalAlbums === 1 ? '' : 'es'}</div>
       </div>
       <div class="actions">
         <button class="btn primary" id="upload-btn">+ Subir fotos</button>
       </div>
     </div>
+    ${sortedTags.length ? `
+      <div class="tag-filter-row" id="photos-tag-filter">
+        <button class="tag-chip tag-chip-all ${!filterTag ? 'active' : ''}" data-tag="">Todas</button>
+        ${sortedTags.map(([tag, count]) => `
+          <button class="tag-chip ${filterTag === tag ? 'active' : ''}" data-tag="${escapeHtml(tag)}" style="--tag-color: ${tagColor(tag)};">
+            #${escapeHtml(tag)} <span class="count">${count}</span>
+          </button>
+        `).join('')}
+      </div>
+    ` : ''}
     <div class="featured-label" ${featured.length ? '' : 'hidden'}><span class="material-symbols-outlined">star</span> Destacadas</div>
     <div class="featured-strip" id="featured-strip" ${featured.length ? '' : 'hidden'}></div>
     <div id="photo-sections"></div>
@@ -1615,14 +1658,27 @@ function renderFotos(root) {
 
   $('#upload-btn').addEventListener('click', openPhotoUpload);
 
+  // Tag filter wiring
+  const tagRow = $('#photos-tag-filter');
+  if (tagRow) {
+    tagRow.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-tag]');
+      if (!b) return;
+      state.filterTag.fotos = b.dataset.tag || null;
+      renderFotos(root);
+    });
+  }
+
   if (featured.length) {
     const strip = $('#featured-strip');
     featured.forEach((p, i) => strip.appendChild(renderPhoto(p, featured, i)));
   }
 
   const container = $('#photo-sections');
-  if (!state.photos.length) {
-    container.innerHTML = '<div class="empty">Aún no hay fotos. Sube las primeras con el botón "Subir fotos".</div>';
+  if (!scoped.length) {
+    container.innerHTML = filterTag
+      ? `<div class="empty">No hay fotos con la etiqueta #${escapeHtml(filterTag)}.</div>`
+      : '<div class="empty">Aún no hay fotos. Sube las primeras con el botón "Subir fotos".</div>';
     return;
   }
 
@@ -2257,9 +2313,9 @@ function renderPlaceCard(p) {
 // ============================================================
 const SECTION_LABELS = {
   notes: 'Notas recientes',
-  media: 'Música reciente',
+  media: 'Música y podcasts recientes',
   photos: 'Fotos recientes',
-  movies: 'Pelis recientes',
+  movies: 'Pelis y Series recientes',
   places: 'Lugares recientes',
 };
 
@@ -3564,7 +3620,52 @@ function renderLightbox() {
   $('#lb-feature').classList.toggle('is-on', !!p.featured);
   $('#lb-feature .material-symbols-outlined').classList.toggle('filled', !!p.featured);
 
+  renderLightboxTags(p);
+
   if (isUnread(p)) markSeen('photos', p);
+}
+
+function renderLightboxTags(p) {
+  const root = $('#lb-tags');
+  if (!root) return;
+  root.innerHTML = '';
+  const tags = Array.isArray(p.tags) ? p.tags : [];
+  tags.forEach(t => {
+    const chip = document.createElement('span');
+    chip.className = 'lb-tag-chip';
+    chip.style.setProperty('--tag-color', tagColor(t));
+    chip.innerHTML = `#${escapeHtml(t)} <button type="button" aria-label="Quitar etiqueta">×</button>`;
+    chip.querySelector('button').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const next = tags.filter(x => x !== t);
+      p.tags = next;
+      // Keep the in-memory copy in state.photos in sync
+      const inState = state.photos.find(x => x.id === p.id);
+      if (inState) inState.tags = next;
+      renderLightboxTags(p);
+      try { await supabase.from('photos').update({ tags: next }).eq('id', p.id); } catch (err) { console.error('photo tag remove', err); }
+    });
+    root.appendChild(chip);
+  });
+  // "+ Etiqueta" button
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'lb-tag-add';
+  addBtn.innerHTML = '<span class="material-symbols-outlined">add</span> Etiqueta';
+  addBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const raw = await uiPrompt('Etiqueta', { title: 'Añadir etiqueta', placeholder: 'verano, viajes…', required: true });
+    if (!raw) return;
+    // Allow comma-separated bulk add
+    const incoming = raw.split(',').map(s => s.trim()).filter(Boolean);
+    const next = Array.from(new Set([...(Array.isArray(p.tags) ? p.tags : []), ...incoming]));
+    p.tags = next;
+    const inState = state.photos.find(x => x.id === p.id);
+    if (inState) inState.tags = next;
+    renderLightboxTags(p);
+    try { await supabase.from('photos').update({ tags: next }).eq('id', p.id); } catch (err) { console.error('photo tag add', err); }
+  });
+  root.appendChild(addBtn);
 }
 
 function lbNav(delta) {
@@ -4157,7 +4258,7 @@ function renderPelis(root) {
   root.innerHTML = `
     <div class="page-head">
       <div>
-        <h1>🎬 Pelis</h1>
+        <h1>🎬 Pelis y Series</h1>
         <div class="sub">Lo que queremos ver y lo que ya vimos</div>
       </div>
       <div class="actions">
