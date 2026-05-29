@@ -649,7 +649,10 @@ button.btn.pin-toggle.is-pinned {
   opacity: 0.7;
   transition: opacity 0.12s ease;
 }
-.card:hover .card-actions, .card.pinned .card-actions { opacity: 1; }
+.card:hover .card-actions, .card.pinned .card-actions, .card.featured .card-actions { opacity: 1; }
+/* Featured media cards get a subtle warm border so it's immediately
+   obvious which songs are in the "Destacadas" strip. */
+.card.media-card.featured { border-color: rgba(249, 178, 51, 0.55); }
 @media (hover: none) { .card .card-actions { opacity: 1; } }
 .card .card-actions button {
   background: var(--surface-alt); border: 1px solid var(--border); border-radius: 6px;
@@ -658,6 +661,13 @@ button.btn.pin-toggle.is-pinned {
 }
 .card .card-actions button:hover { color: var(--text); background: var(--border); }
 .card .card-actions button.is-on { color: var(--on-accent); background: var(--accent); border-color: transparent; }
+/* Featured star buttons use the warm star color instead of the brand
+   accent so they read as "starred", not "pinned". */
+.card .card-actions button[data-action="feature"].is-on {
+  color: var(--on-accent);
+  background: #f9b233;
+  border-color: transparent;
+}
 
 /* New CTA tile */
 .card.new-cta {

@@ -645,25 +645,33 @@ let backfillRan = false;
 async function backfillMediaThumbnails() {
   if (backfillRan) return;
   backfillRan = true;
-  const missing = state.media.filter(m => !m.thumbnail_url);
-  if (!missing.length) return;
-  for (const m of missing) {
+  // Anything that's missing a thumbnail OR an artist gets a fetch.
+  const needs = state.media.filter(m => !m.thumbnail_url || !m.artist);
+  if (!needs.length) return;
+  let anyChanged = false;
+  for (const m of needs) {
     const parsed = parseMediaUrl(m.url);
     if (!parsed) continue;
-    let thumb = parsed.thumbnailUrl;
-    if (!thumb) {
-      try {
-        const oe = await fetchOembedTitle(parsed);
-        if (oe?.thumbnail) thumb = oe.thumbnail;
-      } catch {}
+    let thumb = m.thumbnail_url || parsed.thumbnailUrl;
+    let artist = m.artist;
+    let oe = null;
+    // Only hit oembed once per item, and only if there's something to fetch
+    if (!thumb || !artist) {
+      try { oe = await fetchOembedTitle(parsed); } catch {}
+      if (oe?.thumbnail && !thumb) thumb = oe.thumbnail;
+      if (oe?.author && !artist) artist = oe.author;
     }
-    if (thumb) {
-      m.thumbnail_url = thumb;
-      try { await supabase.from('media').update({ thumbnail_url: thumb }).eq('id', m.id); } catch {}
+    const updates = {};
+    if (thumb && thumb !== m.thumbnail_url) updates.thumbnail_url = thumb;
+    if (artist && artist !== m.artist) updates.artist = artist;
+    if (Object.keys(updates).length) {
+      Object.assign(m, updates);
+      try { await supabase.from('media').update(updates).eq('id', m.id); } catch {}
+      anyChanged = true;
     }
   }
-  // Re-render current view to show the new thumbnails
-  if (state.route === '#/musica' || state.route === '#/inicio') {
+  // Re-render current view to show the new thumbnails / titles
+  if (anyChanged && (state.route === '#/musica' || state.route === '#/inicio')) {
     router();
   }
 }
@@ -1510,7 +1518,7 @@ function renderMediaCard(m) {
   const card = document.createElement('article');
   card.className = `card clickable media-card ${m.kind}`;
   card.style.viewTransitionName = `media-${cssSafeId(m.id)}`;
-  if (m.pinned) card.classList.add('pinned');
+  if (m.featured) card.classList.add('featured');
   card.setAttribute('role', 'button');
   card.setAttribute('tabindex', '0');
 
@@ -1520,23 +1528,24 @@ function renderMediaCard(m) {
     card.appendChild(dot);
   }
 
-  // Card actions: pin + edit
+  // Card actions: feature + edit. (We dropped pin for music — featured
+  // is what now drives the "Destacadas" strip at the top of /musica.)
   const actions = document.createElement('div');
   actions.className = 'card-actions';
   actions.innerHTML = `
     <button title="Editar" data-action="edit"><span class="material-symbols-outlined">edit</span></button>
-    <button title="${m.pinned ? 'Desanclar' : 'Anclar'}" class="${m.pinned ? 'is-on' : ''}" data-action="pin"><span class="material-symbols-outlined">keep</span></button>
+    <button title="${m.featured ? 'Quitar de destacadas' : 'Destacar'}" class="${m.featured ? 'is-on' : ''}" data-action="feature"><span class="material-symbols-outlined ${m.featured ? 'filled' : ''}">star</span></button>
   `;
   actions.addEventListener('click', async (e) => {
     e.stopPropagation();
     const btn = e.target.closest('button');
     if (!btn) return;
     if (btn.dataset.action === 'edit') openMediaEditor(m);
-    if (btn.dataset.action === 'pin') {
-      const next = !m.pinned;
+    if (btn.dataset.action === 'feature') {
+      const next = !m.featured;
       await togglePinWithTransition(async () => {
-        m.pinned = next;
-        await supabase.from('media').update({ pinned: next }).eq('id', m.id);
+        m.featured = next;
+        await supabase.from('media').update({ featured: next }).eq('id', m.id);
         await router();
       });
     }
