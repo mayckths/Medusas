@@ -2089,15 +2089,19 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 
 /* ======== Notes layout fixes ======== */
 .card.note-card {
-  padding-bottom: 1.8rem;
   aspect-ratio: 1 / 1;
   overflow: hidden;
 }
 .card.note-card .body { overflow: hidden; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 0.35rem; }
-.card.note-card .preview { -webkit-line-clamp: 3; flex: 1; }
+.card.note-card .preview { -webkit-line-clamp: 3; flex: 0 0 auto; }
 .card.note-card .gallery img { width: 42px; height: 42px; }
+/* Meta sits in flow at the bottom of the body via margin-top: auto.
+   This frees the previously-reserved 1.8rem padding so the checklist
+   preview can extend further down the card. The fit logic measures
+   body.scrollHeight including meta, so items are hidden only when
+   they really don't fit. */
 .card.note-card .meta {
-  position: absolute; bottom: 10px; left: 14px; right: 14px;
+  margin-top: auto;
   align-items: center;
 }
 .card.note-card .meta .badge { margin-left: auto; }
