@@ -1420,7 +1420,11 @@ function renderNoteCard(note) {
   if (Array.isArray(note.checklist) && note.checklist.length) {
     const cl = document.createElement('div');
     cl.className = 'card-checklist';
-    note.checklist.slice(0, 3).forEach((it, idx) => {
+    // Render up to 12 items. JS (fitCardChecklist) hides extras based
+    // on the actual available card height so taller cards get to show
+    // more items, shorter cards show fewer + "+N más".
+    const renderLimit = Math.min(note.checklist.length, 12);
+    note.checklist.slice(0, renderLimit).forEach((it, idx) => {
       const row = document.createElement('div');
       row.className = `cl-pv ${it.done ? 'is-done' : ''}`;
       row.innerHTML = `
@@ -1446,12 +1450,12 @@ function renderNoteCard(note) {
       });
       cl.appendChild(row);
     });
-    if (note.checklist.length > 3) {
-      const more = document.createElement('div');
-      more.className = 'cl-pv-more';
-      more.textContent = `+${note.checklist.length - 3} más`;
-      cl.appendChild(more);
-    }
+    // The "+N más" tail is added/updated by fitCardChecklist after
+    // we know which items overflow. Start hidden.
+    const more = document.createElement('div');
+    more.className = 'cl-pv-more';
+    more.style.display = 'none';
+    cl.appendChild(more);
     body.appendChild(cl);
   }
 
@@ -1497,7 +1501,68 @@ function renderNoteCard(note) {
   card.appendChild(body);
   card.addEventListener('click', () => openNoteEditor(note));
   card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNoteEditor(note); } });
+  // Once the card is in the DOM and laid out, hide checklist items that
+  // overflow the available card height and show a "+N más" tail.
+  if (Array.isArray(note.checklist) && note.checklist.length) {
+    requestAnimationFrame(() => fitCardChecklist(card, note));
+  }
   return card;
+}
+
+// Hide checklist items that don't fit in the card's available height
+// and update the "+N más" tail. Runs after layout. Re-evaluates on
+// resize so taller cards (e.g. desktop with fewer columns) show more
+// items dynamically.
+function fitCardChecklist(card, note) {
+  const cl = card.querySelector('.card-checklist');
+  if (!cl) return;
+  const body = card.querySelector('.body');
+  if (!body) return;
+  const items = Array.from(cl.querySelectorAll('.cl-pv'));
+  let moreEl = cl.querySelector('.cl-pv-more');
+  if (!items.length) return;
+
+  const total = note.checklist.length;
+  const rendered = items.length;
+  const renderShortfall = total - rendered; // items not even rendered
+
+  if (!moreEl) {
+    moreEl = document.createElement('div');
+    moreEl.className = 'cl-pv-more';
+    cl.appendChild(moreEl);
+  }
+
+  const updateBadge = (hiddenRendered) => {
+    const hiddenTotal = renderShortfall + hiddenRendered;
+    if (hiddenTotal > 0) {
+      moreEl.style.display = '';
+      moreEl.textContent = `+${hiddenTotal} más`;
+    } else {
+      moreEl.style.display = 'none';
+    }
+  };
+
+  const apply = () => {
+    // Reset to "all visible" so we measure naturally
+    items.forEach(it => { it.style.display = ''; });
+    // Set initial badge (visible only if we couldn't even render every item)
+    updateBadge(0);
+    let hiddenRendered = 0;
+    // Hide items from the end until the body no longer overflows
+    for (let i = items.length - 1; i >= 0 && body.scrollHeight > body.clientHeight + 1; i--) {
+      items[i].style.display = 'none';
+      hiddenRendered += 1;
+      updateBadge(hiddenRendered);
+    }
+  };
+
+  apply();
+  // Re-fit when the card's size changes (e.g., responsive column count).
+  if (typeof ResizeObserver !== 'undefined') {
+    if (card._fitObs) { try { card._fitObs.disconnect(); } catch {} }
+    card._fitObs = new ResizeObserver(() => apply());
+    card._fitObs.observe(card);
+  }
 }
 
 // Date+time helper for note cards (always show day, plus time if today)
