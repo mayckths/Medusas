@@ -1449,7 +1449,17 @@ function renderNoteCard(note) {
 
   const meta = document.createElement('div');
   meta.className = 'meta';
-  meta.innerHTML = `<span>${fmtDateWithDay(note.updated_at || note.created_at)} · ${escapeHtml(note.created_by || '?')}</span>`;
+  // Compact checklist badge — shown next to the date so the user can
+  // see at a glance whether a note has a checklist (and how far along
+  // it is). The .card-checklist preview is hidden in list view, this
+  // badge replaces it.
+  let checklistBadge = '';
+  if (Array.isArray(note.checklist) && note.checklist.length) {
+    const total = note.checklist.length;
+    const done = note.checklist.filter(it => it && it.done).length;
+    checklistBadge = `<span class="checklist-badge ${done === total ? 'is-complete' : ''}"><span class="material-symbols-outlined">${done === total ? 'check_box' : 'check_box_outline_blank'}</span> ${done}/${total}</span>`;
+  }
+  meta.innerHTML = `<span>${fmtDateWithDay(note.updated_at || note.created_at)} · ${escapeHtml(note.created_by || '?')}</span>${checklistBadge}`;
   body.appendChild(meta);
 
   card.appendChild(body);

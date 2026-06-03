@@ -2120,11 +2120,38 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 }
 .grid-list .card.note-card .preview { -webkit-line-clamp: 1; max-height: 1.4em; flex: 1; min-width: 0; }
 .grid-list .card.note-card .gallery,
-.grid-list .card.note-card .links { display: none; }
+.grid-list .card.note-card .links,
+.grid-list .card.note-card .card-checklist { display: none; }
 .grid-list .card.note-card .tag-row { flex-shrink: 0; max-width: 220px; overflow: hidden; flex-wrap: nowrap; }
 .grid-list .card.note-card h3 { font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38%; }
-.grid-list .card.note-card .meta { position: static; margin-left: auto; flex-shrink: 0; }
+.grid-list .card.note-card .meta {
+  position: static;
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: 0.5rem;
+}
 .grid-list .card.note-card .meta .badge { margin-left: 0; }
+
+/* Compact checklist progress badge shown in the meta area (list view).
+   Also visible in card view as a subtle bottom-of-meta indicator. */
+.checklist-badge {
+  display: inline-flex; align-items: center; gap: 0.2rem;
+  font-size: 0.7rem;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.checklist-badge .material-symbols-outlined {
+  font-size: 13px;
+  line-height: 1;
+}
+.checklist-badge.is-complete {
+  color: var(--accent);
+  border-color: rgba(255, 255, 255, 0.18);
+}
 
 .tag-row { margin-bottom: 0.25rem; }
 
