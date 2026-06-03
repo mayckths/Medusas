@@ -21,7 +21,28 @@ const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => Array.from(root.querySelectorAll(s));
 
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-const publicImageUrl = (path) => supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+
+// Public URL for a photo in the photos bucket. Without `opts` returns the
+// original full-res object — use that ONLY when we really need it (the
+// lightbox). For widgets, grids, card thumbnails and previews, pass a
+// transform options object (e.g. `{ width: 320 }`) so Supabase's image
+// pipeline serves a much smaller, format-optimized payload. That keeps
+// the dashboard fast and only loads the heavy original when the user
+// actually opens a photo.
+function publicImageUrl(path, opts) {
+  if (!path) return '';
+  if (!opts) return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+  const transform = { resize: 'cover', quality: 75, ...opts };
+  return supabase.storage.from(BUCKET).getPublicUrl(path, { transform }).data.publicUrl;
+}
+
+// Pick a transform width sized for an on-screen CSS width, taking device
+// pixel ratio into account so retina screens don't look fuzzy. Capped at
+// 2x to keep payloads sane on 3x phones.
+function thumbWidth(cssPx) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  return Math.ceil(cssPx * dpr);
+}
 const fmtDate = (iso) => {
   const d = new Date(iso);
   const now = new Date();
@@ -1087,7 +1108,9 @@ function setBgPhoto(path) {
   if (!layers[0] || !layers[1]) return;
   const next = (bgPhotoActiveLayer + 1) % 2;
   const nextEl = layers[next];
-  const url = publicImageUrl(path);
+  // The blurred backdrop is heavily blurred via CSS, so a small transform
+  // is fine and saves a ton of bandwidth (full-res photos can be many MB).
+  const url = publicImageUrl(path, { width: 800, quality: 60 });
   // Preload so the crossfade only happens once the image is ready
   const probe = new Image();
   probe.onload = () => {
@@ -1202,7 +1225,9 @@ function setupPhotoWidget() {
   root.innerHTML = `
     <div class="pw-stage" id="pw-stage">
       ${pool.map((p, i) =>
-        `<img src="${escapeHtml(publicImageUrl(p.storage_path))}" alt="${escapeHtml(p.caption || '')}" class="${i === 0 ? 'active' : ''}" loading="lazy" />`
+        // Photo widget stage is ~520px wide on desktop, ~360 on mobile.
+        // 1000px transform covers 2x retina without slamming the network.
+        `<img src="${escapeHtml(publicImageUrl(p.storage_path, { width: 1000 }))}" alt="${escapeHtml(p.caption || '')}" class="${i === 0 ? 'active' : ''}" loading="lazy" />`
       ).join('')}
       <div class="pw-dots">${modeLabel}</div>
       ${pool[0].caption ? `<div class="pw-cap" id="pw-cap">${escapeHtml(pool[0].caption)}</div>` : '<div class="pw-cap" id="pw-cap" hidden></div>'}
@@ -1452,7 +1477,9 @@ function renderNoteCard(note) {
     gallery.className = 'gallery';
     note.images.forEach(path => {
       const img = document.createElement('img');
-      img.src = publicImageUrl(path); img.alt = ''; img.loading = 'lazy';
+      // Card gallery thumbnails render at 42x42, so 96px transform is plenty.
+      img.src = publicImageUrl(path, { width: thumbWidth(96) });
+      img.alt = ''; img.loading = 'lazy';
       gallery.appendChild(img);
     });
     body.appendChild(gallery);
@@ -2106,7 +2133,7 @@ function renderAlbumTile(name, photos) {
   const cover = photos[0];
   tile.innerHTML = `
     <div class="album-stack"></div>
-    <img src="${escapeHtml(publicImageUrl(cover.storage_path))}" alt="${escapeHtml(name)}" loading="lazy" />
+    <img src="${escapeHtml(publicImageUrl(cover.storage_path, { width: thumbWidth(240) }))}" alt="${escapeHtml(name)}" loading="lazy" />
     <div class="album-info">
       <div class="album-name">📁 ${escapeHtml(name)}</div>
       <div class="album-count">${photos.length} foto${photos.length === 1 ? '' : 's'}</div>
@@ -2124,7 +2151,9 @@ function renderPhoto(p, list, index) {
   tile.className = 'photo';
   tile.setAttribute('role', 'button');
   tile.setAttribute('tabindex', '0');
-  const src = publicImageUrl(p.storage_path);
+  // Grid tiles are ~160px square (dashboard strip + photos page grid).
+  // 360px transform covers retina without loading the full original.
+  const src = publicImageUrl(p.storage_path, { width: thumbWidth(180) });
   tile.innerHTML = `<img src="${escapeHtml(src)}" alt="${escapeHtml(p.caption || '')}" loading="lazy" />` +
     (p.caption ? `<div class="photo-caption">${escapeHtml(p.caption)}</div>` : '');
 
@@ -3114,7 +3143,7 @@ function renderNoteImagePreviews() {
   noteDraft.images.forEach((path, i) => {
     const thumb = document.createElement('div');
     thumb.className = 'thumb';
-    thumb.innerHTML = `<img src="${escapeHtml(publicImageUrl(path))}" alt="" /><button class="remove" type="button" aria-label="Quitar">×</button>`;
+    thumb.innerHTML = `<img src="${escapeHtml(publicImageUrl(path, { width: thumbWidth(120) }))}" alt="" /><button class="remove" type="button" aria-label="Quitar">×</button>`;
     thumb.querySelector('button.remove').addEventListener('click', async () => {
       try { await supabase.storage.from(BUCKET).remove([path]); } catch {}
       noteDraft.images.splice(i, 1); renderNoteImagePreviews();
@@ -4589,7 +4618,9 @@ function renderMovieCard(m) {
   poster.className = 'poster-wrap';
   if (m.image_path) {
     const img = document.createElement('img');
-    img.src = publicImageUrl(m.image_path);
+    // Posters render at ~220-280px wide (aspect 2:3). 500px transform
+    // covers retina screens without hauling the original.
+    img.src = publicImageUrl(m.image_path, { width: thumbWidth(280) });
     img.alt = m.title; img.loading = 'lazy';
     poster.appendChild(img);
   } else {
@@ -4730,7 +4761,7 @@ function renderMovieImage() {
   el.innerHTML = '';
   if (movieDraft.image_path) {
     const img = document.createElement('img');
-    img.src = publicImageUrl(movieDraft.image_path);
+    img.src = publicImageUrl(movieDraft.image_path, { width: thumbWidth(220) });
     el.appendChild(img);
   } else {
     el.textContent = '🎬';
@@ -4922,13 +4953,10 @@ function setupPostitBoardScale() {
     const w = wrap.clientWidth || wrap.offsetWidth || 0;
     if (!w) return;
     // Uniform scale — postits keep their natural square proportions.
-    // On mobile we apply an extra shrink factor so the whole board
-    // takes less vertical (and horizontal) space; the wrapper centers
-    // the scaled board horizontally so it doesn't hug the left edge.
-    const fitScale = Math.min(1, w / POSTIT_DESIGN_W);
-    const isMobile = window.innerWidth <= 760;
-    const shrink = isMobile ? 0.7 : 1;
-    const scale = fitScale * shrink;
+    // The board fills the wrapper's full width on every breakpoint;
+    // height grows proportionally (taller on phones, but no awkward
+    // gutters on either side).
+    const scale = Math.min(1, w / POSTIT_DESIGN_W);
     wrap.style.setProperty('--pb-scale', String(scale));
   };
   apply();

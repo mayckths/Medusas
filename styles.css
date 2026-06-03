@@ -452,8 +452,10 @@ nav.menu a .m-icon { font-size: 20px; width: 22px; text-align: center; }
 .card.note-card .pin-card-btn .material-symbols-outlined { font-size: 18px; }
 /* Reserve room for the absolutely-positioned pin button so the tag row
    doesn't slide UNDER it. Use max-width instead of padding-right so
-   the visible tags aren't half-clipped at the right edge. */
-.card.note-card .body .tag-row { max-width: calc(100% - 42px); }
+   the visible tags aren't half-clipped at the right edge.
+   flex-shrink: 0 keeps the row at its natural height even when the
+   body's `overflow: hidden` would otherwise squash it down to ~3px. */
+.card.note-card .body .tag-row { max-width: calc(100% - 42px); flex-shrink: 0; }
 .page-head {
   display: flex; align-items: baseline; justify-content: space-between;
   flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;
@@ -633,7 +635,10 @@ button.btn.pin-toggle.is-pinned {
 }
 .card .badge.private { color: var(--accent); }
 /* Tag row inside cards: single-line horizontal scroll instead of wrapping
-   into multiple rows. Lets the user swipe through tags on mobile. */
+   into multiple rows on desktop (where there's enough room). On mobile
+   the cards are narrow and the hidden-scrollbar swipe is invisible — the
+   tags just *look* clipped. So below 760px we let them wrap and show
+   all chips. */
 .card .tag-row {
   display: flex; gap: 0.3rem;
   flex-wrap: nowrap;
@@ -650,6 +655,13 @@ button.btn.pin-toggle.is-pinned {
   color: white;
   background: var(--tag-color, var(--text-dim));
   white-space: nowrap;
+}
+@media (max-width: 760px) {
+  .card .tag-row {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    row-gap: 0.25rem;
+  }
 }
 .card .unread-dot {
   position: absolute; top: 10px; left: 10px; width: 8px; height: 8px; border-radius: 999px;
@@ -2108,6 +2120,14 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 }
 .card.note-card .meta .badge { margin-left: auto; }
 
+/* On narrow viewports the 1:1 aspect leaves no room for wrapped tags
+   + long titles + checklist + meta. Let the card grow vertically so
+   content fits — `margin-top: auto` on .meta collapses to 0 when the
+   body is in overflow, pushing the date below the visible card. */
+@media (max-width: 760px) {
+  .card.note-card { aspect-ratio: auto; }
+}
+
 /* New-CTA tile matches note-card aspect to keep the grid uniform */
 .card.new-cta {
   aspect-ratio: 1 / 1;
@@ -2608,7 +2628,11 @@ a.btn.icon-pill .material-symbols-outlined { font-size: 20px; }
 /* ======== Mobile: 2-column grid for dashboard sections ======== */
 @media (max-width: 760px) {
   .section-block .grid-cards {
-    grid-template-columns: 1fr 1fr;
+    /* minmax(0, 1fr) forces equal columns regardless of content width.
+       Plain `1fr` resolves to `minmax(auto, 1fr)`, which would let a
+       single long checklist item stretch its column wider than the
+       other. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 0.5rem;
   }
 }
