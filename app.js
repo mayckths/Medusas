@@ -1035,17 +1035,8 @@ function countCheckedItems() {
 // without re-rendering the whole page. Called whenever a checklist
 // item is toggled (from a card preview or from inside the editor).
 function refreshChecklistStat() {
-  const cards = document.querySelectorAll('.stats-widget .stat-card');
-  // The card with the check_circle icon is the metas tile (index 1 in
-  // the current order, but find it by icon to be safe).
-  for (const card of cards) {
-    const icon = card.querySelector('.stat-icon .material-symbols-outlined');
-    if (icon && icon.textContent === 'check_circle') {
-      const valueEl = card.querySelector('.stat-value');
-      if (valueEl) valueEl.textContent = String(countCheckedItems());
-      return;
-    }
-  }
+  const cell = document.querySelector('.stats-widget .stat-cell[data-stat="checked-goals"] .stat-value');
+  if (cell) cell.textContent = String(countCheckedItems());
 }
 
 function renderRelationshipStats() {
@@ -1053,21 +1044,18 @@ function renderRelationshipStats() {
   const checkedGoals = countCheckedItems();
   const seenTogether = moviesWatchedTogether();
   const months = monthsSince(RELATIONSHIP_START);
-  const cards = [
-    { icon: 'star', label: 'Fotos destacadas', value: featuredPhotos },
-    { icon: 'check_circle', label: 'Metas checkeadas', value: checkedGoals },
-    { icon: 'movie', label: 'Pelis vistas por ambos', value: seenTogether },
-    { icon: 'favorite', label: 'Meses juntos', value: months },
+  const stats = [
+    { key: 'featured-photos', label: 'Fotos destacadas', value: featuredPhotos },
+    { key: 'checked-goals', label: 'Metas checkeadas', value: checkedGoals },
+    { key: 'movies-both', label: 'Pelis vistas por ambos', value: seenTogether },
+    { key: 'months', label: 'Meses juntos', value: months },
   ];
   return `
     <div class="stats-widget">
-      ${cards.map(c => `
-        <div class="stat-card">
-          <div class="stat-top">
-            <span class="stat-icon"><span class="material-symbols-outlined">${c.icon}</span></span>
-            <span class="stat-label">${escapeHtml(c.label)}</span>
-          </div>
-          <div class="stat-value">${c.value}</div>
+      ${stats.map(s => `
+        <div class="stat-cell" data-stat="${s.key}">
+          <div class="stat-value">${s.value}</div>
+          <div class="stat-label">${escapeHtml(s.label)}</div>
         </div>
       `).join('')}
     </div>
