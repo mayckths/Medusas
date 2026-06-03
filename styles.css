@@ -451,9 +451,9 @@ nav.menu a .m-icon { font-size: 20px; width: 22px; text-align: center; }
 .card.note-card.pinned .pin-card-btn { background: var(--accent); color: var(--on-accent); border-color: transparent; opacity: 1; }
 .card.note-card .pin-card-btn .material-symbols-outlined { font-size: 18px; }
 /* Reserve room for the absolutely-positioned pin button so the tag row
-   doesn't scroll under it. The button is 30px + 8px right inset + a
-   small gap. */
-.card.note-card .body .tag-row { padding-right: 42px; }
+   doesn't slide UNDER it. Use max-width instead of padding-right so
+   the visible tags aren't half-clipped at the right edge. */
+.card.note-card .body .tag-row { max-width: calc(100% - 42px); }
 .page-head {
   display: flex; align-items: baseline; justify-content: space-between;
   flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;

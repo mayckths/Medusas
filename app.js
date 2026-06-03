@@ -1420,7 +1420,7 @@ function renderNoteCard(note) {
   if (Array.isArray(note.checklist) && note.checklist.length) {
     const cl = document.createElement('div');
     cl.className = 'card-checklist';
-    note.checklist.slice(0, 4).forEach((it, idx) => {
+    note.checklist.slice(0, 3).forEach((it, idx) => {
       const row = document.createElement('div');
       row.className = `cl-pv ${it.done ? 'is-done' : ''}`;
       row.innerHTML = `
@@ -1446,10 +1446,10 @@ function renderNoteCard(note) {
       });
       cl.appendChild(row);
     });
-    if (note.checklist.length > 4) {
+    if (note.checklist.length > 3) {
       const more = document.createElement('div');
       more.className = 'cl-pv-more';
-      more.textContent = `+${note.checklist.length - 4} más`;
+      more.textContent = `+${note.checklist.length - 3} más`;
       cl.appendChild(more);
     }
     body.appendChild(cl);
