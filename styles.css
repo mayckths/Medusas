@@ -585,6 +585,12 @@ button.btn.pin-toggle.is-pinned {
 
 /* ======== Shared cards ======== */
 .grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.6rem; }
+/* Dashboard sections (Notas recientes / Música recientes / etc.) use a
+   slightly wider min width so we don't fit too many tiny cards, and
+   the JS in renderInicio hides extras that wouldn't fit on one row. */
+.section-block .grid-cards {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
 .grid-list { display: flex; flex-direction: column; gap: 0.5rem; }
 .card {
   /* Semi-transparent so the blurred photo / chosen bg color shows

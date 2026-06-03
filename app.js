@@ -937,7 +937,39 @@ function renderInicio(root) {
   setupPhotoWidget();
   setupNotifBell();
   // Defer to next paint so layout is committed before we measure.
-  requestAnimationFrame(() => fitColRightToViewport());
+  requestAnimationFrame(() => {
+    fitColRightToViewport();
+    // Hide overflowing cards so dashboard sections always show one row
+    ['#dash-notes-grid', '#dash-media-grid', '#dash-movies-grid', '#dash-places-grid']
+      .forEach(sel => clampGridToOneRow(document.querySelector(sel)));
+  });
+}
+
+// Hide any children that would wrap to a second row in a CSS grid.
+// Keeps dashboard sections to a single row regardless of how many
+// items the renderer queued. Re-evaluates on container resize.
+function clampGridToOneRow(gridEl) {
+  if (!gridEl) return;
+  const apply = () => {
+    const children = Array.from(gridEl.children);
+    if (!children.length) return;
+    // Reset visibility first so we measure with everything shown
+    children.forEach(c => { c.style.display = ''; });
+    // Force one layout pass
+    void gridEl.offsetHeight;
+    // The first row's top is the smallest offsetTop. Anything with a
+    // bigger offsetTop wrapped to a later row → hide it.
+    const firstTop = children[0].offsetTop;
+    for (const c of children) {
+      if (c.offsetTop > firstTop + 2) c.style.display = 'none';
+    }
+  };
+  apply();
+  if (typeof ResizeObserver !== 'undefined') {
+    if (gridEl._clampObs) try { gridEl._clampObs.disconnect(); } catch {}
+    gridEl._clampObs = new ResizeObserver(apply);
+    gridEl._clampObs.observe(gridEl);
+  }
 }
 
 // ============================================================
