@@ -1045,6 +1045,15 @@ function moviesWatchedTogether() {
   }).length;
 }
 
+// Pelis + series que nadie ha marcado como vista. La tira del dashboard
+// las muestra para tener a la vista cuántos pendientes hay en cola.
+function moviesPending() {
+  return state.movies.filter(m => {
+    const wb = Array.isArray(m.watched_by) ? m.watched_by : [];
+    return wb.length === 0;
+  }).length;
+}
+
 function countCheckedItems() {
   return state.notes.reduce((sum, n) => {
     if (!Array.isArray(n.checklist)) return sum;
@@ -1063,12 +1072,12 @@ function refreshChecklistStat() {
 function renderRelationshipStats() {
   const featuredPhotos = state.photos.filter(p => p.featured).length;
   const checkedGoals = countCheckedItems();
-  const seenTogether = moviesWatchedTogether();
+  const pending = moviesPending();
   const months = monthsSince(RELATIONSHIP_START);
   const stats = [
     { key: 'featured-photos', label: 'Fotos destacadas', value: featuredPhotos },
     { key: 'checked-goals', label: 'Metas checkeadas', value: checkedGoals },
-    { key: 'movies-both', label: 'Pelis vistas por ambos', value: seenTogether },
+    { key: 'movies-pending', label: 'Pelis y series por ver', value: pending },
     { key: 'months', label: 'Meses juntos', value: months },
   ];
   return `
