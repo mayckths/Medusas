@@ -32,7 +32,10 @@ const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':
 function publicImageUrl(path, opts) {
   if (!path) return '';
   if (!opts) return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
-  const transform = { resize: 'cover', quality: 75, ...opts };
+  // No default `resize` — only width is set, so Supabase keeps the natural
+  // aspect and just scales down. CSS `object-fit` decides the final crop
+  // per use-case (cover for posters / album covers, contain for thumbnails).
+  const transform = { quality: 75, ...opts };
   return supabase.storage.from(BUCKET).getPublicUrl(path, { transform }).data.publicUrl;
 }
 

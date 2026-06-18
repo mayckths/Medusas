@@ -1,25 +1,28 @@
 :root, :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0a0a0c;
-  --surface: #15151a;
-  --surface-alt: #1d1d23;
-  --surface-2: #25252c;
-  --border: rgba(255,255,255,0.06);
-  --border-strong: rgba(255,255,255,0.10);
-  --text: #f5f5f0;
-  --text-dim: #888888;
-  /* Accent is the brand-active color. White for active states / focus rings,
-     with --on-accent (dark) used for text/icons placed on top of it. */
-  --accent: #ffffff;
-  --accent-2: #6d5be6;
-  --accent-hover: #e8e8e0;
-  --on-accent: #0a0a0c;
+  /* "Shared Hearth" palette — terracotta primary, forest-green secondary,
+     cream tertiary, warm-brown neutral. Surfaces stay dark so the photo
+     backdrop + glass effects still read; accent / text shift to warm. */
+  --bg: #1f2e26;            /* deep forest green */
+  --surface: #2d4739;       /* secondary green — main card surface */
+  --surface-alt: #3a554a;   /* lighter green for hover / inset rows */
+  --surface-2: #4a4542;     /* warm neutral brown for layered chrome */
+  --border: rgba(249, 246, 240, 0.08);
+  --border-strong: rgba(249, 246, 240, 0.14);
+  --text: #f9f6f0;          /* tertiary cream */
+  --text-dim: rgba(249, 246, 240, 0.55);
+  /* Accent is the brand-active color. Terracotta primary, with cream
+     used for text/icons placed on top of it. */
+  --accent: #c76d52;
+  --accent-2: #2d4739;
+  --accent-hover: #d4836a;
+  --on-accent: #f9f6f0;
   /* Glass button tokens (the new pill design from Figma). */
-  --glass-bg: rgba(0, 0, 0, 0.2);
-  --glass-bg-hover: rgba(0, 0, 0, 0.35);
-  --glass-border: rgba(255, 255, 255, 0.10);
-  --glass-text: #ffffff;
-  --danger: #ff6b6b;
+  --glass-bg: rgba(31, 46, 38, 0.35);
+  --glass-bg-hover: rgba(31, 46, 38, 0.55);
+  --glass-border: rgba(249, 246, 240, 0.14);
+  --glass-text: #f9f6f0;
+  --danger: #c76d52;
   --warn: #ffb84d;
   --radius: 16px;
   --radius-lg: 22px;
@@ -1178,7 +1181,10 @@ dialog.theater::backdrop { background: rgba(0,0,0,0.85); }
 .photo:hover {
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45), 0 3px 6px rgba(0, 0, 0, 0.25);
 }
-.photo img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.2s ease; }
+/* Thumbnails show the WHOLE photo (object-fit: contain) so the user
+   can recognize it from the tile. Lightbox uses the original full-res
+   image and fills its container. */
+.photo img { width: 100%; height: 100%; object-fit: contain; display: block; transition: transform 0.2s ease; background: var(--surface); }
 .photo:hover img { transform: scale(1.04); }
 .photo .photo-caption {
   position: absolute; left: 0; right: 0; bottom: 0;
