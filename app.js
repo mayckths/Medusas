@@ -426,6 +426,10 @@ const state = {
   },
   view: { notas: 'cards', musica: 'cards' },
   filterTag: { notas: null, lugares: null, fotos: null, pelis: null },
+  /* Pelis page top-level tab: 'watchlist' (alguien aún no la vio) or
+     'together' (ambos la vieron). Persists across navigations within
+     the session; resets on reload. */
+  peliView: 'watchlist',
 };
 
 // ============================================================
@@ -1923,26 +1927,30 @@ function renderAlbumSection(name, photos) {
   const displayName = isUnnamed ? 'Sin álbum' : name;
   const slug = albumSlugFor(name);
 
-  // Fit as many photos as we can into a single row of the strip.
-  // If there are extras, the last tile is a "+N" link to the album page.
-  const fits = computeAlbumPreviewCount();
-  let visible, more;
-  if (photos.length > fits) {
-    visible = photos.slice(0, fits - 1);
-    more = photos.length - visible.length;
-  } else {
-    visible = photos;
-    more = 0;
-  }
+  // Hero mosaic layout (ref 4): 1 large photo + up to 2 stacked tiles on
+  // the right. With >3 photos, the third right-tile becomes a "+N · Ver
+  // todas" overlay that links to the full album page.
+  const layout = photos.length === 1 ? 'single' : photos.length === 2 ? 'pair' : 'hero';
+  const visibleCount = layout === 'hero' ? Math.min(3, photos.length) : photos.length;
+  const visible = photos.slice(0, visibleCount);
+  const more = photos.length - visibleCount;
+
+  // Meta line: month range (from the photos' created_at) and total count.
+  const meta = albumMetaLabel(photos);
 
   const section = document.createElement('div');
   section.className = 'album-section';
   section.innerHTML = `
-    <div class="album-title-row">
-      <h2>${escapeHtml(displayName)}</h2>
+    <div class="album-section-head">
+      <span class="rule"></span>
+      <div class="title-block">
+        <h2>${escapeHtml(displayName)}</h2>
+        ${meta ? `<div class="album-meta">${escapeHtml(meta)}</div>` : ''}
+      </div>
+      <span class="rule"></span>
       <span class="album-menu-wrap">
         <button class="album-menu-btn" type="button" title="Opciones del álbum" aria-label="Opciones del álbum">
-          <span class="material-symbols-outlined">keyboard_arrow_down</span>
+          <span class="material-symbols-outlined">more_horiz</span>
         </button>
         <div class="album-menu-popover">
           <button data-action="rename"><span class="material-symbols-outlined">edit</span>${isUnnamed ? 'Asignar nombre…' : 'Renombrar álbum'}</button>
@@ -1951,20 +1959,50 @@ function renderAlbumSection(name, photos) {
         </div>
       </span>
     </div>
-    <div class="album-strip"></div>
+    <div class="album-mosaic mosaic-${layout}"></div>
   `;
-  const strip = section.querySelector('.album-strip');
-  visible.forEach((p, i) => strip.appendChild(renderPhoto(p, photos, i)));
+  const mosaic = section.querySelector('.album-mosaic');
+  visible.forEach((p, i) => {
+    const tile = renderPhoto(p, photos, i);
+    if (layout === 'hero' && i === 0) tile.classList.add('hero');
+    mosaic.appendChild(tile);
+  });
   if (more > 0) {
+    // Overlay the last visible tile with a "+N · Ver todas" pill instead
+    // of replacing it — keeps the photo recognizable as a preview.
+    const lastTile = mosaic.lastElementChild;
     const moreEl = document.createElement('a');
-    moreEl.className = 'more-photos';
+    moreEl.className = 'mosaic-more';
     moreEl.href = `#/fotos/album/${slug}`;
-    moreEl.innerHTML = `<span class="more-count">+${more}</span>`;
-    strip.appendChild(moreEl);
+    moreEl.innerHTML = `<span>+${more} · Ver todas</span>`;
+    lastTile.appendChild(moreEl);
   }
 
   wireAlbumMenu(section, name, photos);
   return section;
+}
+
+// "MAY 2026 · 12 FOTOS" — small-caps subtitle under the album title.
+// If the album spans multiple months, we show the range; otherwise just
+// the single month + year.
+function albumMetaLabel(photos) {
+  if (!photos.length) return '';
+  const dates = photos
+    .map(p => p.created_at)
+    .filter(Boolean)
+    .map(d => new Date(d))
+    .sort((a, b) => a - b);
+  let when = '';
+  if (dates.length) {
+    const first = dates[0];
+    const last = dates[dates.length - 1];
+    const fmt = (d) => d.toLocaleDateString('es', { month: 'long', year: 'numeric' });
+    when = (first.getMonth() === last.getMonth() && first.getFullYear() === last.getFullYear())
+      ? fmt(first)
+      : `${fmt(first)} – ${fmt(last)}`;
+  }
+  const count = `${photos.length} foto${photos.length === 1 ? '' : 's'}`;
+  return when ? `${when} · ${count}` : count;
 }
 
 // Wires the ellipsis menu of an album (used in both renderAlbumSection and renderAlbumDetail).
@@ -4504,7 +4542,19 @@ function renderPelis(root) {
   // The two users (used for the watched filter chips)
   const userNames = state._userAssets ? Object.keys(state._userAssets) : ['Jaime', 'Mayck'];
 
-  const items = !filterTag ? state.movies : state.movies.filter(m => {
+  // Top-level tab filter: Watchlist (someone hasn't watched) vs
+  // Watched Together (everyone watched). Tag/platform/watched-by
+  // chips below filter within whichever tab is active.
+  const peliView = state.peliView || 'watchlist';
+  const matchesView = (m) => {
+    const wb = Array.isArray(m.watched_by) ? m.watched_by : [];
+    const everyone = userNames.length >= 2 && userNames.every(u => wb.includes(u));
+    return peliView === 'together' ? everyone : !everyone;
+  };
+
+  const items = state.movies.filter(m => {
+    if (!matchesView(m)) return false;
+    if (!filterTag) return true;
     if (activePlatform) return (m.platform || '').trim() === activePlatform;
     if (activeWatched) {
       const wb = Array.isArray(m.watched_by) ? m.watched_by : [];
@@ -4513,6 +4563,14 @@ function renderPelis(root) {
     }
     return Array.isArray(m.tags) && m.tags.includes(activeTag);
   });
+
+  // Counts for the tabs themselves so the UI shows how many sit in each.
+  const tabCounts = state.movies.reduce((acc, m) => {
+    const wb = Array.isArray(m.watched_by) ? m.watched_by : [];
+    const everyone = userNames.length >= 2 && userNames.every(u => wb.includes(u));
+    if (everyone) acc.together += 1; else acc.watchlist += 1;
+    return acc;
+  }, { watchlist: 0, together: 0 });
 
   // Build counts for tags + platforms combined into a single ordered list
   const tagCounts = new Map();
@@ -4544,6 +4602,14 @@ function renderPelis(root) {
         <button class="btn primary" id="new-movie-btn">+ Nueva peli</button>
       </div>
     </div>
+    <div class="seg-tabs" id="pelis-tabs">
+      <button class="seg-tab ${peliView === 'watchlist' ? 'active' : ''}" data-view="watchlist">
+        Por ver <span class="count">${tabCounts.watchlist}</span>
+      </button>
+      <button class="seg-tab ${peliView === 'together' ? 'active' : ''}" data-view="together">
+        Vistas juntos <span class="count">${tabCounts.together}</span>
+      </button>
+    </div>
     ${(sortedTags.length || sortedPlatforms.length || Object.keys(watchedCounts).length) ? `
       <div class="tag-filter-row" id="pelis-tag-filter">
         <button class="tag-chip tag-chip-all ${!filterTag ? 'active' : ''}" data-tag="">Todas</button>
@@ -4572,6 +4638,20 @@ function renderPelis(root) {
     <div class="grid-cards" id="movies-grid"></div>
   `;
   $('#new-movie-btn').addEventListener('click', () => openMovieEditor(null));
+  const tabsRow = $('#pelis-tabs');
+  if (tabsRow) {
+    tabsRow.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-view]');
+      if (!b) return;
+      const next = b.dataset.view;
+      if (next === state.peliView) return;
+      state.peliView = next;
+      // Switching tabs invalidates the active tag/watched-by chip filter
+      // since the counts inside the tab are different.
+      state.filterTag.pelis = null;
+      renderPelis(root);
+    });
+  }
   const tagRow = $('#pelis-tag-filter');
   if (tagRow) {
     tagRow.addEventListener('click', (e) => {

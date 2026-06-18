@@ -317,9 +317,14 @@ body {
 
 /* ======== Layout ======== */
 .app-shell { display: flex; min-height: 100vh; gap: 0; padding: 16px; box-sizing: border-box; }
+/* Sidebar uses its own warm-cream surface (vs the dark green main bg)
+   so it reads like a notebook panel in the middle of the photo backdrop.
+   Active item: terracotta-tinted pill matching the brand accent. */
 aside.sidebar {
   width: var(--sidebar-w); flex-shrink: 0;
-  background: var(--surface); border: 1px solid var(--border);
+  background: #f9f6f0;
+  color: #4a4542;
+  border: 1px solid rgba(74, 69, 66, 0.12);
   border-radius: var(--radius-lg);
   padding: 1.25rem 0.75rem 1.25rem;
   position: sticky; top: 16px;
@@ -328,11 +333,11 @@ aside.sidebar {
   box-shadow: var(--shadow);
   margin-right: 16px;
 }
-nav.menu.menu-bottom { margin-top: auto; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+nav.menu.menu-bottom { margin-top: auto; padding-top: 0.5rem; border-top: 1px solid rgba(74, 69, 66, 0.10); }
 .brand { padding: 0 0.5rem 0.75rem; }
 .brand .logo { display: flex; gap: 4px; align-items: center; }
 .brand .logo img { width: 32px; height: 32px; }
-.brand .tag { color: var(--text-dim); font-size: 0.78rem; margin-top: 0.25rem; font-style: italic; }
+.brand .tag { color: rgba(74, 69, 66, 0.65); font-size: 0.78rem; margin-top: 0.25rem; font-style: italic; }
 
 .auth-hero-fallback {
   display: flex; align-items: center; justify-content: center; gap: 0.6rem;
@@ -343,16 +348,20 @@ nav.menu { display: flex; flex-direction: column; gap: 2px; }
 nav.menu a {
   display: flex; align-items: center; gap: 0.65rem;
   padding: 0.5rem 0.65rem; border-radius: 8px;
-  color: var(--text-dim); text-decoration: none; font-size: 0.92rem;
+  color: rgba(74, 69, 66, 0.75); text-decoration: none; font-size: 0.92rem;
   position: relative;
 }
 nav.menu a > span:nth-child(2) { flex: 1; }
-nav.menu a:hover { background: var(--surface-alt); color: var(--text); }
-nav.menu a.active { background: var(--surface-alt); color: var(--text); font-weight: 600; }
+nav.menu a:hover { background: rgba(199, 109, 82, 0.08); color: #4a4542; }
+nav.menu a.active {
+  background: rgba(199, 109, 82, 0.14);
+  color: var(--accent);
+  font-weight: 600;
+}
 nav.menu .icon { width: 1.2rem; display: inline-block; text-align: center; }
 nav.menu .section-label {
   font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--text-dim); padding: 0.85rem 0.65rem 0.3rem;
+  color: rgba(74, 69, 66, 0.55); padding: 0.85rem 0.65rem 0.3rem;
 }
 .badge-unread {
   background: var(--accent); color: var(--on-accent); font-size: 0.65rem;
@@ -1059,6 +1068,47 @@ button.btn.pin-toggle.is-pinned {
 .unread-banner .unread-item .icon { width: 1.2rem; text-align: center; }
 .unread-banner .unread-item .who { color: var(--text-dim); font-size: 0.78rem; }
 
+/* ======== Segmented tabs (Pelis: Por ver / Vistas juntos) ======== */
+.seg-tabs {
+  display: flex; gap: 0;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.seg-tabs .seg-tab {
+  background: transparent;
+  border: 0;
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  font-weight: 500;
+  padding: 0.6rem 1rem 0.7rem;
+  cursor: pointer;
+  position: relative;
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  font-family: inherit;
+  transition: color 0.15s ease;
+}
+.seg-tabs .seg-tab:hover { color: var(--text); }
+.seg-tabs .seg-tab.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+.seg-tabs .seg-tab.active::after {
+  content: "";
+  position: absolute;
+  left: 0.4rem; right: 0.4rem; bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+.seg-tabs .seg-tab .count {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  background: var(--surface-alt);
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+}
+.seg-tabs .seg-tab.active .count { background: rgba(199, 109, 82, 0.18); color: var(--accent); }
+
 /* ======== Tags filter row ======== */
 .tag-filter-row { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .tag-filter-row .tag-chip {
@@ -1181,10 +1231,16 @@ dialog.theater::backdrop { background: rgba(0,0,0,0.85); }
 .photo:hover {
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45), 0 3px 6px rgba(0, 0, 0, 0.25);
 }
-/* Thumbnails show the WHOLE photo (object-fit: contain) so the user
-   can recognize it from the tile. Lightbox uses the original full-res
-   image and fills its container. */
-.photo img { width: 100%; height: 100%; object-fit: contain; display: block; transition: transform 0.2s ease; background: var(--surface); }
+/* Thumbnails fill the tile (object-fit: cover) using the smart-cropped
+   thumb returned by Supabase image-transform — the API picks a sensible
+   center frame instead of a random off-center slice. Tall portraits get
+   their top portion (where faces usually are) preserved via object-position. */
+.photo img {
+  width: 100%; height: 100%;
+  object-fit: cover; object-position: center top;
+  display: block; transition: transform 0.2s ease;
+  background: var(--surface);
+}
 .photo:hover img { transform: scale(1.04); }
 .photo .photo-caption {
   position: absolute; left: 0; right: 0; bottom: 0;
@@ -2197,7 +2253,90 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 #dlg-note .modal-inner input.title { margin-top: 0.5rem; padding-top: 0.4rem; }
 
 /* Album titles on Photos page */
-.album-section { margin-bottom: 1.4rem; }
+.album-section { margin-bottom: 2.5rem; }
+
+/* Centered section header (ref 4): title in serif accent + meta subtitle,
+   flanked by thin horizontal rules. The dropdown menu sits in the right
+   corner without disturbing the centering. */
+.album-section .album-section-head {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  position: relative;
+}
+.album-section .album-section-head .rule {
+  height: 1px;
+  background: rgba(249, 246, 240, 0.18);
+}
+.album-section .album-section-head .title-block { text-align: center; }
+.album-section .album-section-head h2 {
+  margin: 0;
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0;
+}
+.album-section .album-section-head .album-meta {
+  margin-top: 0.2rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* Hero mosaic — 1 large + 2 stacked tiles on the right (ref 4 "Summer
+   Trip" layout). Smaller variants stack into 1- or 2-column grids. */
+.album-mosaic {
+  display: grid;
+  gap: 0.5rem;
+}
+.album-mosaic.mosaic-single {
+  grid-template-columns: 1fr;
+  aspect-ratio: 16 / 9;
+}
+.album-mosaic.mosaic-pair {
+  grid-template-columns: 1fr 1fr;
+  aspect-ratio: 16 / 8;
+}
+.album-mosaic.mosaic-hero {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  grid-template-rows: 1fr 1fr;
+  aspect-ratio: 16 / 9;
+}
+.album-mosaic.mosaic-hero .hero { grid-row: span 2; }
+.album-mosaic .photo {
+  width: 100%; height: 100%;
+  aspect-ratio: auto;
+  border-radius: var(--radius);
+  position: relative;
+}
+.album-mosaic .photo img {
+  object-position: center center;
+}
+
+/* "+N · Ver todas" overlay anchored over the last visible tile so the
+   user still sees a photo behind it instead of a blank tile. */
+.album-mosaic .mosaic-more {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  background: rgba(31, 46, 38, 0.55);
+  color: var(--text);
+  font-weight: 500;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  border-radius: inherit;
+  transition: background 0.15s ease;
+}
+.album-mosaic .mosaic-more:hover { background: rgba(199, 109, 82, 0.55); }
+@media (max-width: 760px) {
+  .album-mosaic.mosaic-hero { aspect-ratio: 4 / 3; }
+  .album-section .album-section-head h2 { font-size: 1.15rem; }
+}
+
 .album-section .album-title-row {
   display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.5rem;
   position: relative;
