@@ -1022,8 +1022,8 @@ button.btn.pin-toggle.is-pinned {
 }
 .dash-photos-section .dash-photos-strip::-webkit-scrollbar { display: none; }
 .dash-photos-section .dash-photos-strip .photo {
-  flex: 0 0 160px;
-  width: 160px; height: 160px;
+  flex: 0 0 130px;
+  width: 130px; height: 174px;
   aspect-ratio: auto;
   scroll-snap-align: start;
 }
@@ -2291,36 +2291,34 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 
 /* Hero mosaic — 1 large + 2 stacked tiles on the right (ref 4 "Summer
    Trip" layout). Smaller variants stack into 1- or 2-column grids. */
+/* Mosaic uses a row of equal portrait tiles (3:4) so phone portrait
+   photos fill them without skinny green letterbox bars. Up to 4 tiles
+   visible; the rest collapse behind the "+N · Ver todas" overlay on the
+   last tile. */
 .album-mosaic {
   display: grid;
   gap: 0.5rem;
-  /* Cap the total mosaic height so a single album doesn't dominate the
-     viewport. Aspect ratios are kept wide so the row stays compact even
-     when the content area is wide. */
-  max-height: 360px;
 }
-.album-mosaic.mosaic-single {
-  grid-template-columns: 1fr;
-  aspect-ratio: 16 / 7;
-}
-.album-mosaic.mosaic-pair {
-  grid-template-columns: 1fr 1fr;
-  aspect-ratio: 16 / 6;
-}
-.album-mosaic.mosaic-hero {
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-  grid-template-rows: 1fr 1fr;
-  aspect-ratio: 12 / 5;
-}
-.album-mosaic.mosaic-hero .hero { grid-row: span 2; }
 .album-mosaic .photo {
-  width: 100%; height: 100%;
-  aspect-ratio: auto;
+  aspect-ratio: 3 / 4;
   border-radius: var(--radius);
   position: relative;
 }
-.album-mosaic .photo img {
-  object-position: center center;
+.album-mosaic.mosaic-single {
+  grid-template-columns: minmax(0, 240px);
+  justify-content: center;
+}
+.album-mosaic.mosaic-pair {
+  grid-template-columns: repeat(2, minmax(0, 240px));
+  justify-content: center;
+}
+.album-mosaic.mosaic-hero {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  max-width: 1100px;
+}
+.album-mosaic.mosaic-hero .hero {
+  /* Hero no longer spans extra rows — all tiles are equal portraits so
+     the layout reads as a contact-sheet row instead of a hero collage. */
 }
 
 /* "+N · Ver todas" overlay anchored over the last visible tile so the
@@ -2754,7 +2752,7 @@ a.btn.icon-pill .material-symbols-outlined { font-size: 20px; }
   scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; margin-bottom: 1rem;
 }
 .featured-strip .photo {
-  flex: 0 0 160px; width: 160px; height: 160px;
+  flex: 0 0 130px; width: 130px; height: 174px;
   aspect-ratio: auto;
   scroll-snap-align: start;
 }
