@@ -1231,16 +1231,18 @@ dialog.theater::backdrop { background: rgba(0,0,0,0.85); }
 .photo:hover {
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45), 0 3px 6px rgba(0, 0, 0, 0.25);
 }
-/* Thumbnails fill the tile (object-fit: cover) using the smart-cropped
-   thumb returned by Supabase image-transform — the API picks a sensible
-   center frame instead of a random off-center slice. Tall portraits get
-   their top portion (where faces usually are) preserved via object-position. */
+/* Thumbnails show the WHOLE photo (object-fit: contain) so the user can
+   recognize each tile — a cropped center frame turned into meaningless
+   wood / fabric / sky textures. The tile background uses the app surface
+   color so the letterbox blends with the rest of the UI instead of
+   reading as ugly bars. */
 .photo img {
   width: 100%; height: 100%;
-  object-fit: cover; object-position: center top;
+  object-fit: contain;
   display: block; transition: transform 0.2s ease;
   background: var(--surface);
 }
+.photo { background: var(--surface); }
 .photo:hover img { transform: scale(1.04); }
 .photo .photo-caption {
   position: absolute; left: 0; right: 0; bottom: 0;
@@ -2292,19 +2294,23 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 .album-mosaic {
   display: grid;
   gap: 0.5rem;
+  /* Cap the total mosaic height so a single album doesn't dominate the
+     viewport. Aspect ratios are kept wide so the row stays compact even
+     when the content area is wide. */
+  max-height: 360px;
 }
 .album-mosaic.mosaic-single {
   grid-template-columns: 1fr;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 16 / 7;
 }
 .album-mosaic.mosaic-pair {
   grid-template-columns: 1fr 1fr;
-  aspect-ratio: 16 / 8;
+  aspect-ratio: 16 / 6;
 }
 .album-mosaic.mosaic-hero {
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   grid-template-rows: 1fr 1fr;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 12 / 5;
 }
 .album-mosaic.mosaic-hero .hero { grid-row: span 2; }
 .album-mosaic .photo {
