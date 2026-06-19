@@ -414,6 +414,61 @@ async function markSeen(table, item) {
   } catch (e) { console.warn('markSeen failed', e); }
 }
 
+// Mark every unread item in a collection as seen for the current user
+// in one go. Used when the user enters a section that has the indicator
+// dot, OR when they open the notifications panel from the dashboard —
+// both gestures imply they've acknowledged the new stuff.
+async function markAllSeen(table, items) {
+  if (!state.currentUser) return;
+  const unread = items.filter(item => isUnread(item));
+  if (!unread.length) return;
+  unread.forEach(item => {
+    const seen = Array.isArray(item.seen_by) ? item.seen_by : [];
+    item.seen_by = seen.includes(state.currentUser) ? seen : [...seen, state.currentUser];
+  });
+  updateSidebarBadges();
+  // Also refresh the bell badge on the dashboard without re-rendering.
+  const bellCount = document.querySelector('#notif-bell .notif-count');
+  if (bellCount) {
+    const remaining = totalUnreadCount();
+    if (remaining > 0) bellCount.textContent = String(remaining);
+    else bellCount.remove();
+  }
+  try {
+    await Promise.all(unread.map(item =>
+      supabase.from(table).update({ seen_by: item.seen_by }).eq('id', item.id)
+    ));
+  } catch (e) { console.warn('markAllSeen failed', e); }
+}
+
+// Mark all unread items across every notif-producing table as seen.
+// Called when the user opens the bell — by opening the panel they
+// inherently acknowledge what's new.
+function markAllUnreadEverywhere() {
+  // Private notes never generate notifications, so they shouldn't be
+  // included — leaving them unread keeps their personal "for me" dot
+  // intact even if the partner opened the bell.
+  const sharedNotes = state.notes.filter(n => n.visibility !== 'private');
+  return Promise.all([
+    markAllSeen('notes', sharedNotes),
+    markAllSeen('media', state.media),
+    markAllSeen('photos', state.photos),
+    markAllSeen('movies', state.movies),
+  ]);
+}
+
+// Match the route to its underlying collection so visiting that section
+// (which already shows the indicator dots on each card) acknowledges
+// them as a batch. Albums under /fotos count as visiting Fotos.
+function markSectionVisited(hash) {
+  if (hash === '#/notas' || hash === '#/notas/publicas' || hash === '#/notas/privadas') {
+    return markAllSeen('notes', state.notes.filter(n => n.visibility !== 'private'));
+  }
+  if (hash === '#/musica') return markAllSeen('media', state.media);
+  if (hash === '#/fotos' || hash.startsWith('#/fotos/album/')) return markAllSeen('photos', state.photos);
+  if (hash === '#/pelis') return markAllSeen('movies', state.movies);
+}
+
 // ============================================================
 // State
 // ============================================================
@@ -798,6 +853,11 @@ async function router() {
     case hash === '#/configuracion': renderConfig(content); break;
     default: location.hash = '#/inicio';
   }
+  // Visiting a section is an implicit acknowledgment of its unread
+  // items. Fired after render so the page's own unread-dots animate in
+  // before fading on the next paint, and the DB roundtrip doesn't block
+  // navigation.
+  markSectionVisited(hash);
 }
 window.addEventListener('hashchange', router);
 
@@ -4427,6 +4487,11 @@ function setupNotifBell() {
     if (!popover.hidden) { close(); return; }
     renderNotifList();
     popover.hidden = false;
+    // Opening the panel = acknowledging what's new. Persist after the
+    // list renders so the user still sees which items were unread for
+    // this visit (the panel keeps the "Nuevo para ti" header until next
+    // open).
+    markAllUnreadEverywhere();
   });
   document.addEventListener('click', (e) => {
     if (!popover.contains(e.target) && e.target !== bell) close();
