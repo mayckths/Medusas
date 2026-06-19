@@ -17,7 +17,7 @@
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
 
-    <link rel="stylesheet" href="./styles.css?v=20260618p" />
+    <link rel="stylesheet" href="./styles.css?v=20260618q" />
 
     <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>
@@ -313,6 +313,11 @@
       <button class="lb-delete" id="lb-delete" aria-label="Eliminar"><span class="material-symbols-outlined">delete</span></button>
       <div class="lb-stage" id="lb-stage">
         <img id="lightbox-img" src="" alt="" />
+        <div class="lb-spinner" id="lb-spinner" hidden aria-hidden="true">
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+        </div>
       </div>
       <div class="lb-tags" id="lb-tags"></div>
       <div class="lightbox-cap" id="lightbox-cap" hidden></div>
@@ -454,6 +459,6 @@
       <div class="notif-list" id="notif-list"></div>
     </div>
 
-    <script type="module" src="./app.js?v=20260618p"></script>
+    <script type="module" src="./app.js?v=20260618q"></script>
   </body>
 </html>

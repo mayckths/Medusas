@@ -4028,8 +4028,28 @@ function openLightbox(list, index) {
 function renderLightbox() {
   const p = lightboxState.list[lightboxState.index];
   if (!p) return;
-  $('#lightbox-img').src = publicImageUrl(p.storage_path);
-  $('#lightbox-img').alt = p.caption || '';
+  const img = $('#lightbox-img');
+  const spinner = $('#lb-spinner');
+  const nextSrc = publicImageUrl(p.storage_path);
+  // Always hide the previous frame BEFORE the new src downloads — otherwise
+  // the stale photo sits visible for the duration of the new image's
+  // network roundtrip. Show the spinner while the next image decodes.
+  // A token guards against out-of-order onload events when the user
+  // clicks Next several times before the first image arrives.
+  if (img.src !== nextSrc) {
+    img.classList.add('loading');
+    if (spinner) spinner.hidden = false;
+    const token = (renderLightbox._token = (renderLightbox._token || 0) + 1);
+    const finish = () => {
+      if (renderLightbox._token !== token) return; // a newer src superseded us
+      img.classList.remove('loading');
+      if (spinner) spinner.hidden = true;
+    };
+    img.onload = finish;
+    img.onerror = finish;
+    img.src = nextSrc;
+  }
+  img.alt = p.caption || '';
   if (p.caption) { $('#lightbox-cap').textContent = p.caption; $('#lightbox-cap').hidden = false; }
   else $('#lightbox-cap').hidden = true;
 
