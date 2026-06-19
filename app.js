@@ -2095,12 +2095,15 @@ function renderAlbumSection(name, photos) {
   });
   if (more > 0) {
     // Overlay the last visible tile with a "+N · Ver todas" pill instead
-    // of replacing it — keeps the photo recognizable as a preview.
+    // of replacing it — keeps the photo recognizable as a preview. The
+    // click must NOT open the lightbox (which the parent tile listens
+    // for) — only navigate to the album page.
     const lastTile = mosaic.lastElementChild;
     const moreEl = document.createElement('a');
     moreEl.className = 'mosaic-more';
     moreEl.href = `#/fotos/album/${slug}`;
     moreEl.innerHTML = `<span>+${more} · Ver todas</span>`;
+    moreEl.addEventListener('click', (e) => e.stopPropagation());
     lastTile.appendChild(moreEl);
   }
 
