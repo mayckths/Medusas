@@ -1969,7 +1969,10 @@ function renderAlbumSection(name, photos) {
   `;
   const mosaic = section.querySelector('.album-mosaic');
   visible.forEach((p, i) => {
-    const tile = renderPhoto(p, photos, i);
+    // gridSlot tells renderPhoto to leave the tile's aspect alone so the
+    // CSS grid's hero/stack layout wins — otherwise every tile would try
+    // to take its own photo's aspect and break the composition.
+    const tile = renderPhoto(p, photos, i, { gridSlot: true });
     if (layout === 'hero' && i === 0) tile.classList.add('hero');
     mosaic.appendChild(tile);
   });
@@ -2202,7 +2205,7 @@ function renderAlbumTile(name, photos) {
   return tile;
 }
 
-function renderPhoto(p, list, index) {
+function renderPhoto(p, list, index, opts = {}) {
   const tile = document.createElement('div');
   tile.className = 'photo';
   tile.setAttribute('role', 'button');
@@ -2213,18 +2216,21 @@ function renderPhoto(p, list, index) {
   tile.innerHTML = `<img src="${escapeHtml(src)}" alt="${escapeHtml(p.caption || '')}" loading="lazy" />` +
     (p.caption ? `<div class="photo-caption">${escapeHtml(p.caption)}</div>` : '');
 
-  // Masonry-style sizing: as soon as we know the photo's natural aspect,
-  // copy it onto the tile so the image fills the tile completely (cover
-  // with matching aspect = no crop, no letterbox). Until the image
-  // decodes the tile uses the fallback 3:4 portrait aspect from CSS.
-  const imgEl = tile.querySelector('img');
-  const setAspectFromImg = () => {
-    if (imgEl.naturalWidth && imgEl.naturalHeight) {
-      tile.style.aspectRatio = `${imgEl.naturalWidth} / ${imgEl.naturalHeight}`;
-    }
-  };
-  if (imgEl.complete) setAspectFromImg();
-  else imgEl.addEventListener('load', setAspectFromImg, { once: true });
+  // Masonry-style sizing for free-flow contexts (strips, scroll rows):
+  // copy the photo's natural aspect to the tile so cover fills exactly
+  // without crop or letterbox. For fixed-grid contexts (the album mosaic
+  // hero layout) the parent grid already decides each cell's shape, so
+  // skip this and let the cell + cover do the cropping.
+  if (!opts.gridSlot) {
+    const imgEl = tile.querySelector('img');
+    const setAspectFromImg = () => {
+      if (imgEl.naturalWidth && imgEl.naturalHeight) {
+        tile.style.aspectRatio = `${imgEl.naturalWidth} / ${imgEl.naturalHeight}`;
+      }
+    };
+    if (imgEl.complete) setAspectFromImg();
+    else imgEl.addEventListener('load', setAspectFromImg, { once: true });
+  }
 
   // Quick-feature star button (top-right). Visible on hover; persistent when featured.
   const star = document.createElement('button');
