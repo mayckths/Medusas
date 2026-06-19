@@ -1869,6 +1869,18 @@ function computeAlbumPreviewCount() {
   return Math.max(2, Math.floor(content / ALBUM_TILE_PX));
 }
 
+// How many photos the album hero mosaic should render. Wide viewports
+// get extra columns of stacked tiles so they don't end up with a half
+// empty mosaic next to the hero. Counts pair with the CSS media queries
+// on .album-mosaic.mosaic-hero — every step adds one extra column (= 2
+// stacked tiles), so the slots progress 3 → 5 → 7.
+function computeMosaicSlots() {
+  const w = window.innerWidth;
+  if (w >= 1500) return 7;
+  if (w >= 1200) return 5;
+  return 3;
+}
+
 function albumSlugFor(name) {
   return name ? encodeURIComponent(name) : SIN_ALBUM_KEY;
 }
@@ -2017,11 +2029,16 @@ function renderAlbumSection(name, photos) {
   const displayName = isUnnamed ? 'Sin álbum' : name;
   const slug = albumSlugFor(name);
 
-  // Hero mosaic layout (ref 4): 1 large photo + up to 2 stacked tiles on
-  // the right. With >3 photos, the third right-tile becomes a "+N · Ver
-  // todas" overlay that links to the full album page.
+  // Hero mosaic layout (ref 4): 1 large photo + a column of stacked tiles
+  // on the right. The slot count grows with viewport so wide screens
+  // don't end up with a half-empty mosaic. The last visible tile gets a
+  // "+N · Ver todas" overlay when there are still more photos in the
+  // album beyond what fits.
   const layout = photos.length === 1 ? 'single' : photos.length === 2 ? 'pair' : 'hero';
-  const visibleCount = layout === 'hero' ? Math.min(3, photos.length) : photos.length;
+  const heroSlots = computeMosaicSlots();
+  const visibleCount = layout === 'hero'
+    ? Math.min(heroSlots, photos.length)
+    : photos.length;
   const visible = photos.slice(0, visibleCount);
   const more = photos.length - visibleCount;
 

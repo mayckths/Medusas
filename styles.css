@@ -2315,6 +2315,16 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
   grid-template-rows: 1fr 1fr;
 }
 .album-mosaic.mosaic-hero .hero { grid-row: span 2; }
+/* Wide screens fill the empty space next to the hero with extra stacked
+   columns. Each step adds two tiles (one column × two rows). JS in
+   computeMosaicSlots renders the matching number of photos so the
+   mosaic doesn't end up with empty grid cells. */
+@media (min-width: 1200px) {
+  .album-mosaic.mosaic-hero { grid-template-columns: 2fr 1fr 1fr; }
+}
+@media (min-width: 1500px) {
+  .album-mosaic.mosaic-hero { grid-template-columns: 2fr 1fr 1fr 1fr; }
+}
 @media (max-width: 760px) {
   .album-mosaic { aspect-ratio: 4 / 3; }
 }
