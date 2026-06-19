@@ -4719,25 +4719,32 @@ function renderPelis(root) {
     return acc;
   }, { watchlist: 0, together: 0 });
 
-  // Build counts for tags + platforms combined into a single ordered list
+  // Chips count only movies that live in the active tab — showing chips
+  // with 0 results in this tab (e.g. "Vistas por ambos" while on "Por
+  // ver") leads to dead-ends where clicking the chip shows an empty
+  // grid. Watched-by chips also vary per tab:
+  //   * Por ver: per-user chips only (movies someone watched but the
+  //     other didn't); "ambos" by definition can't sit here.
+  //   * Vistas juntos: hide watched-by chips altogether — the tab IS
+  //     the everyone-watched filter, so per-user chips would all
+  //     duplicate the tab's count.
+  const tabMovies = state.movies.filter(matchesView);
   const tagCounts = new Map();
-  state.movies.forEach(m => (m.tags || []).forEach(t => tagCounts.set(t, (tagCounts.get(t) || 0) + 1)));
+  tabMovies.forEach(m => (m.tags || []).forEach(t => tagCounts.set(t, (tagCounts.get(t) || 0) + 1)));
   const sortedTags = Array.from(tagCounts.entries()).sort((a, b) => b[1] - a[1]);
   const platformCounts = new Map();
-  state.movies.forEach(m => {
+  tabMovies.forEach(m => {
     const pl = (m.platform || '').trim();
     if (pl) platformCounts.set(pl, (platformCounts.get(pl) || 0) + 1);
   });
   const sortedPlatforms = Array.from(platformCounts.entries()).sort((a, b) => b[1] - a[1]);
-  // Watched-by counts: per-user + "ambos"
   const watchedCounts = {};
-  state.movies.forEach(m => {
-    const wb = Array.isArray(m.watched_by) ? m.watched_by : [];
-    userNames.forEach(u => { if (wb.includes(u)) watchedCounts[u] = (watchedCounts[u] || 0) + 1; });
-    if (userNames.length >= 2 && userNames.every(u => wb.includes(u))) {
-      watchedCounts.both = (watchedCounts.both || 0) + 1;
-    }
-  });
+  if (peliView === 'watchlist') {
+    tabMovies.forEach(m => {
+      const wb = Array.isArray(m.watched_by) ? m.watched_by : [];
+      userNames.forEach(u => { if (wb.includes(u)) watchedCounts[u] = (watchedCounts[u] || 0) + 1; });
+    });
+  }
 
   root.innerHTML = `
     <div class="page-head">
