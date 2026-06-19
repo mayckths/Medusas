@@ -1308,6 +1308,23 @@ dialog.theater::backdrop { background: rgba(0,0,0,0.85); }
 
 /* ======== Modal ======== */
 dialog.modal {
+  /* Cream "notebook" palette to match the sidebar — re-scope the same
+     tokens locally so every input, chip, button and helper inside the
+     dialog automatically picks up the warm theme without per-rule
+     overrides. The accent stays terracotta and pops nicely on cream. */
+  --surface: #f9f6f0;
+  --surface-alt: #efeae0;
+  --surface-2: #e4dcce;
+  --text: #4a4542;
+  --text-dim: rgba(74, 69, 66, 0.65);
+  --border: rgba(74, 69, 66, 0.14);
+  --border-strong: rgba(74, 69, 66, 0.22);
+  --glass-bg: rgba(74, 69, 66, 0.06);
+  --glass-bg-hover: rgba(74, 69, 66, 0.12);
+  --glass-border: rgba(74, 69, 66, 0.18);
+  --glass-text: #4a4542;
+
+  color-scheme: light;
   border: 1px solid var(--border); border-radius: var(--radius);
   background: var(--surface); color: var(--text);
   padding: 0; max-width: 640px; width: calc(100% - 2rem);
