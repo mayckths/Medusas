@@ -1220,7 +1220,7 @@ dialog.theater::backdrop { background: rgba(0,0,0,0.85); }
   gap: 0.5rem;
 }
 .photo {
-  position: relative; aspect-ratio: 1 / 1; border-radius: 12px; overflow: hidden;
+  position: relative; aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden;
   background: var(--surface-alt);
   border: 0;
   cursor: pointer;

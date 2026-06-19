@@ -2029,7 +2029,10 @@ function renderAlbumDetail(root, slug) {
     grid.innerHTML = '<div class="empty">Este álbum está vacío.</div>';
     return;
   }
-  photos.forEach((p, i) => grid.appendChild(renderPhoto(p, photos, i)));
+  // Album detail uses a uniform-aspect grid (portrait 3:4) so the page
+  // reads like a contact sheet instead of a Pinterest jumble. gridSlot
+  // tells renderPhoto to skip the per-photo masonry aspect.
+  photos.forEach((p, i) => grid.appendChild(renderPhoto(p, photos, i, { gridSlot: true })));
 }
 
 function renderAlbumSection(name, photos) {
