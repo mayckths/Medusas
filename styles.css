@@ -1022,9 +1022,8 @@ button.btn.pin-toggle.is-pinned {
 }
 .dash-photos-section .dash-photos-strip::-webkit-scrollbar { display: none; }
 .dash-photos-section .dash-photos-strip .photo {
-  flex: 0 0 130px;
-  width: 130px; height: 174px;
-  aspect-ratio: auto;
+  flex: 0 0 auto;
+  width: auto; height: 174px;
   scroll-snap-align: start;
 }
 .section-block .section-head {
@@ -1231,18 +1230,16 @@ dialog.theater::backdrop { background: rgba(0,0,0,0.85); }
 .photo:hover {
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45), 0 3px 6px rgba(0, 0, 0, 0.25);
 }
-/* Thumbnails show the WHOLE photo (object-fit: contain) so the user can
-   recognize each tile — a cropped center frame turned into meaningless
-   wood / fabric / sky textures. The tile background uses the app surface
-   color so the letterbox blends with the rest of the UI instead of
-   reading as ugly bars. */
+/* Tiles are sized to each photo's natural aspect (set inline by
+   renderPhoto on image load), so object-fit: cover fills the tile
+   exactly without cropping or letterbox. The 3:4 portrait aspect on
+   .photo is just a fallback before the image decodes. */
 .photo img {
   width: 100%; height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   display: block; transition: transform 0.2s ease;
   background: var(--surface);
 }
-.photo { background: var(--surface); }
 .photo:hover img { transform: scale(1.04); }
 .photo .photo-caption {
   position: absolute; left: 0; right: 0; bottom: 0;
@@ -2291,35 +2288,27 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 
 /* Hero mosaic — 1 large + 2 stacked tiles on the right (ref 4 "Summer
    Trip" layout). Smaller variants stack into 1- or 2-column grids. */
-/* Mosaic uses a row of equal portrait tiles (3:4) so phone portrait
-   photos fill them without skinny green letterbox bars. Up to 4 tiles
-   visible; the rest collapse behind the "+N · Ver todas" overlay on the
-   last tile. */
+/* Mosaic is a horizontal row of tiles at a fixed height. Each tile's
+   width is implied by its photo's natural aspect (set inline by
+   renderPhoto on image load), so the photo fills the tile completely
+   regardless of portrait/landscape. Photos that don't fit horizontally
+   are hidden via overflow and surfaced through the +N overlay. */
 .album-mosaic {
-  display: grid;
+  display: flex;
+  flex-wrap: nowrap;
   gap: 0.5rem;
+  align-items: flex-start;
+  overflow: hidden;
 }
 .album-mosaic .photo {
-  aspect-ratio: 3 / 4;
+  flex: 0 0 auto;
+  height: 260px;
+  width: auto;
   border-radius: var(--radius);
   position: relative;
 }
-.album-mosaic.mosaic-single {
-  grid-template-columns: minmax(0, 240px);
-  justify-content: center;
-}
-.album-mosaic.mosaic-pair {
-  grid-template-columns: repeat(2, minmax(0, 240px));
-  justify-content: center;
-}
-.album-mosaic.mosaic-hero {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  max-width: 1100px;
-}
-.album-mosaic.mosaic-hero .hero {
-  /* Hero no longer spans extra rows — all tiles are equal portraits so
-     the layout reads as a contact-sheet row instead of a hero collage. */
-}
+.album-mosaic.mosaic-single,
+.album-mosaic.mosaic-pair { justify-content: center; }
 
 /* "+N · Ver todas" overlay anchored over the last visible tile so the
    user still sees a photo behind it instead of a blank tile. */
@@ -2752,8 +2741,7 @@ a.btn.icon-pill .material-symbols-outlined { font-size: 20px; }
   scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; margin-bottom: 1rem;
 }
 .featured-strip .photo {
-  flex: 0 0 130px; width: 130px; height: 174px;
-  aspect-ratio: auto;
+  flex: 0 0 auto; width: auto; height: 174px;
   scroll-snap-align: start;
 }
 .featured-strip .card {

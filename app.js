@@ -32,10 +32,16 @@ const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':
 function publicImageUrl(path, opts) {
   if (!path) return '';
   if (!opts) return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
-  // No default `resize` — only width is set, so Supabase keeps the natural
-  // aspect and just scales down. CSS `object-fit` decides the final crop
-  // per use-case (cover for posters / album covers, contain for thumbnails).
-  const transform = { quality: 75, ...opts };
+  // Supabase's imgproxy ignores aspect ratio when only `width` is given —
+  // it scales width but keeps the original height (we caught it serving
+  // 360x4032 files for 3000x4000 originals, aspect 0.09). Always bound
+  // BOTH dimensions and use `resize: contain` so the API returns an
+  // image that fits inside w×h preserving the original aspect. Default
+  // height to 4× width — wide enough to never crop, no matter how
+  // portrait the source.
+  const width = opts.width;
+  const height = opts.height || (width ? width * 4 : undefined);
+  const transform = { quality: 75, resize: 'contain', ...opts, width, height };
   return supabase.storage.from(BUCKET).getPublicUrl(path, { transform }).data.publicUrl;
 }
 
@@ -2206,6 +2212,19 @@ function renderPhoto(p, list, index) {
   const src = publicImageUrl(p.storage_path, { width: thumbWidth(180) });
   tile.innerHTML = `<img src="${escapeHtml(src)}" alt="${escapeHtml(p.caption || '')}" loading="lazy" />` +
     (p.caption ? `<div class="photo-caption">${escapeHtml(p.caption)}</div>` : '');
+
+  // Masonry-style sizing: as soon as we know the photo's natural aspect,
+  // copy it onto the tile so the image fills the tile completely (cover
+  // with matching aspect = no crop, no letterbox). Until the image
+  // decodes the tile uses the fallback 3:4 portrait aspect from CSS.
+  const imgEl = tile.querySelector('img');
+  const setAspectFromImg = () => {
+    if (imgEl.naturalWidth && imgEl.naturalHeight) {
+      tile.style.aspectRatio = `${imgEl.naturalWidth} / ${imgEl.naturalHeight}`;
+    }
+  };
+  if (imgEl.complete) setAspectFromImg();
+  else imgEl.addEventListener('load', setAspectFromImg, { once: true });
 
   // Quick-feature star button (top-right). Visible on hover; persistent when featured.
   const star = document.createElement('button');
