@@ -2305,15 +2305,15 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 
 /* Hero mosaic — 1 large + 2 stacked tiles on the right (ref 4 "Summer
    Trip" layout). Smaller variants stack into 1- or 2-column grids. */
-/* Mosaic uses a fixed grid composition (ref 3): one hero tile on the
-   left + two stacked tiles on the right. Each cell's shape is defined
-   by the grid, photos fill with cover. Tiles ignore the masonry
-   auto-aspect (renderPhoto skips it via gridSlot). */
+/* Mosaic uses a fluid grid: hero tile on the left + N stacked-pairs
+   of small tiles on the right. The column count is set inline by JS
+   (computeMosaicLayout) so the mosaic stretches to 100% of the page
+   width on any monitor without weird "capped" empty space. Rows are
+   fixed height so the mosaic stays compact vertically regardless of
+   how many columns are visible. */
 .album-mosaic {
   display: grid;
   gap: 0.5rem;
-  aspect-ratio: 7 / 3;
-  max-height: 400px;
 }
 .album-mosaic .photo {
   aspect-ratio: auto;
@@ -2321,29 +2321,21 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
   border-radius: var(--radius);
   position: relative;
 }
+.album-mosaic.mosaic-single .photo,
+.album-mosaic.mosaic-pair .photo { aspect-ratio: 16 / 9; }
 .album-mosaic.mosaic-single {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 720px);
+  justify-content: center;
 }
 .album-mosaic.mosaic-pair {
   grid-template-columns: 1fr 1fr;
 }
 .album-mosaic.mosaic-hero {
-  grid-template-columns: 2fr 1fr;
-  grid-template-rows: 1fr 1fr;
+  grid-template-rows: 200px 200px;
 }
 .album-mosaic.mosaic-hero .hero { grid-row: span 2; }
-/* Wide screens fill the empty space next to the hero with extra stacked
-   columns. Each step adds two tiles (one column × two rows). JS in
-   computeMosaicSlots renders the matching number of photos so the
-   mosaic doesn't end up with empty grid cells. */
-@media (min-width: 1200px) {
-  .album-mosaic.mosaic-hero { grid-template-columns: 2fr 1fr 1fr; }
-}
-@media (min-width: 1500px) {
-  .album-mosaic.mosaic-hero { grid-template-columns: 2fr 1fr 1fr 1fr; }
-}
 @media (max-width: 760px) {
-  .album-mosaic { aspect-ratio: 4 / 3; }
+  .album-mosaic.mosaic-hero { grid-template-rows: 160px 160px; }
 }
 
 /* "+N · Ver todas" overlay anchored over the last visible tile so the

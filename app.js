@@ -1869,16 +1869,24 @@ function computeAlbumPreviewCount() {
   return Math.max(2, Math.floor(content / ALBUM_TILE_PX));
 }
 
-// How many photos the album hero mosaic should render. Wide viewports
-// get extra columns of stacked tiles so they don't end up with a half
-// empty mosaic next to the hero. Counts pair with the CSS media queries
-// on .album-mosaic.mosaic-hero — every step adds one extra column (= 2
-// stacked tiles), so the slots progress 3 → 5 → 7.
-function computeMosaicSlots() {
+// Fluid mosaic sizing: pick a column count from the available content
+// width so the mosaic stretches to 100% of the page width on any
+// monitor. The hero is twice as wide as a small tile; each extra column
+// adds one stacked-pair of small tiles. Tile target ≈ 280px so wide
+// screens get more photos automatically.
+function computeMosaicLayout() {
   const w = window.innerWidth;
-  if (w >= 1500) return 7;
-  if (w >= 1200) return 5;
-  return 3;
+  const sidebarVisible = w > 760;
+  const sidebar = sidebarVisible ? 240 : 0;
+  const sidePadding = sidebarVisible ? 80 : 32;
+  const content = Math.max(320, w - sidebar - sidePadding);
+  const SMALL_TILE_TARGET = 280;
+  const HERO_W = SMALL_TILE_TARGET * 2;
+  const remaining = content - HERO_W;
+  const smallCols = Math.max(1, Math.round(remaining / SMALL_TILE_TARGET));
+  const columns = 1 + smallCols;     // hero col + N small-tile columns
+  const tiles = 1 + smallCols * 2;    // hero + 2 stacked per small col
+  return { columns, tiles };
 }
 
 function albumSlugFor(name) {
@@ -2030,14 +2038,14 @@ function renderAlbumSection(name, photos) {
   const slug = albumSlugFor(name);
 
   // Hero mosaic layout (ref 4): 1 large photo + a column of stacked tiles
-  // on the right. The slot count grows with viewport so wide screens
-  // don't end up with a half-empty mosaic. The last visible tile gets a
-  // "+N · Ver todas" overlay when there are still more photos in the
-  // album beyond what fits.
+  // on the right. The slot count + column count grow with viewport so
+  // wide screens fill 100% of the content width instead of leaving the
+  // mosaic capped at some max. The last visible tile gets a "+N · Ver
+  // todas" overlay when there are still more photos beyond what fits.
   const layout = photos.length === 1 ? 'single' : photos.length === 2 ? 'pair' : 'hero';
-  const heroSlots = computeMosaicSlots();
+  const mosaicLayout = computeMosaicLayout();
   const visibleCount = layout === 'hero'
-    ? Math.min(heroSlots, photos.length)
+    ? Math.min(mosaicLayout.tiles, photos.length)
     : photos.length;
   const visible = photos.slice(0, visibleCount);
   const more = photos.length - visibleCount;
@@ -2069,6 +2077,14 @@ function renderAlbumSection(name, photos) {
     <div class="album-mosaic mosaic-${layout}"></div>
   `;
   const mosaic = section.querySelector('.album-mosaic');
+  if (layout === 'hero') {
+    // Inline the column count so the mosaic stretches with the viewport.
+    // "2fr" gives the hero column twice the width of each small tile,
+    // then each small column is 1fr. minmax(0, …) keeps long content
+    // from blowing out the grid.
+    const smallCols = Array(mosaicLayout.columns - 1).fill('minmax(0, 1fr)').join(' ');
+    mosaic.style.gridTemplateColumns = `minmax(0, 2fr) ${smallCols}`;
+  }
   visible.forEach((p, i) => {
     // gridSlot tells renderPhoto to leave the tile's aspect alone so the
     // CSS grid's hero/stack layout wins — otherwise every tile would try
