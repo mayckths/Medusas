@@ -109,8 +109,19 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
 .app-shell { position: relative; z-index: 1; }
 .auth-overlay { position: fixed; z-index: 50; }
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   font-size: 15px; line-height: 1.45; min-height: 100vh;
+}
+
+/* Display headings use Playfair Display (the "Headline" font in the
+   design system). h3 stays on Inter — it's used for card titles and
+   small UI labels where a sans-serif reads better. */
+h1, h2,
+.page-head h1,
+.album-section .album-section-head h2 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 /* ======== Auth (v2 — universe + glass) ======== */
