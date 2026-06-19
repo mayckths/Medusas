@@ -4775,7 +4775,7 @@ function renderPelis(root) {
   root.innerHTML = `
     <div class="page-head">
       <div>
-        <h1>🎬 Pelis y Series</h1>
+        <h1>Pelis y Series</h1>
         <div class="sub">Lo que queremos ver y lo que ya vimos</div>
       </div>
       <div class="actions">
