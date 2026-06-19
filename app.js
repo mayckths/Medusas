@@ -414,6 +414,26 @@ async function markSeen(table, item) {
   } catch (e) { console.warn('markSeen failed', e); }
 }
 
+// Reconcile the dashboard bell badge with the live totalUnreadCount.
+// Creates the .notif-count span if needed, removes it when count drops
+// to 0. Called from markAllSeen and any other code that mutates seen_by.
+function refreshBellBadge() {
+  const bell = document.querySelector('#notif-bell');
+  if (!bell) return;
+  const count = totalUnreadCount();
+  let badge = bell.querySelector('.notif-count');
+  if (count > 0) {
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'notif-count';
+      bell.appendChild(badge);
+    }
+    badge.textContent = String(count);
+  } else if (badge) {
+    badge.remove();
+  }
+}
+
 // Mark every unread item in a collection as seen for the current user
 // in one go. Used when the user enters a section that has the indicator
 // dot, OR when they open the notifications panel from the dashboard —
@@ -427,13 +447,7 @@ async function markAllSeen(table, items) {
     item.seen_by = seen.includes(state.currentUser) ? seen : [...seen, state.currentUser];
   });
   updateSidebarBadges();
-  // Also refresh the bell badge on the dashboard without re-rendering.
-  const bellCount = document.querySelector('#notif-bell .notif-count');
-  if (bellCount) {
-    const remaining = totalUnreadCount();
-    if (remaining > 0) bellCount.textContent = String(remaining);
-    else bellCount.remove();
-  }
+  refreshBellBadge();
   try {
     await Promise.all(unread.map(item =>
       supabase.from(table).update({ seen_by: item.seen_by }).eq('id', item.id)
@@ -444,17 +458,21 @@ async function markAllSeen(table, items) {
 // Mark all unread items across every notif-producing table as seen.
 // Called when the user opens the bell — by opening the panel they
 // inherently acknowledge what's new.
-function markAllUnreadEverywhere() {
+async function markAllUnreadEverywhere() {
   // Private notes never generate notifications, so they shouldn't be
   // included — leaving them unread keeps their personal "for me" dot
   // intact even if the partner opened the bell.
   const sharedNotes = state.notes.filter(n => n.visibility !== 'private');
-  return Promise.all([
+  await Promise.all([
     markAllSeen('notes', sharedNotes),
     markAllSeen('media', state.media),
     markAllSeen('photos', state.photos),
     markAllSeen('movies', state.movies),
   ]);
+  // Belt-and-braces refresh in case any of the inner calls didn't
+  // get to update the badge (e.g. an early return when its table had
+  // no unread items — still leaves the total visible).
+  refreshBellBadge();
 }
 
 // Match the route to its underlying collection so visiting that section
