@@ -1058,12 +1058,18 @@ function moviesWatchedTogether() {
   }).length;
 }
 
-// Pelis + series que nadie ha marcado como vista. La tira del dashboard
-// las muestra para tener a la vista cuántos pendientes hay en cola.
+// Pelis + series donde a alguien le falta verla todavía — mismo criterio
+// que el tab "Por ver" en la página de Pelis (no las del watchlist 0/2
+// solamente sino TODAS donde algún usuario no la marcó). Si los dos
+// criterios divergen, la tira del dashboard miente respecto al tab.
 function moviesPending() {
+  const userNames = state._userAssets
+    ? Object.keys(state._userAssets)
+    : ['Jaime', 'Mayck'];
   return state.movies.filter(m => {
     const wb = Array.isArray(m.watched_by) ? m.watched_by : [];
-    return wb.length === 0;
+    if (userNames.length < 2) return wb.length === 0;
+    return !userNames.every(u => wb.includes(u));
   }).length;
 }
 
