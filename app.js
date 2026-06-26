@@ -985,7 +985,7 @@ function renderInicio(root) {
     <div class="page-head">
       <div>
         <h1>${escapeHtml(greeting.headline)}</h1>
-        <div class="sub">${escapeHtml(greeting.sub)}</div>
+        ${greeting.sub ? `<div class="sub">${escapeHtml(greeting.sub)}</div>` : ''}
       </div>
       <div class="actions">
         <div class="notif-bell-wrap">
@@ -1178,24 +1178,25 @@ function getDashboardGreeting(userName) {
   // 3. Aniversario mensual (cada día 25 desde RELATIONSHIP_START)
   if (d === RELATIONSHIP_START.getDate() && now >= RELATIONSHIP_START) {
     const months = monthsSince(RELATIONSHIP_START);
-    if (months === 0) return { headline: 'Felices comienzos',                    sub: 'Hoy empezó todo.' };
-    if (months === 1) return { headline: 'Hoy cumplimos un mes',                 sub: 'Por muchos más.' };
+    if (months === 0) return { headline: 'Felices comienzos',    sub: 'Hoy empezó todo.' };
+    if (months === 1) return { headline: 'Hoy cumplimos un mes', sub: 'Por muchos más.' };
     if (months % 12 === 0) {
       const years = months / 12;
-      return { headline: `Feliz aniversario · ${years} ${years === 1 ? 'año' : 'años'}`, sub: `${months} meses como nosotros.` };
+      return { headline: `Feliz aniversario · ${years} ${years === 1 ? 'año' : 'años'}`, sub: '' };
     }
     return { headline: `Hoy cumplimos ${months} meses`, sub: 'Y los que faltan.' };
   }
 
-  // 4. Día de la semana
-  if (dow === 1) return { headline: `Feliz lunes, ${safe}`,      sub: 'Buen inicio de semana.' };
-  if (dow === 5) return { headline: `Por fin viernes, ${safe}`,  sub: 'Casi finde.' };
-  if (dow === 6) return { headline: `Buen sábado, ${safe}`,      sub: 'Día de hacer algo juntos.' };
-  if (dow === 0) return { headline: `Buen domingo, ${safe}`,     sub: 'Día de descanso.' };
+  // 4. Día de la semana — solo lunes lleva sub, los demás se quedan
+  //    con headline limpio (el sub se omite del template).
+  if (dow === 1) return { headline: `Feliz lunes, ${safe}`,     sub: 'Buen inicio de semana.' };
+  if (dow === 5) return { headline: `Por fin viernes, ${safe}`, sub: '' };
+  if (dow === 6) return { headline: `Buen sábado, ${safe}`,     sub: '' };
+  if (dow === 0) return { headline: `Buen domingo, ${safe}`,    sub: '' };
 
-  // 5. Hora del día (fallback martes / miércoles / jueves)
+  // 5. Hora del día (fallback ma/mi/ju). Sin rama especial de madrugada
+  //    — h<5 cae naturalmente en "Buenos días".
   const sub = 'Este es nuestro lugar seguro';
-  if (h < 5)  return { headline: `Trasnochando, ${safe}`,  sub: 'Cuídate.' };
   if (h < 12) return { headline: `Buenos días, ${safe}`,   sub };
   if (h < 19) return { headline: `Buenas tardes, ${safe}`, sub };
   return         { headline: `Buenas noches, ${safe}`,     sub };
