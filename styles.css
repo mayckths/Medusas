@@ -113,6 +113,34 @@ body {
   font-size: 15px; line-height: 1.45; min-height: 100vh;
 }
 
+/* ======== Dashboard entry stagger ========
+   Fades + rises the main dashboard blocks on the first visit per
+   session. Page-head leads, stats follow, then col-right opens in
+   parallel with the col-left section blocks. Respects reduced-motion
+   preference by skipping the animation entirely. */
+@media (prefers-reduced-motion: no-preference) {
+  .inicio-fresh .page-head,
+  .inicio-fresh .stats-widget,
+  .inicio-fresh .col-right > *,
+  .inicio-fresh .col-left .section-block {
+    opacity: 0;
+    animation: inicio-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+  .inicio-fresh .page-head                                  { animation-delay: 0.00s; }
+  .inicio-fresh .stats-widget                               { animation-delay: 0.08s; }
+  .inicio-fresh .col-right .photo-widget                    { animation-delay: 0.18s; }
+  .inicio-fresh .col-right .postit-board-wrap               { animation-delay: 0.30s; }
+  .inicio-fresh .col-left .section-block:nth-child(1)       { animation-delay: 0.22s; }
+  .inicio-fresh .col-left .section-block:nth-child(2)       { animation-delay: 0.32s; }
+  .inicio-fresh .col-left .section-block:nth-child(3)       { animation-delay: 0.42s; }
+  .inicio-fresh .col-left .section-block:nth-child(4)       { animation-delay: 0.52s; }
+  .inicio-fresh .col-left .section-block:nth-child(5)       { animation-delay: 0.62s; }
+}
+@keyframes inicio-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* Display headings use Playfair Display (the "Headline" font in the
    design system). h3 stays on Inter — it's used for card titles and
    small UI labels where a sans-serif reads better. */

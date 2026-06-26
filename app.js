@@ -915,7 +915,23 @@ function getDashboardOrder() {
   return filtered;
 }
 
+// Tracks whether the dashboard has already mounted once in this page
+// load. The staggered entry animation only runs on the FIRST renderInicio
+// per session — navigating away and back shouldn't re-flash the layout.
+// Resets on full reload (module re-evaluates).
+let _dashboardEntered = false;
+
 function renderInicio(root) {
+  // Apply the entry class BEFORE innerHTML so the children are born with
+  // opacity: 0 (ancestor selector applies immediately) and the animation
+  // fires on their first paint instead of after a visible flash.
+  if (!_dashboardEntered) {
+    _dashboardEntered = true;
+    root.classList.add('inicio-fresh');
+    // Strip the class once the longest stagger has settled so any later
+    // partial re-render of the page doesn't re-animate everything.
+    setTimeout(() => root.classList.remove('inicio-fresh'), 1200);
+  }
   const order = getDashboardOrder();
   const sectionTemplates = {
     notes: `
