@@ -509,6 +509,10 @@ const state = {
      'together' (ambos la vieron). Persists across navigations within
      the session; resets on reload. */
   peliView: 'watchlist',
+  /* Notas page top-level tab: false (activas) or true (archivadas).
+     Archived notes hide from the default view + dashboard but their
+     checklist items still count toward the "Metas checkeadas" stat. */
+  notasArchived: false,
 };
 
 // ============================================================
@@ -1022,10 +1026,12 @@ function renderInicio(root) {
     </div>
   `;
 
-  // Recent notes (3 cards — wider in the 2/3 column)
+  // Recent notes (3 cards — wider in the 2/3 column). Archived notes
+  // stay out of the dashboard so the recent list always reads as
+  // "active stuff" — they're still reachable through the Archivadas tab.
   const notesGrid = $('#dash-notes-grid');
   if (notesGrid) {
-    const recentNotes = state.notes.slice(0, 3);
+    const recentNotes = state.notes.filter(n => !n.archived_at).slice(0, 3);
     if (recentNotes.length) recentNotes.forEach(n => notesGrid.appendChild(renderNoteCard(n)));
     else notesGrid.innerHTML = '<div class="empty">Aún no hay notas.</div>';
   }
@@ -1232,10 +1238,43 @@ function moviesPending() {
 }
 
 function countCheckedItems() {
+  // Includes archived notes intentionally — the dashboard stat keeps
+  // climbing as the couple accumulates "metas checkeadas" over time,
+  // even after they tidy a completed list out of the active view.
   return state.notes.reduce((sum, n) => {
     if (!Array.isArray(n.checklist)) return sum;
     return sum + n.checklist.filter(it => it && it.done).length;
   }, 0);
+}
+
+// Quick celebration when the user just completed the LAST unchecked
+// item of a multi-item checklist: a soft pulse on the checkbox + a
+// burst of 8 cream/accent dots radiating outward. Skips for single-
+// item lists (no "list" to complete) and for reduced-motion users.
+function celebrateChecklistCompletion(checkboxEl) {
+  if (!checkboxEl) return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  checkboxEl.classList.remove('cl-celebrate'); // restart if mid-flight
+  // Force reflow so re-adding the class restarts the animation.
+  void checkboxEl.offsetWidth;
+  checkboxEl.classList.add('cl-celebrate');
+  const burst = document.createElement('span');
+  burst.className = 'cl-burst';
+  burst.setAttribute('aria-hidden', 'true');
+  for (let i = 0; i < 8; i++) {
+    const dot = document.createElement('span');
+    dot.style.setProperty('--angle', `${i * 45}deg`);
+    burst.appendChild(dot);
+  }
+  // Position relative so the absolute burst children center on the checkbox.
+  const prevPos = checkboxEl.style.position;
+  if (!prevPos) checkboxEl.style.position = 'relative';
+  checkboxEl.appendChild(burst);
+  setTimeout(() => {
+    burst.remove();
+    checkboxEl.classList.remove('cl-celebrate');
+    if (!prevPos) checkboxEl.style.position = '';
+  }, 700);
 }
 
 // Update the "Metas checkeadas" tile in the dashboard stats widget
@@ -1483,12 +1522,22 @@ function wirePwMenu(root, cfg) {
 // ============================================================
 function renderNotas(root) {
   const filterTag = state.filterTag.notas;
-  let filtered = state.notes.slice();
+  const showArchived = !!state.notasArchived;
+  // Split notes by archived status first so each tab feels self-contained.
+  const pool = state.notes.filter(n => !!n.archived_at === showArchived);
+  let filtered = pool.slice();
   if (filterTag) filtered = filtered.filter(n => Array.isArray(n.tags) && n.tags.includes(filterTag));
 
+  // Tag counts come from the currently-visible pool so chips don't show
+  // tags that only live in the other tab.
   const tagCounts = new Map();
-  state.notes.forEach(n => (n.tags || []).forEach(t => tagCounts.set(t, (tagCounts.get(t) || 0) + 1)));
+  pool.forEach(n => (n.tags || []).forEach(t => tagCounts.set(t, (tagCounts.get(t) || 0) + 1)));
   const sortedTags = Array.from(tagCounts.entries()).sort((a, b) => b[1] - a[1]);
+
+  // Tab counts (from the full notes set) so "Archivadas" only appears
+  // once there is something to look at.
+  const activeCount = state.notes.filter(n => !n.archived_at).length;
+  const archivedCount = state.notes.filter(n => !!n.archived_at).length;
 
   root.innerHTML = `
     <div class="page-head">
@@ -1501,6 +1550,12 @@ function renderNotas(root) {
         <button data-v="list" class="${state.view.notas === 'list' ? 'active' : ''}">Lista</button>
       </div>
     </div>
+    ${archivedCount > 0 ? `
+      <div class="seg-tabs" id="notes-archive-tabs">
+        <button class="seg-tab ${!showArchived ? 'active' : ''}" data-archived="0">Activas <span class="count">${activeCount}</span></button>
+        <button class="seg-tab ${showArchived ? 'active' : ''}" data-archived="1">Archivadas <span class="count">${archivedCount}</span></button>
+      </div>
+    ` : ''}
     ${sortedTags.length ? `
       <div class="tag-filter-row" id="tag-filter-row">
         <button class="tag-chip tag-chip-all ${!filterTag ? 'active' : ''}" data-tag="">Todas</button>
@@ -1520,6 +1575,19 @@ function renderNotas(root) {
     state.view.notas = b.dataset.v;
     renderNotas(root);
   });
+  const archiveTabs = $('#notes-archive-tabs');
+  if (archiveTabs) {
+    archiveTabs.addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-archived]');
+      if (!b) return;
+      const next = b.dataset.archived === '1';
+      if (next === state.notasArchived) return;
+      state.notasArchived = next;
+      // Changing tab invalidates the active tag filter — counts differ.
+      state.filterTag.notas = null;
+      renderNotas(root);
+    });
+  }
   const filterRow = $('#tag-filter-row');
   if (filterRow) {
     filterRow.addEventListener('click', (e) => {
@@ -1531,12 +1599,15 @@ function renderNotas(root) {
   }
 
   const grid = $('#notes-grid');
-  grid.appendChild(renderNewCtaTile('Nueva nota', () => openNoteEditor(null)));
+  // The "+ Nueva nota" tile only appears in the active tab — creating
+  // from inside the archived view is confusing.
+  if (!showArchived) grid.appendChild(renderNewCtaTile('Nueva nota', () => openNoteEditor(null)));
   filtered.forEach(n => grid.appendChild(renderNoteCard(n)));
-  if (!filtered.length && filterTag) {
+  if (!filtered.length) {
     const empty = document.createElement('div');
     empty.className = 'empty';
-    empty.textContent = `No hay notas con la etiqueta #${filterTag}.`;
+    if (filterTag) empty.textContent = `No hay notas con la etiqueta #${filterTag}.`;
+    else if (showArchived) empty.textContent = 'Todavía no hay notas archivadas.';
     grid.appendChild(empty);
   }
 }
@@ -1635,6 +1706,9 @@ function renderNoteCard(note) {
       const checkBtn = row.querySelector('.cl-check');
       checkBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
+        // Snapshot completion BEFORE flipping so we can detect the
+        // "last box checked" transition and celebrate.
+        const wasAllDone = (note.checklist || []).length > 0 && (note.checklist || []).every(x => x.done);
         const updated = (note.checklist || []).map((x, i) => i === idx ? { ...x, done: !x.done } : x);
         note.checklist = updated;
         try { await supabase.from('notes').update({ checklist: updated }).eq('id', note.id); } catch (err) { console.error('toggle checklist', err); }
@@ -1646,6 +1720,13 @@ function renderNoteCard(note) {
         if (span) span.textContent = nowDone ? 'check_box' : 'check_box_outline_blank';
         // Keep the "Metas checkeadas" stat card in sync
         refreshChecklistStat();
+        // Celebrate when the user just finished the last unchecked box
+        // of a multi-item list — single-item lists don't really feel
+        // like "completing" anything.
+        const isAllDone = updated.every(x => x.done);
+        if (isAllDone && !wasAllDone && updated.length > 1) {
+          celebrateChecklistCompletion(checkBtn);
+        }
       });
       cl.appendChild(row);
     });
@@ -3347,6 +3428,7 @@ function openNoteEditor(note) {
   noteDraft.images = Array.isArray(note?.images) ? [...note.images] : [];
   noteDraft.tags = Array.isArray(note?.tags) ? [...note.tags] : [];
   noteDraft.pinned = !!note?.pinned;
+  noteDraft.archived_at = note?.archived_at || null;
   noteDraft.checklist = Array.isArray(note?.checklist)
     ? note.checklist.map(it => ({ text: String(it.text || ''), done: !!it.done }))
     : [];
@@ -3363,6 +3445,13 @@ function openNoteEditor(note) {
   $('#dlg-note-title').textContent = note ? 'Editar nota' : 'Nueva nota';
   $('#note-save').textContent = note ? 'Actualizar nota' : 'Guardar nota';
   $('#note-delete').hidden = !note;
+  // Archive button only makes sense for existing notes. Label flips
+  // depending on current state so the same button serves both ways.
+  const archiveBtn = $('#note-archive');
+  if (archiveBtn) {
+    archiveBtn.hidden = !note;
+    archiveBtn.textContent = noteDraft.archived_at ? 'Desarchivar' : 'Archivar';
+  }
   dlgNote.showModal();
   setTimeout(() => $('#note-title-input').focus(), 0);
   // Size the body textarea to fit its content. Capped to ~70vh via CSS
@@ -3501,8 +3590,17 @@ function renderNoteChecklist() {
       grip.addEventListener('pointercancel', onPointerUp);
     });
     check.addEventListener('click', () => {
+      const wasAllDone = noteDraft.checklist.length > 0 && noteDraft.checklist.every(it => it.done);
       noteDraft.checklist[i].done = !noteDraft.checklist[i].done;
+      const isAllDone = noteDraft.checklist.every(it => it.done);
       renderNoteChecklist();
+      // renderNoteChecklist rebuilt every row, so the original check
+      // element is orphaned. Re-target the fresh checkbox at the same
+      // index so the burst animates on something still in the DOM.
+      if (isAllDone && !wasAllDone && noteDraft.checklist.length > 1) {
+        const freshCheck = $$('#note-checklist .cl-row')[i]?.querySelector('.cl-check');
+        if (freshCheck) celebrateChecklistCompletion(freshCheck);
+      }
     });
     text.addEventListener('input', () => { noteDraft.checklist[i].text = text.value; });
     text.addEventListener('keydown', (e) => {
@@ -3686,6 +3784,29 @@ $('#note-delete').addEventListener('click', async () => {
     dlgNote.close();
     await router();
   } catch (e) { setStatus($('#note-status'), `Error al eliminar: ${e.message || e}`, true); }
+});
+
+// Archive / desarchivar — flip the archived_at timestamp on the note.
+// Archived notes hide from the default Notas view + dashboard recent
+// list, but their checklist items keep counting in the dashboard stat
+// so the user can keep accumulating "metas checkeadas".
+$('#note-archive').addEventListener('click', async () => {
+  if (!noteDraft.id) return;
+  const note = state.notes.find(n => n.id === noteDraft.id);
+  if (!note) return;
+  const isArchived = !!note.archived_at;
+  const nextValue = isArchived ? null : new Date().toISOString();
+  setStatus($('#note-status'), isArchived ? 'Desarchivando…' : 'Archivando…');
+  try {
+    const { error } = await supabase.from('notes').update({ archived_at: nextValue }).eq('id', note.id);
+    if (error) throw error;
+    note.archived_at = nextValue;
+    noteDraft.archived_at = nextValue;
+    dlgNote.close();
+    rerenderCurrentPage();
+  } catch (e) {
+    setStatus($('#note-status'), `Error al ${isArchived ? 'desarchivar' : 'archivar'}: ${e.message || e}`, true);
+  }
 });
 
 // ============================================================

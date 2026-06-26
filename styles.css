@@ -1629,6 +1629,49 @@ textarea.content-plain:focus { border-color: var(--accent); background: var(--su
 .card-checklist .cl-pv .cl-check:hover { background: var(--border); color: var(--text); }
 .card-checklist .cl-pv .cl-check.is-done { color: var(--accent); }
 .card-checklist .cl-pv .cl-check .material-symbols-outlined { font-size: 18px; }
+
+/* ===== Checklist completion celebration ===== */
+/* Soft pulse on the checkbox itself */
+@media (prefers-reduced-motion: no-preference) {
+  .cl-check.cl-celebrate {
+    animation: cl-celebrate-pulse 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+}
+@keyframes cl-celebrate-pulse {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.32); }
+  100% { transform: scale(1); }
+}
+
+/* 8 dots radiating outward from the checkbox center. Each dot's
+   --angle is set inline by celebrateChecklistCompletion(). The dot
+   rotates around its own center, then translates outward along the
+   new local X axis. Color alternates accent / cream for variety. */
+.cl-burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.cl-burst > span {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 5px; height: 5px;
+  margin: -2.5px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0;
+}
+.cl-burst > span:nth-child(even) { background: var(--text); }
+@media (prefers-reduced-motion: no-preference) {
+  .cl-burst > span {
+    animation: cl-burst-fly 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+}
+@keyframes cl-burst-fly {
+  0%   { opacity: 1; transform: rotate(var(--angle, 0deg)) translateX(0); }
+  100% { opacity: 0; transform: rotate(var(--angle, 0deg)) translateX(28px); }
+}
 .card-checklist .cl-pv-text {
   flex: 1; min-width: 0;
   color: var(--text);
