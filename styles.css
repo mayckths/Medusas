@@ -1335,13 +1335,20 @@ dialog.theater::backdrop { background: rgba(0,0,0,0.85); }
   transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.1s ease;
   z-index: 2;
 }
-.photo:hover .photo-star,
-.photo:focus-within .photo-star,
+/* Featured-photo star: visible permanently when already featured, plus
+   on hover/focus-within for pointer devices. Touch users tap the photo
+   to open the lightbox and toggle featured from inside — otherwise
+   showing the star on tap triggers iOS's "show hover first" gesture
+   and the first tap never opens the photo. */
 .photo .photo-star.is-on { opacity: 1; }
-.photo .photo-star:hover {
-  background: rgba(0, 0, 0, 0.75);
-  color: #f9b233;
-  transform: scale(1.08);
+@media (hover: hover) {
+  .photo:hover .photo-star,
+  .photo:focus-within .photo-star { opacity: 1; }
+  .photo .photo-star:hover {
+    background: rgba(0, 0, 0, 0.75);
+    color: #f9b233;
+    transform: scale(1.08);
+  }
 }
 .photo .photo-star.is-on {
   background: rgba(0, 0, 0, 0.7);
@@ -2846,6 +2853,7 @@ a.btn.icon-pill .material-symbols-outlined { font-size: 20px; }
   cursor: pointer;
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4), 0 2px 5px rgba(0, 0, 0, 0.2);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
+  touch-action: manipulation;
 }
 .album-tile img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.2s ease; }
 @media (hover: hover) {
