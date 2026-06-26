@@ -4632,8 +4632,11 @@ function renderNotifList() {
   // of each other into a single "[user] subió N fotos a [álbum]" entry.
   const groupedPhotos = groupPhotoUploads(state.photos);
 
-  // Helper — wraps the title in quotes (with a fallback when empty) so all
-  // notification labels follow the same "Se añadió '…'" pattern.
+  // Narrative attribution: "Mayck escribió X" reads more like a journal
+  // entry than the passive "Se añadió X" with the name buried below.
+  // Verb varies by content type to keep the stream from feeling like a
+  // template. Fallback "Alguien" only triggers when created_by is null.
+  const who = (name) => (name && String(name).trim()) || 'Alguien';
   const named = (title, fallback) => {
     const t = (title || '').trim();
     return t ? `“${t}”` : fallback;
@@ -4643,30 +4646,31 @@ function renderNotifList() {
     ...state.notes
       .filter(n => n.visibility !== 'private')
       .map(n => tagItem(n, 'note', mi('edit_note'), '#/notas',
-        `Se añadió ${named(n.title, 'una nueva nota')}`)),
+        `${who(n.created_by)} escribió ${named(n.title, 'una nota')}`)),
     ...state.media.map(m => {
       const icon = mi(m.kind === 'spotify' ? 'music_note' : 'play_circle');
       const kindLabel = m.kind === 'spotify' ? 'una canción' : 'un video';
-      // Use the combined "Title — Artist" for media so notifs match cards
       const t = displayMediaTitle(m);
+      const author = who(m.created_by);
       const label = (t && t !== 'Sin título')
-        ? `Se añadió “${t}”`
-        : `Se añadió ${kindLabel}`;
+        ? `${author} guardó “${t}”`
+        : `${author} guardó ${kindLabel}`;
       return tagItem(m, 'media', icon, '#/musica', label);
     }),
     ...groupedPhotos.map(g => {
       const slug = g.album ? albumSlugFor(g.album) : '';
       const route = g.album ? `#/fotos/album/${slug}` : '#/fotos';
       const n = g.photos.length;
+      const author = who(g.created_by);
       let label;
       if (n > 1) {
         label = g.album
-          ? `Se añadieron ${n} fotos a ${g.album}`
-          : `Se añadieron ${n} fotos`;
+          ? `${author} subió ${n} fotos a ${g.album}`
+          : `${author} subió ${n} fotos`;
       } else {
         label = g.album
-          ? `Se añadió una foto a ${g.album}`
-          : `Se añadió una foto`;
+          ? `${author} subió una foto a ${g.album}`
+          : `${author} subió una foto`;
       }
       return {
         _kind: 'photo',
@@ -4681,7 +4685,7 @@ function renderNotifList() {
       };
     }),
     ...state.movies.map(m => tagItem(m, 'movie', mi('movie'), '#/pelis',
-      `Se añadió ${named(m.title, 'una peli')}`)),
+      `${who(m.created_by)} agregó ${named(m.title, 'una peli')}`)),
   ];
 
   const unread = all.filter(it => isUnread(it));
@@ -4701,12 +4705,14 @@ function renderNotifList() {
     const a = document.createElement('a');
     a.className = 'notif-item';
     a.href = it._route;
+    // Title already names the author ("Mayck escribió …"), so meta only
+    // needs the timestamp now — keeping the name there would duplicate it.
     a.innerHTML = `
       ${showUnread ? '<span class="dot"></span>' : ''}
       <span class="icon">${it._icon}</span>
       <span class="info">
         <span class="title">${escapeHtml(it._label || 'Sin título')}</span>
-        <span class="meta">${escapeHtml(it.created_by || '?')} · ${fmtDate(it.created_at)}</span>
+        <span class="meta">${fmtDate(it.created_at)}</span>
       </span>
     `;
     a.addEventListener('click', () => { $('#notif-popover').hidden = true; });
