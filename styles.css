@@ -653,12 +653,25 @@ button.btn.pin-toggle.is-pinned {
   -webkit-backdrop-filter: blur(14px) saturate(140%);
   border: 1px solid var(--border); border-radius: var(--radius-lg);
   padding: 0.9rem 1rem; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 0.5rem;
-  position: relative; transition: transform 0.08s ease, border-color 0.15s ease;
+  position: relative;
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.15s ease, box-shadow 0.22s ease;
 }
 .card.clickable { cursor: pointer; }
+/* Polaroid lift on hover — slight rise + a tiny rotation alternating
+   per card so a grid reads like a loose pile of photos instead of a
+   uniform tray. Aesthetics of Joy: Play. Respects reduced-motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .card.clickable:hover {
+    transform: translateY(-3px) rotate(-0.4deg);
+  }
+  .grid-cards > .card.clickable:nth-child(even):hover,
+  .grid-list   > .card.clickable:nth-child(even):hover {
+    transform: translateY(-3px) rotate(0.4deg);
+  }
+}
 .card.clickable:hover {
   border-color: var(--accent);
-  box-shadow: var(--shadow), 0 0 0 1px var(--accent), 0 8px 20px rgba(255, 255, 255, 0.18);
+  box-shadow: var(--shadow), 0 0 0 1px var(--accent), 0 12px 26px rgba(0, 0, 0, 0.32);
 }
 .card.with-stripe { border-left: 4px solid var(--stripe, var(--border)); }
 .card h3 { margin: 0; font-size: 1.02rem; letter-spacing: -0.01em; word-wrap: break-word; }
