@@ -659,8 +659,11 @@ button.btn.pin-toggle.is-pinned {
 .card.clickable { cursor: pointer; }
 /* Polaroid lift on hover — slight rise + a tiny rotation alternating
    per card so a grid reads like a loose pile of photos instead of a
-   uniform tray. Aesthetics of Joy: Play. Respects reduced-motion. */
-@media (prefers-reduced-motion: no-preference) {
+   uniform tray. Aesthetics of Joy: Play.
+   `hover: hover` keeps touch devices out — iOS Safari treats the first
+   tap on an element with a hover-transform as "show hover", forcing a
+   second tap to navigate. Scoping to real pointers fixes that. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
   .card.clickable:hover {
     transform: translateY(-3px) rotate(-0.4deg);
   }
@@ -1278,9 +1281,20 @@ dialog.theater::backdrop { background: rgba(0,0,0,0.85); }
   cursor: pointer;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.2);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
+  /* Drops the iOS 300ms double-tap-zoom wait so a single tap fires the
+     click immediately — otherwise tapping .mosaic-more on mobile felt
+     unresponsive on the first tap. */
+  touch-action: manipulation;
 }
-.photo:hover {
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45), 0 3px 6px rgba(0, 0, 0, 0.25);
+/* Hover-only effects scoped to real pointer devices — on iOS Safari
+   the first tap on a hover-transformed parent triggers "show hover"
+   instead of click, breaking child anchors like .mosaic-more. */
+@media (hover: hover) {
+  .photo:hover {
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45), 0 3px 6px rgba(0, 0, 0, 0.25);
+  }
+  .photo:hover img { transform: scale(1.04); }
+  .photo:hover .photo-caption { opacity: 1; }
 }
 /* Tiles are sized to each photo's natural aspect (set inline by
    renderPhoto on image load), so object-fit: cover fills the tile
@@ -1292,14 +1306,12 @@ dialog.theater::backdrop { background: rgba(0,0,0,0.85); }
   display: block; transition: transform 0.2s ease;
   background: var(--surface);
 }
-.photo:hover img { transform: scale(1.04); }
 .photo .photo-caption {
   position: absolute; left: 0; right: 0; bottom: 0;
   background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
   color: white; padding: 0.5rem; font-size: 0.78rem;
   opacity: 0; transition: opacity 0.15s ease;
 }
-.photo:hover .photo-caption { opacity: 1; }
 .photo .photo-indicator {
   position: absolute; top: 8px; left: 32px; display: flex; gap: 4px;
 }
@@ -2448,7 +2460,9 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
   border-radius: inherit;
   transition: background 0.15s ease;
 }
-.album-mosaic .mosaic-more:hover { background: rgba(199, 109, 82, 0.55); }
+@media (hover: hover) {
+  .album-mosaic .mosaic-more:hover { background: rgba(199, 109, 82, 0.55); }
+}
 @media (max-width: 760px) {
   .album-mosaic.mosaic-hero { aspect-ratio: 4 / 3; }
   .album-section .album-section-head h2 { font-size: 1.15rem; }
@@ -2833,11 +2847,13 @@ a.btn.icon-pill .material-symbols-outlined { font-size: 20px; }
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4), 0 2px 5px rgba(0, 0, 0, 0.2);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-.album-tile:hover {
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.5), 0 3px 7px rgba(0, 0, 0, 0.25);
-}
 .album-tile img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.2s ease; }
-.album-tile:hover img { transform: scale(1.04); }
+@media (hover: hover) {
+  .album-tile:hover {
+    box-shadow: 0 14px 32px rgba(0, 0, 0, 0.5), 0 3px 7px rgba(0, 0, 0, 0.25);
+  }
+  .album-tile:hover img { transform: scale(1.04); }
+}
 .album-tile::after {
   content: ""; position: absolute; inset: 0;
   background: linear-gradient(to top, rgba(0,0,0,0.65), transparent 60%);
