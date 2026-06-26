@@ -980,11 +980,12 @@ function renderInicio(root) {
 
   // The left column shows the post-it board + section blocks in the configured order.
   // The right column is the photo widget + Instantáneos chat.
+  const greeting = getDashboardGreeting(state.currentUser);
   root.innerHTML = `
     <div class="page-head">
       <div>
-        <h1>Hola, ${escapeHtml(state.currentUser)}</h1>
-        <div class="sub">Este es nuestro lugar seguro</div>
+        <h1>${escapeHtml(greeting.headline)}</h1>
+        <div class="sub">${escapeHtml(greeting.sub)}</div>
       </div>
       <div class="actions">
         <div class="notif-bell-wrap">
@@ -1129,6 +1130,12 @@ if (!window._medusasColResizeWired) {
 // ============================================================
 const RELATIONSHIP_START = new Date(2026, 3, 25); // April 25, 2026
 
+// Birthdays for contextual greetings. Date as { month: 1-12, day: 1-31 }.
+const BIRTHDAYS = {
+  Mayck: { month: 12, day: 12 },
+  Jaime: { month: 6,  day: 7  },
+};
+
 function monthsSince(start) {
   const now = new Date();
   let months = (now.getFullYear() - start.getFullYear()) * 12
@@ -1136,6 +1143,62 @@ function monthsSince(start) {
   // Subtract a month if we haven't reached the same day-of-month yet
   if (now.getDate() < start.getDate()) months -= 1;
   return Math.max(0, months);
+}
+
+// Build a dashboard headline + subtitle that adapts to the current day.
+// Priority (most specific wins): birthday of the user → birthday of the
+// partner → fixed festividad (NY, Christmas, etc.) → monthly anniversary
+// on the 25th → weekday vibe → time of day fallback.
+function getDashboardGreeting(userName) {
+  const now = new Date();
+  const m = now.getMonth() + 1;
+  const d = now.getDate();
+  const dow = now.getDay();
+  const h = now.getHours();
+  const safe = String(userName || 'tú');
+  const partner = Object.keys(BIRTHDAYS).find(n => n !== userName) || null;
+  const matches = (date) => date && date.month === m && date.day === d;
+
+  // 1. Birthdays
+  if (matches(BIRTHDAYS[userName])) {
+    return { headline: `Feliz cumpleaños, ${safe}`, sub: 'Que sea un día como tú quieras.' };
+  }
+  if (partner && matches(BIRTHDAYS[partner])) {
+    return { headline: `Hoy es el cumple de ${partner}`, sub: 'No olvides hacerle sentir todo el amor.' };
+  }
+
+  // 2. Festividades fijas
+  if (m === 1  && d === 1)  return { headline: 'Feliz año nuevo',     sub: 'Un año más para llenar de recuerdos.' };
+  if (m === 2  && d === 14) return { headline: 'Feliz San Valentín',  sub: 'Hoy con permiso de exagerar.' };
+  if (m === 10 && d === 31) return { headline: 'Feliz Halloween',     sub: 'Que la noche esté divertida.' };
+  if (m === 12 && d === 24) return { headline: 'Feliz Nochebuena',    sub: 'Que sea suave y cálida.' };
+  if (m === 12 && d === 25) return { headline: `Feliz Navidad, ${safe}`, sub: 'Hoy se celebra estar juntos.' };
+  if (m === 12 && d === 31) return { headline: 'Feliz fin de año',    sub: 'Buen cierre, nos vemos del otro lado.' };
+
+  // 3. Aniversario mensual (cada día 25 desde RELATIONSHIP_START)
+  if (d === RELATIONSHIP_START.getDate() && now >= RELATIONSHIP_START) {
+    const months = monthsSince(RELATIONSHIP_START);
+    if (months === 0) return { headline: 'Felices comienzos',                    sub: 'Hoy empezó todo.' };
+    if (months === 1) return { headline: 'Hoy cumplimos un mes',                 sub: 'Por muchos más.' };
+    if (months % 12 === 0) {
+      const years = months / 12;
+      return { headline: `Feliz aniversario · ${years} ${years === 1 ? 'año' : 'años'}`, sub: `${months} meses como nosotros.` };
+    }
+    return { headline: `Hoy cumplimos ${months} meses`, sub: 'Y los que faltan.' };
+  }
+
+  // 4. Día de la semana
+  if (dow === 1) return { headline: `Feliz lunes, ${safe}`,      sub: 'Buen inicio de semana.' };
+  if (dow === 5) return { headline: `Por fin viernes, ${safe}`,  sub: 'Casi finde.' };
+  if (dow === 6) return { headline: `Buen sábado, ${safe}`,      sub: 'Día de hacer algo juntos.' };
+  if (dow === 0) return { headline: `Buen domingo, ${safe}`,     sub: 'Día de descanso.' };
+
+  // 5. Hora del día (fallback martes / miércoles / jueves)
+  const sub = 'Este es nuestro lugar seguro';
+  if (h < 5)  return { headline: `Trasnochando, ${safe}`,  sub: 'Cuídate.' };
+  if (h < 12) return { headline: `Buenos días, ${safe}`,   sub };
+  if (h < 19) return { headline: `Buenas tardes, ${safe}`, sub };
+  return         { headline: `Buenas noches, ${safe}`,     sub };
 }
 
 function moviesWatchedTogether() {
