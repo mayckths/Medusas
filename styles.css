@@ -39,10 +39,9 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
 
 /* Top-bar gradient on mobile — terracotta blooming into transparent
    so the iOS status area (clock, signal, battery) sits over a warm
-   tint instead of a flat green block. Sized to cover the safe-area
-   inset + ~120px of soft fade. In PWA / black-translucent mode this
-   shows through the status bar directly; in Safari tab mode it pairs
-   with the theme-color meta tag for consistency. */
+   tint instead of a flat green block. The gradient lives BEHIND the
+   page content so headings don't get washed out — it only paints over
+   the bg-photo backdrop, not over the page-head text. */
 @media (max-width: 760px) {
   body::before {
     content: "";
@@ -52,15 +51,19 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
     background: linear-gradient(
       180deg,
       var(--accent) 0%,
-      rgba(199, 109, 82, 0.55) calc(env(safe-area-inset-top, 0px) + 50px),
+      rgba(199, 109, 82, 0.45) calc(env(safe-area-inset-top, 0px) + 50px),
       rgba(199, 109, 82, 0)   100%
     );
     pointer-events: none;
-    z-index: 2;
+    z-index: 0;
   }
-  /* Reserve room for the status bar inset so the page-head doesn't
-     hide behind the notch when running as a PWA. */
-  .app-shell { padding-top: env(safe-area-inset-top, 0px); }
+  /* Establish a stacking context above the gradient so the dashboard
+     (page-head, stats, sections) sits cleanly on top of the tint. */
+  .app-shell {
+    padding-top: env(safe-area-inset-top, 0px);
+    position: relative;
+    z-index: 1;
+  }
 }
 
 /* ======== Ambient blurred backdrop (driven by featured photo) ======== */
