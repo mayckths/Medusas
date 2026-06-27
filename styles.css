@@ -1440,7 +1440,11 @@ dialog.modal::backdrop { background: rgba(0,0,0,0.45); }
     height: 100%;
     max-height: 100%;
     overflow-y: auto;
-    padding: 0.5rem 1rem 1.25rem;
+    /* Match the desktop padding rhythm so the breathing room around
+       inputs and below the last field reads the same on mobile.
+       Extra padding-bottom (1.5rem instead of 1rem) keeps the action
+       buttons off the very edge when the user scrolls to the end. */
+    padding: 1rem 1.1rem 1.5rem;
     -webkit-overflow-scrolling: touch;
   }
   /* Subtle fade-in instead of slide-up; full-screen sliding from
