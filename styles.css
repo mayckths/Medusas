@@ -35,7 +35,13 @@
 /* The HTML `hidden` attribute must win even when CSS sets an explicit display
    (e.g. .auth-overlay { display: grid } would otherwise show through). */
 [hidden] { display: none !important; }
-html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+/* Base background is BLACK, not the forest-green --bg. In photo mode the
+   .bg-photo backdrop covers this completely, so the page still looks the
+   same — but SFSafariViewController (the in-app browser from WhatsApp)
+   samples this body background-color to tint the status bar. Black means
+   the status bar reads black instead of green, matching the black top
+   gradient. Color mode overrides this with the user's chosen color. */
+html, body { margin: 0; padding: 0; background: #000000; color: var(--text); }
 
 /* Top-bar gradient on mobile — terracotta blooming into transparent
    so the iOS status area (clock, signal, battery) sits over a warm
