@@ -68,6 +68,32 @@ function setStatus(el, msg, isError = false) {
   if (msg && !isError) setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 2500);
 }
 
+// Floating toast for transient confirmations ("Guardado ✓") and errors.
+// Reusable across the app — far more visible than the old inline status
+// spans (Nielsen #1, visibility of system status). Auto-dismisses; a new
+// toast replaces the current one so they never stack. role=status keeps
+// it announced to screen readers.
+let _toastTimer = null;
+function uiToast(message, opts = {}) {
+  const { error = false, duration = 2600 } = opts;
+  let host = document.getElementById('ui-toast');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'ui-toast';
+    host.setAttribute('role', 'status');
+    host.setAttribute('aria-live', 'polite');
+    document.body.appendChild(host);
+  }
+  host.textContent = message;
+  host.classList.toggle('is-error', !!error);
+  // Restart the show animation even if a toast is already up.
+  host.classList.remove('show');
+  void host.offsetWidth;
+  host.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => host.classList.remove('show'), duration);
+}
+
 // Make a UUID safe to use as a view-transition-name token (must be a CSS ident).
 function cssSafeId(id) { return String(id).replace(/[^a-zA-Z0-9_-]/g, '-'); }
 
@@ -638,7 +664,7 @@ async function initAuthUI() {
       console.error('[auth] error', e);
       pincode.classList.remove('is-verifying');
       pincode.classList.add('is-error');
-      setStatus(statusEl, `Error: ${e.message || e}`, true);
+      uiToast(`Error: ${e.message || e}`, { error: true });
       setTimeout(() => clearPin(true), 600);
     } finally {
       verifying = false;
@@ -2846,20 +2872,19 @@ const SECTION_LABELS = {
   places: 'Lugares recientes',
 };
 
-let configActiveTab = 'dashboard';
+let configActiveTab = 'apariencia';
 
 function renderConfig(root) {
   const tabs = [
-    { id: 'dashboard', icon: 'home', label: 'Inicio' },
-    { id: 'login', icon: 'lock_open', label: 'Login' },
-    { id: 'tags', icon: 'sell', label: 'Etiquetas' },
-    { id: 'cuenta', icon: 'account_circle', label: 'Cuenta' },
+    { id: 'apariencia', icon: 'palette', label: 'Apariencia' },
+    { id: 'perfil', icon: 'account_circle', label: 'Perfil' },
+    { id: 'cuenta', icon: 'lock', label: 'Cuenta' },
   ];
 
   root.innerHTML = `
     <div class="page-head">
       <div>
-        <h1>⚙️ Configuración</h1>
+        <h1>Configuración</h1>
         <div class="sub">Solo para ti — los cambios se guardan al instante</div>
       </div>
     </div>
@@ -2883,14 +2908,26 @@ function renderConfig(root) {
 
 function renderConfigTab(body) {
   switch (configActiveTab) {
-    case 'dashboard': renderConfigDashboard(body); break;
-    case 'login': renderConfigLogin(body); break;
-    case 'tags': renderConfigTags(body); break;
+    case 'apariencia': renderConfigApariencia(body); break;
+    case 'perfil': renderConfigLogin(body); break;
     case 'cuenta': renderConfigCuenta(body); break;
-    // Legacy targets fall through to cuenta
+    // Legacy tab ids (old 4-tab layout) map onto the new 3-tab one.
+    case 'dashboard':
+    case 'tags': renderConfigApariencia(body); break;
+    case 'login': renderConfigLogin(body); break;
     case 'clave':
     case 'logout': renderConfigCuenta(body); break;
+    default: renderConfigApariencia(body);
   }
+}
+
+// "Apariencia" groups everything visual: dashboard order, app background,
+// and tag colors. Each sub-renderer appends its own cards into the body
+// (they re-call renderConfigTab on change, which clears + rebuilds here).
+function renderConfigApariencia(body) {
+  body.innerHTML = '';
+  renderConfigDashboard(body);
+  renderConfigTags(body);
 }
 
 function renderConfigCuenta(body) {
@@ -2926,57 +2963,16 @@ function renderConfigCuenta(body) {
       });
       if (error) throw error;
       if (!data) { setStatus(statusEl, 'Clave actual incorrecta', true); return; }
-      setStatus(statusEl, 'Clave cambiada ✓');
+      // Success celebrated via toast; clear the inline error span.
+      setStatus(statusEl, '');
+      uiToast('Clave cambiada ✓');
       $('#cfg-old-pw').value = ''; $('#cfg-new-pw').value = '';
-    } catch (e) { setStatus(statusEl, `Error: ${e.message || e}`, true); }
+    } catch (e) { uiToast(`Error: ${e.message || e}`, { error: true }); }
   });
-  $('#cfg-logout').addEventListener('click', () => logout());
-}
-
-function renderConfigClave(body) {
-  body.innerHTML = `
-    <div class="settings-card">
-      <h3>Mi clave</h3>
-      <div class="field"><label>Usuario</label><input type="text" value="${escapeHtml(state.currentUser)}" disabled /></div>
-      <div class="field"><label>Clave actual</label><input type="password" id="cfg-old-pw" placeholder="0000" /></div>
-      <div class="field"><label>Nueva clave</label><input type="password" id="cfg-new-pw" placeholder="Mínimo 4 caracteres" /></div>
-      <div class="row" style="margin-top:.4rem;">
-        <button class="btn primary" id="cfg-save-pw">Cambiar clave</button>
-        <span class="status" id="cfg-pw-status"></span>
-      </div>
-    </div>
-  `;
-
-  $('#cfg-save-pw').addEventListener('click', async () => {
-    const oldp = $('#cfg-old-pw').value;
-    const newp = $('#cfg-new-pw').value;
-    const statusEl = $('#cfg-pw-status');
-    if (!oldp || !newp) { setStatus(statusEl, 'Llena los dos campos', true); return; }
-    if (newp.length < 4) { setStatus(statusEl, 'La nueva clave debe tener al menos 4 caracteres', true); return; }
-    setStatus(statusEl, 'Cambiando…');
-    try {
-      const { data, error } = await supabase.rpc('update_password', {
-        p_name: state.currentUser, p_old_password: oldp, p_new_password: newp,
-      });
-      if (error) throw error;
-      if (!data) { setStatus(statusEl, 'Clave actual incorrecta', true); return; }
-      setStatus(statusEl, 'Clave cambiada ✓');
-      $('#cfg-old-pw').value = ''; $('#cfg-new-pw').value = '';
-    } catch (e) { setStatus(statusEl, `Error: ${e.message || e}`, true); }
+  $('#cfg-logout').addEventListener('click', async () => {
+    if (!(await uiConfirm('¿Cerrar sesión ahora?', { title: 'Cerrar sesión', confirmLabel: 'Cerrar sesión' }))) return;
+    logout();
   });
-}
-
-function renderConfigLogout(body) {
-  body.innerHTML = `
-    <div class="settings-card">
-      <h3>Cerrar sesión</h3>
-      <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Tendrás que volver a meter la clave la próxima vez.</div>
-      <div class="row" style="margin-top:.7rem;">
-        <button class="btn primary" id="cfg-logout"><span class="material-symbols-outlined">logout</span> Cerrar sesión ahora</button>
-      </div>
-    </div>
-  `;
-  $('#cfg-logout').addEventListener('click', () => logout());
 }
 
 function renderConfigDashboard(body) {
@@ -2984,7 +2980,9 @@ function renderConfigDashboard(body) {
   const order = getDashboardOrder();
   const presets = ['#0a0a0c', '#15151a', '#1a1142', '#1e3a5f', '#3a1d4a', '#0d2616', '#f5f4ee'];
 
-  body.innerHTML = `
+  // Append (not replace) — the parent renderConfigApariencia clears the
+  // body once, then this + renderConfigTags each add their own cards.
+  body.insertAdjacentHTML('beforeend', `
     <div class="settings-card">
       <h3>Orden del dashboard</h3>
       <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Usa las flechas para reorganizar, o arrastra en escritorio.</div>
@@ -3000,7 +2998,6 @@ function renderConfigDashboard(body) {
           </div>
         `).join('')}
       </div>
-      <span class="status" id="cfg-order-status"></span>
     </div>
 
     <div class="settings-card">
@@ -3033,9 +3030,8 @@ function renderConfigDashboard(body) {
           ${bg.image_path ? '<button class="btn danger" id="cfg-bg-image-remove" type="button"><span class="material-symbols-outlined">delete</span> Quitar</button>' : ''}
         </div>
       </div>
-      <span class="status" id="cfg-bg-status" style="margin-top:.5rem;display:inline-block;"></span>
     </div>
-  `;
+  `);
 
   // ----- Bg mode toggle -----
   const bgColorRow = $('#cfg-bg-color-row');
@@ -3051,9 +3047,8 @@ function renderConfigDashboard(body) {
   };
 
   const persistBg = async (next) => {
-    setStatus($('#cfg-bg-status'), 'Guardando…');
     await saveSetting('bg', next);
-    setStatus($('#cfg-bg-status'), 'Guardado ✓');
+    uiToast('Fondo actualizado ✓');
   };
 
   $('#cfg-bg-mode').addEventListener('click', async (e) => {
@@ -3094,31 +3089,34 @@ function renderConfigDashboard(body) {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
       if (!file.type.startsWith('image/')) {
-        setStatus($('#cfg-bg-status'), 'El archivo no es una imagen', true);
+        uiToast('El archivo no es una imagen', { error: true });
         return;
       }
-      setStatus($('#cfg-bg-status'), 'Subiendo…');
+      uiToast('Subiendo…');
       try {
         const path = await uploadAssetFile(file, 'app-bg');
         const next = { mode: 'image', color: bgColorInput.value || '#0a0a0c', image_path: path };
         await saveSetting('bg', next);
-        setStatus($('#cfg-bg-status'), 'Imagen aplicada ✓');
+        uiToast('Imagen aplicada ✓');
         // Refresh the card so the preview + Remove button show up
         renderConfigTab(body);
       } catch (err) {
         console.error('bg upload', err);
-        setStatus($('#cfg-bg-status'), 'Error al subir: ' + (err.message || err), true);
+        uiToast('Error al subir: ' + (err.message || err), { error: true });
       }
     });
   }
   const bgRemoveBtn = $('#cfg-bg-image-remove');
   if (bgRemoveBtn) {
     bgRemoveBtn.addEventListener('click', async () => {
-      // Best-effort: also remove the file from storage
+      // Confirm before removing — deletes the uploaded file from storage,
+      // which is only recoverable by re-uploading (Nielsen #5).
+      if (!(await uiConfirm('¿Quitar la imagen de fondo?', { title: 'Quitar imagen', confirmLabel: 'Quitar', danger: true }))) return;
       if (bg.image_path) {
         try { await supabase.storage.from(APP_ASSETS_BUCKET).remove([bg.image_path]); } catch {}
       }
       await saveSetting('bg', { mode: 'image', color: bgColorInput.value || '#0a0a0c', image_path: null });
+      uiToast('Imagen quitada');
       renderConfigTab(body);
     });
   }
@@ -3133,7 +3131,8 @@ function renderConfigTags(body) {
   state.places.forEach(p => (p.tags || []).forEach(t => allTags.add(t)));
   const overrides = state.settings.tag_colors || {};
 
-  body.innerHTML = `
+  // Append — shares the body with the dashboard card (see renderConfigApariencia).
+  body.insertAdjacentHTML('beforeend', `
     <div class="settings-card">
       <h3>Colores de las etiquetas</h3>
       <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Por defecto cada etiqueta tiene su propio color. Aquí puedes personalizarlos. Los cambios afectan a las notas y a los lugares.</div>
@@ -3147,18 +3146,16 @@ function renderConfigTags(body) {
           </div>
         `).join('')}
       </div>
-      <span class="status" id="cfg-tags-status"></span>
     </div>
-  `;
+  `);
 
   $$('input.tag-color-picker').forEach(input => {
     input.addEventListener('change', async () => {
       const tag = input.dataset.tag;
       const next = { ...(state.settings.tag_colors || {}) };
       next[tag] = input.value;
-      setStatus($('#cfg-tags-status'), 'Guardando…');
       await saveSetting('tag_colors', next);
-      setStatus($('#cfg-tags-status'), 'Guardado ✓');
+      uiToast('Color guardado ✓');
       renderConfigTab(body); // refresh chip preview
     });
   });
@@ -3226,8 +3223,6 @@ function renderConfigLogin(body) {
         </div>
       </div>
     </div>
-
-    <span class="status" id="cfg-assets-status"></span>
   `;
   setupAssetUploaders();
 }
@@ -3265,7 +3260,6 @@ function setupAssetUploaders() {
   const me = state.currentUser;
   const assets = state._userAssets?.[me] || {};
   const defaultBg = state._defaultBg || '';
-  const statusEl = $('#cfg-assets-status');
 
   renderAssetPreview($('#cfg-avatar-preview'), assets.avatar, false);
   renderAssetPreview($('#cfg-bg-preview'), assets.bg, true);
@@ -3275,16 +3269,16 @@ function setupAssetUploaders() {
     if (!input.files?.length) return;
     const file = input.files[0];
     input.value = '';
-    setStatus(statusEl, 'Subiendo…');
+    uiToast('Subiendo…');
     try {
       const path = await uploadAssetFile(file, prefix);
       await save(path);
       await refreshUserAssetsLocal();
-      setStatus(statusEl, 'Guardado ✓');
+      uiToast('Guardado ✓');
       setupAssetUploaders(); // refresh previews
     } catch (e) {
       console.error(e);
-      setStatus(statusEl, `Error: ${e.message || e}`, true);
+      uiToast(`Error: ${e.message || e}`, { error: true });
     }
   }
 
@@ -3310,42 +3304,42 @@ function setupAssetUploaders() {
     const current = state._userAssets[me]?.avatar;
     if (!current) return;
     if (!(await uiConfirm('¿Quitar tu avatar?', { title: 'Quitar avatar', confirmLabel: 'Quitar', danger: true }))) return;
-    setStatus(statusEl, 'Quitando…');
+    uiToast('Quitando…');
     try {
       const { error } = await supabase.rpc('set_user_assets', { p_name: me, p_avatar_path: '', p_background_path: null });
       if (error) throw error;
       try { await supabase.storage.from(APP_ASSETS_BUCKET).remove([current]); } catch {}
       state._userAssets[me].avatar = null;
-      setStatus(statusEl, 'Quitado');
+      uiToast('Quitado ✓');
       setupAssetUploaders();
-    } catch (e) { setStatus(statusEl, `Error: ${e.message || e}`, true); }
+    } catch (e) { uiToast(`Error: ${e.message || e}`, { error: true }); }
   });
   $('#cfg-bg-clear').addEventListener('click', async () => {
     const current = state._userAssets[me]?.bg;
     if (!current) return;
     if (!(await uiConfirm('¿Quitar tu imagen del login?', { title: 'Quitar imagen', confirmLabel: 'Quitar', danger: true }))) return;
-    setStatus(statusEl, 'Quitando…');
+    uiToast('Quitando…');
     try {
       const { error } = await supabase.rpc('set_user_assets', { p_name: me, p_avatar_path: null, p_background_path: '' });
       if (error) throw error;
       try { await supabase.storage.from(APP_ASSETS_BUCKET).remove([current]); } catch {}
       state._userAssets[me].bg = null;
-      setStatus(statusEl, 'Quitada');
+      uiToast('Quitada ✓');
       setupAssetUploaders();
-    } catch (e) { setStatus(statusEl, `Error: ${e.message || e}`, true); }
+    } catch (e) { uiToast(`Error: ${e.message || e}`, { error: true }); }
   });
   $('#cfg-default-bg-clear').addEventListener('click', async () => {
     if (!state._defaultBg) return;
     if (!(await uiConfirm('¿Quitar la foto por defecto?', { title: 'Quitar foto', confirmLabel: 'Quitar', danger: true }))) return;
-    setStatus(statusEl, 'Quitando…');
+    uiToast('Quitando…');
     try {
       const old = state._defaultBg;
       await saveSetting('default_background_path', '');
       try { await supabase.storage.from(APP_ASSETS_BUCKET).remove([old]); } catch {}
       state._defaultBg = '';
-      setStatus(statusEl, 'Quitada');
+      uiToast('Quitada ✓');
       setupAssetUploaders();
-    } catch (e) { setStatus(statusEl, `Error: ${e.message || e}`, true); }
+    } catch (e) { uiToast(`Error: ${e.message || e}`, { error: true }); }
   });
 }
 
@@ -3398,15 +3392,16 @@ function setupReorder() {
       return;
     }
     await persistOrder();
-    // Re-render the dashboard config tab to update disabled state on buttons
-    renderConfigDashboard($('#config-body'));
+    // Re-render the whole Apariencia tab (clears + rebuilds dashboard +
+    // tags cards) to refresh the up/down disabled states. Calling
+    // renderConfigDashboard alone would append a duplicate set of cards.
+    renderConfigApariencia($('#config-body'));
   });
 
   async function persistOrder() {
     const newOrder = $$('.reorder-item', list).map(el => el.dataset.sec);
-    setStatus($('#cfg-order-status'), 'Guardando…');
     await saveSetting('dashboard_order', { order: newOrder });
-    setStatus($('#cfg-order-status'), 'Orden actualizado ✓');
+    uiToast('Orden actualizado ✓');
   }
 }
 

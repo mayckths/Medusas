@@ -1503,6 +1503,36 @@ dialog.modal::backdrop { background: rgba(0,0,0,0.45); }
   }
 }
 
+/* Floating toast — transient "Guardado ✓" / error feedback. Fixed near
+   the bottom center, slides up + fades in. Sits above everything. */
+#ui-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  transform: translate(-50%, 16px);
+  z-index: 200;
+  max-width: min(420px, calc(100vw - 2rem));
+  padding: 0.7rem 1.1rem;
+  border-radius: 999px;
+  background: #2d4739;
+  color: #f9f6f0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(249, 246, 240, 0.14);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+#ui-toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+#ui-toast.is-error {
+  background: var(--danger);
+  border-color: transparent;
+}
+
 /* Custom alert / confirm dialog */
 dialog.ui-dialog { max-width: 460px; }
 dialog.ui-dialog .ui-dialog-message {
