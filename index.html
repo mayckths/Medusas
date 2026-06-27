@@ -2,7 +2,17 @@
 <html lang="es">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- Safari paints the URL bar / status area this color when scrolled,
+         so the top of the page reads as warm terracotta instead of the
+         dark green surface. -->
+    <meta name="theme-color" content="#c76d52" />
+    <!-- iOS PWA hooks: when the user "Add to Home Screen" the app opens
+         standalone with a translucent status bar so the gradient below
+         shows through, similar to Apple Music. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Medusas" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
@@ -17,7 +27,7 @@
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
 
-    <link rel="stylesheet" href="./styles.css?v=20260626j" />
+    <link rel="stylesheet" href="./styles.css?v=20260626k" />
 
     <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>

@@ -37,6 +37,32 @@
 [hidden] { display: none !important; }
 html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
 
+/* Top-bar gradient on mobile — terracotta blooming into transparent
+   so the iOS status area (clock, signal, battery) sits over a warm
+   tint instead of a flat green block. Sized to cover the safe-area
+   inset + ~120px of soft fade. In PWA / black-translucent mode this
+   shows through the status bar directly; in Safari tab mode it pairs
+   with the theme-color meta tag for consistency. */
+@media (max-width: 760px) {
+  body::before {
+    content: "";
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: calc(env(safe-area-inset-top, 0px) + 140px);
+    background: linear-gradient(
+      180deg,
+      var(--accent) 0%,
+      rgba(199, 109, 82, 0.55) calc(env(safe-area-inset-top, 0px) + 50px),
+      rgba(199, 109, 82, 0)   100%
+    );
+    pointer-events: none;
+    z-index: 2;
+  }
+  /* Reserve room for the status bar inset so the page-head doesn't
+     hide behind the notch when running as a PWA. */
+  .app-shell { padding-top: env(safe-area-inset-top, 0px); }
+}
+
 /* ======== Ambient blurred backdrop (driven by featured photo) ======== */
 .bg-photo {
   position: fixed; inset: 0;
