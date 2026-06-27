@@ -1412,6 +1412,55 @@ dialog.modal {
 }
 dialog.modal::backdrop { background: rgba(0,0,0,0.45); }
 
+/* Mobile: dialogs become bottom sheets. Slide up from the bottom,
+   full-width with rounded top corners — much more native-feeling on
+   touch than a floating modal. ui-dialog (alert/confirm/prompt) keeps
+   the centered modal style because it's small and transient. */
+@media (max-width: 760px) {
+  dialog.modal:not(.ui-dialog) {
+    /* Override the centered defaults */
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    margin: 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: 90vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    border-bottom: 0;
+  }
+  /* Slide-up entrance via @starting-style. Browsers that don't support
+     it (Chrome <117 / Safari <17.5) skip the animation and the sheet
+     just appears in place — functional in both cases. */
+  @media (prefers-reduced-motion: no-preference) {
+    dialog.modal:not(.ui-dialog) {
+      transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    @starting-style {
+      dialog.modal:not(.ui-dialog)[open] {
+        transform: translateY(100%);
+      }
+    }
+  }
+  /* The inner padding still gives breathing room; the close-x stays
+     reachable in the top-right of the sheet. */
+  dialog.modal:not(.ui-dialog) .modal-inner {
+    padding: 0.75rem 1rem 1.25rem;
+  }
+  /* Drag-handle bar at the top of the sheet — purely visual cue that
+     this is a sheet, not a centered modal. No actual drag-to-dismiss. */
+  dialog.modal:not(.ui-dialog)::before {
+    content: "";
+    display: block;
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(74, 69, 66, 0.25);
+    margin: 0.45rem auto 0;
+  }
+}
+
 /* Custom alert / confirm dialog */
 dialog.ui-dialog { max-width: 460px; }
 dialog.ui-dialog .ui-dialog-message {
@@ -1470,6 +1519,23 @@ dialog.ui-dialog .ui-prompt-input:focus {
   font-size: 1.15rem; font-weight: 600; padding: 0.25rem 0 0.5rem; outline: none;
 }
 .modal-inner input.title::placeholder { color: var(--text-dim); }
+
+/* When the title input plays the role of the modal heading: bumped to
+   page-head h1 size (Playfair Display, larger), tighter tracking. The
+   modal-head above it is empty except for the close-x, so we collapse
+   its bottom margin. */
+.modal-inner input.title.title-as-heading {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 1.55rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  padding: 0 0 0.6rem;
+}
+.modal-head.modal-head-bare {
+  justify-content: flex-end;
+  margin-bottom: 0.1rem;
+  min-height: 0;
+}
 textarea.content-plain {
   width: 100%;
   /* Auto-grows via JS to fit content. The CSS bounds cap it: bigger
@@ -2377,6 +2443,24 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 .card.new-cta {
   aspect-ratio: 1 / 1;
   min-height: 0;
+}
+/* On mobile the 1:1 tile takes half the screen — way too much real
+   estate for an entry point. Collapse to a slim 56px pill across the
+   row so the actual notes lead the layout. */
+@media (max-width: 760px) {
+  .card.new-cta {
+    aspect-ratio: auto;
+    grid-column: 1 / -1;
+    height: 56px;
+    flex-direction: row;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 0 1rem;
+  }
+  .card.new-cta .plus {
+    width: 24px; height: 24px;
+  }
+  .card.new-cta .label { font-size: 0.9rem; }
 }
 
 /* List mode: every row same height, hide visual extras */

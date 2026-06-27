@@ -3442,7 +3442,6 @@ function openNoteEditor(note) {
   renderNoteTagSuggestions('');
   $('#note-tag-input').value = '';
   $('#note-status').textContent = '';
-  $('#dlg-note-title').textContent = note ? 'Editar nota' : 'Nueva nota';
   $('#note-save').textContent = note ? 'Actualizar nota' : 'Guardar nota';
   $('#note-delete').hidden = !note;
   // Archive button only makes sense for existing notes. Label flips
@@ -3453,7 +3452,13 @@ function openNoteEditor(note) {
     archiveBtn.textContent = noteDraft.archived_at ? 'Desarchivar' : 'Archivar';
   }
   dlgNote.showModal();
-  setTimeout(() => $('#note-title-input').focus(), 0);
+  // Focus the title synchronously (no setTimeout) so iOS keeps the
+  // user-gesture context and actually opens the keyboard.
+  const titleInput = $('#note-title-input');
+  titleInput.focus();
+  // For existing notes, drop the caret at the end instead of selecting
+  // the whole title — friendlier for quick edits.
+  if (note) titleInput.setSelectionRange(titleInput.value.length, titleInput.value.length);
   // Size the body textarea to fit its content. Capped to ~70vh via CSS
   // so long notes don't force a tiny textbox with internal scroll.
   requestAnimationFrame(() => autoGrowTextarea($('#note-plain')));

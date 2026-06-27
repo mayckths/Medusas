@@ -17,7 +17,7 @@
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
 
-    <link rel="stylesheet" href="./styles.css?v=20260626c" />
+    <link rel="stylesheet" href="./styles.css?v=20260626f" />
 
     <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>
@@ -134,14 +134,13 @@
     </div>
 
     <!-- ==================== Note editor ==================== -->
-    <dialog class="modal" id="dlg-note">
+    <dialog class="modal modal-note" id="dlg-note">
       <div class="modal-inner">
-        <div class="modal-head">
-          <h2 id="dlg-note-title">Nueva nota</h2>
+        <div class="modal-head modal-head-bare">
           <button class="close-x" data-close><span class="material-symbols-outlined">close</span></button>
         </div>
 
-        <input type="text" class="title" id="note-title-input" placeholder="Título…" maxlength="200" />
+        <input type="text" class="title title-as-heading" id="note-title-input" placeholder="Título…" maxlength="200" autofocus />
 
         <textarea class="content-plain" id="note-plain" placeholder="Escribe algo…"></textarea>
 
@@ -460,6 +459,6 @@
       <div class="notif-list" id="notif-list"></div>
     </div>
 
-    <script type="module" src="./app.js?v=20260626c"></script>
+    <script type="module" src="./app.js?v=20260626d"></script>
   </body>
 </html>
