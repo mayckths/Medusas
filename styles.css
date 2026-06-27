@@ -50,9 +50,9 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
     height: calc(env(safe-area-inset-top, 0px) + 200px);
     /* Forest-green tint that matches the URL bar exactly. Fully OPAQUE
        in the area covering the status bar + a small buffer below, so
-       there's no "two greens" effect from the photo backdrop bleeding
-       through. Only fades to transparent once we're well below the
-       chrome, leaving the photo backdrop to take over smoothly. */
+       the band right under the URL bar is the SAME color the browser
+       chrome shows — no "two greens" cut. Fades to transparent so the
+       photo backdrop takes over smoothly below. */
     background: linear-gradient(
       180deg,
       #2d4739 0%,
@@ -61,14 +61,16 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
       rgba(45, 71, 57, 0)   100%
     );
     pointer-events: none;
-    z-index: 0;
+    /* MUST be above .bg-photo (z:0) — otherwise the blurred photo + its
+       dark scrim paints over the gradient and the top band ends up
+       darker than the URL bar. */
+    z-index: 1;
   }
-  /* Establish a stacking context above the gradient so the dashboard
-     (page-head, stats, sections) sits cleanly on top of the tint. */
+  /* Stack content above both the gradient and the photo backdrop. */
   .app-shell {
     padding-top: env(safe-area-inset-top, 0px);
     position: relative;
-    z-index: 1;
+    z-index: 2;
   }
 }
 
@@ -140,8 +142,9 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
   color: #ffffff;
 }
 
-/* App shell sits on top of the backdrop */
-.app-shell { position: relative; z-index: 1; }
+/* App shell sits on top of the backdrop AND the mobile top-bar gradient
+   (which lives at z:1, between the bg-photo backdrop and the content). */
+.app-shell { position: relative; z-index: 2; }
 .auth-overlay { position: fixed; z-index: 50; }
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
