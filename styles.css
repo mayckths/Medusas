@@ -3057,3 +3057,28 @@ a.btn.icon-pill .material-symbols-outlined { font-size: 20px; }
     gap: 0.5rem;
   }
 }
+
+/* ======== iOS Safari auto-zoom guard ========
+   iOS auto-zooms the viewport when focusing an input with font-size
+   < 16px. The body's 15px root and several inputs at 0.85-0.95rem
+   would trigger it, making the app jump scale every time you tap a
+   text field. Bump every editable control to 16px on mobile (desktop
+   sizes stay untouched). Pinch-zoom remains available — only the
+   focus-zoom is prevented. */
+@media (max-width: 760px) {
+  textarea.content-plain,
+  .field input[type=text],
+  .field input[type=url],
+  .field input[type=password],
+  .field input[type=email],
+  .field input[type=number],
+  .field textarea,
+  .tag-section input,
+  .note-checklist .cl-text,
+  .album-picker input,
+  .places-search-row input,
+  dialog.ui-dialog .ui-prompt-input,
+  .modal-inner input.title {
+    font-size: 16px;
+  }
+}
