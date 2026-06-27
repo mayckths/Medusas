@@ -1412,52 +1412,46 @@ dialog.modal {
 }
 dialog.modal::backdrop { background: rgba(0,0,0,0.45); }
 
-/* Mobile: dialogs become bottom sheets. Slide up from the bottom,
-   full-width with rounded top corners — much more native-feeling on
-   touch than a floating modal. ui-dialog (alert/confirm/prompt) keeps
-   the centered modal style because it's small and transient. */
+/* Mobile: dialogs become full-screen, like Mail / Twitter compose.
+   Bottom sheets break with the on-screen keyboard (iOS pushes the
+   sheet up and the title goes off-screen), so we anchor to the full
+   viewport instead and let the inner content scroll. ui-dialog
+   (alert/confirm/prompt) keeps the centered modal style because it's
+   small and transient. */
 @media (max-width: 760px) {
   dialog.modal:not(.ui-dialog) {
-    /* Override the centered defaults */
-    top: auto;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    inset: 0;
     margin: 0;
     width: 100%;
     max-width: 100%;
-    max-height: 90vh;
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    border-bottom: 0;
+    /* 100dvh = "dynamic viewport height" — excludes iOS Safari's
+       browser UI when scrolling, so the modal really fills the
+       visible area without forcing internal scroll on small screens. */
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+    border: 0;
   }
-  /* Slide-up entrance via @starting-style. Browsers that don't support
-     it (Chrome <117 / Safari <17.5) skip the animation and the sheet
-     just appears in place — functional in both cases. */
+  /* Scroll the editor content inside the modal so the focused input
+     can be auto-scrolled into view by the browser when the keyboard
+     pops up. Bottom buttons may be covered by the keyboard while
+     typing — the user dismisses the keyboard to reach them. */
+  dialog.modal:not(.ui-dialog) .modal-inner {
+    height: 100%;
+    max-height: 100%;
+    overflow-y: auto;
+    padding: 0.5rem 1rem 1.25rem;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Subtle fade-in instead of slide-up; full-screen sliding from
+     bottom reads as awkward. */
   @media (prefers-reduced-motion: no-preference) {
     dialog.modal:not(.ui-dialog) {
-      transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+      transition: opacity 0.18s ease;
     }
     @starting-style {
-      dialog.modal:not(.ui-dialog)[open] {
-        transform: translateY(100%);
-      }
+      dialog.modal:not(.ui-dialog)[open] { opacity: 0; }
     }
-  }
-  /* The inner padding still gives breathing room; the close-x stays
-     reachable in the top-right of the sheet. */
-  dialog.modal:not(.ui-dialog) .modal-inner {
-    padding: 0.75rem 1rem 1.25rem;
-  }
-  /* Drag-handle bar at the top of the sheet — purely visual cue that
-     this is a sheet, not a centered modal. No actual drag-to-dismiss. */
-  dialog.modal:not(.ui-dialog)::before {
-    content: "";
-    display: block;
-    width: 36px;
-    height: 4px;
-    border-radius: 2px;
-    background: rgba(74, 69, 66, 0.25);
-    margin: 0.45rem auto 0;
   }
 }
 
