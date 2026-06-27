@@ -3,10 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <!-- Safari paints the URL bar / status area this color, matching
-         the deep-green tint at the top of the body so there's no hard
-         line between the browser chrome and the page. -->
-    <meta name="theme-color" content="#2d4739" />
+    <!-- Black URL bar / status area. Black survives whatever opacity
+         iOS layers on for legibility, so the chrome never desaturates
+         into a mismatched tone — it stays in sync with the black
+         gradient band at the top of the body. -->
+    <meta name="theme-color" content="#000000" />
     <!-- iOS PWA hooks: when the user "Add to Home Screen" the app opens
          standalone with a translucent status bar so the gradient below
          shows through, similar to Apple Music. -->
@@ -27,7 +28,7 @@
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
 
-    <link rel="stylesheet" href="./styles.css?v=20260626q" />
+    <link rel="stylesheet" href="./styles.css?v=20260626r" />
 
     <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>
