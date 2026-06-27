@@ -934,7 +934,7 @@ function renderInicio(root) {
     root.classList.add('inicio-fresh');
     // Strip the class once the longest stagger has settled so any later
     // partial re-render of the page doesn't re-animate everything.
-    setTimeout(() => root.classList.remove('inicio-fresh'), 1200);
+    setTimeout(() => root.classList.remove('inicio-fresh'), 1800);
   }
   const order = getDashboardOrder();
   const sectionTemplates = {
