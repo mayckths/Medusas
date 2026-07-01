@@ -3984,11 +3984,25 @@ const uploadList = $('#upload-list');
 // Files the user picked but hasn't uploaded yet. Held here until they
 // confirm the album in the modal.
 let pendingPhotos = [];
+// Album to preselect in the upload modal (set when "Subir fotos" is
+// pressed from inside an album detail page). Consumed by resetUploadDialog.
+let pendingPreselectAlbum = null;
+// After a successful upload we jump to this album's detail page (set in
+// startConfirmedUpload, read by the dialog's close handler).
+let afterUploadAlbumSlug = null;
 
 // "Subir fotos" button entry-point. On mobile this means: open the
 // device's photo picker directly instead of a modal. After the user
 // selects something, we open the modal asking for the album.
 function openPhotoUpload() {
+  // If we're inside a named album, preselect it so photos land there
+  // by default (the user came here to add to THIS album).
+  if (state.route && state.route.startsWith('#/fotos/album/')) {
+    const name = albumNameFromSlug(state.route.slice('#/fotos/album/'.length));
+    pendingPreselectAlbum = name || null; // skip the unnamed "Sin álbum" bucket
+  } else {
+    pendingPreselectAlbum = null;
+  }
   // Reset the input so picking the same set again still fires change
   $('#photo-input').value = '';
   $('#photo-input').click();
@@ -4004,9 +4018,13 @@ function resetUploadDialog() {
     <option value="__new__">+ Nuevo álbum</option>
     ${albums.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('')}
   `;
-  // No default — force the user to choose so we don't silently dump
-  // photos into the first existing album.
-  select.value = '';
+  // Preselect the album we came from (album detail page). Otherwise no
+  // default — force the user to choose so we don't silently dump photos
+  // into the first existing album.
+  select.value = (pendingPreselectAlbum && albums.includes(pendingPreselectAlbum))
+    ? pendingPreselectAlbum
+    : '';
+  pendingPreselectAlbum = null; // consume — one-shot
   function syncAlbumInput() {
     const v = select.value;
     if (v === '__new__') {
@@ -4173,6 +4191,7 @@ async function startConfirmedUpload() {
   updateUploadStatus();
   if (uploadProcessing) return;
   uploadProcessing = true;
+  const failedBefore = uploadList.querySelectorAll('.upload-row.error').length;
   try {
     while (uploadQueue.length > 0) {
       const item = uploadQueue.shift();
@@ -4182,6 +4201,15 @@ async function startConfirmedUpload() {
     }
   } finally {
     uploadProcessing = false;
+  }
+  // Once the whole queue drains: if everything landed cleanly, close the
+  // modal and jump to the album so the user sees the new photos. If any
+  // row errored, keep the modal open so they can see what failed.
+  const anyError = uploadList.querySelector('.upload-row.error');
+  if (!anyError && uploadDone > 0) {
+    afterUploadAlbumSlug = albumSlugFor(album);
+    uiToast(`${uploadDone} foto${uploadDone === 1 ? '' : 's'} subida${uploadDone === 1 ? '' : 's'} ✓`);
+    dlgPhoto.close();
   }
 }
 
@@ -4206,7 +4234,18 @@ dz.addEventListener('drop', (e) => {
 
 dlgPhoto.addEventListener('close', () => {
   pendingPhotos = [];
-  router();
+  // If we just finished an upload, land on the album's detail page so
+  // the new photos are front and center. router() (via loadAll) fetches
+  // the freshly-inserted rows.
+  const target = afterUploadAlbumSlug;
+  afterUploadAlbumSlug = null;
+  if (target) {
+    const hash = `#/fotos/album/${target}`;
+    if (location.hash === hash) router();   // already there → manual refresh
+    else location.hash = hash;              // navigate → hashchange fires router
+  } else {
+    router();
+  }
 });
 
 // ============================================================
