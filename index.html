@@ -28,7 +28,7 @@
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
 
-    <link rel="stylesheet" href="./styles.css?v=20260627c" />
+    <link rel="stylesheet" href="./styles.css?v=20260627e" />
 
     <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>
@@ -147,41 +147,38 @@
     <!-- ==================== Note editor ==================== -->
     <dialog class="modal modal-note" id="dlg-note">
       <div class="modal-inner">
-        <div class="modal-head modal-head-bare">
-          <button class="close-x" data-close><span class="material-symbols-outlined">close</span></button>
-        </div>
-
-        <input type="text" class="title title-as-heading" id="note-title-input" placeholder="Título…" maxlength="200" autofocus />
-
-        <textarea class="content-plain" id="note-plain" placeholder="Escribe algo…"></textarea>
-
-        <div class="note-icon-row">
-          <button class="icon-btn" id="note-add-link" title="Añadir enlace" type="button"><span class="material-symbols-outlined">link</span></button>
-          <button class="icon-btn" id="note-add-image" title="Añadir imagen" type="button"><span class="material-symbols-outlined">image</span></button>
-          <button class="icon-btn" id="note-add-checklist" title="Añadir lista" type="button"><span class="material-symbols-outlined">check_box</span></button>
-          <input type="file" id="note-image-input" accept="image/*" multiple hidden />
-          <span class="status" id="note-status"></span>
-        </div>
-
-        <div class="chips" id="note-links"></div>
-        <div class="images-preview" id="note-images"></div>
-        <div class="note-checklist" id="note-checklist"></div>
-
-        <div class="tag-section">
-          <div class="tags-selected" id="note-tags"></div>
-          <input type="text" id="note-tag-input" placeholder="Añadir etiqueta… (Enter)" maxlength="40" />
-          <div class="tag-suggestions" id="note-tag-suggestions"></div>
-        </div>
-
-        <div class="modal-actions">
-          <div class="left">
+        <!-- Fixed top bar (iOS-style): discard left, actions + save right. -->
+        <div class="note-editor-bar">
+          <button class="note-bar-icon" data-close type="button" aria-label="Descartar"><span class="material-symbols-outlined">close</span></button>
+          <div class="note-bar-actions">
+            <button class="note-bar-icon" id="note-archive" type="button" hidden aria-label="Archivar"><span class="material-symbols-outlined">archive</span></button>
+            <button class="note-bar-icon danger" id="note-delete" type="button" hidden aria-label="Eliminar"><span class="material-symbols-outlined">delete</span></button>
+            <button class="note-bar-save" id="note-save" type="button" aria-label="Guardar nota"><span class="material-symbols-outlined">check</span></button>
           </div>
-          <button class="btn danger" id="note-delete" hidden>Eliminar</button>
-          <button class="btn ghost" id="note-archive" hidden>Archivar</button>
-          <div class="right">
-            <button class="btn ghost" data-close>Cancelar</button>
-            <button class="btn primary" id="note-save">Guardar nota</button>
+        </div>
+
+        <div class="note-editor-body">
+          <!-- Tags first, above the title/body inputs. -->
+          <div class="tag-section">
+            <div class="tags-selected" id="note-tags"></div>
+            <input type="text" id="note-tag-input" placeholder="Añadir etiqueta… (Enter)" maxlength="40" />
+            <div class="tag-suggestions" id="note-tag-suggestions"></div>
           </div>
+
+          <input type="text" class="title title-as-heading" id="note-title-input" placeholder="Título…" maxlength="200" autofocus />
+          <textarea class="content-plain" id="note-plain" placeholder="Escribe algo…"></textarea>
+
+          <div class="note-icon-row">
+            <button class="icon-btn" id="note-add-link" title="Añadir enlace" type="button"><span class="material-symbols-outlined">link</span></button>
+            <button class="icon-btn" id="note-add-image" title="Añadir imagen" type="button"><span class="material-symbols-outlined">image</span></button>
+            <button class="icon-btn" id="note-add-checklist" title="Añadir lista" type="button"><span class="material-symbols-outlined">check_box</span></button>
+            <input type="file" id="note-image-input" accept="image/*" multiple hidden />
+            <span class="status" id="note-status"></span>
+          </div>
+
+          <div class="chips" id="note-links"></div>
+          <div class="images-preview" id="note-images"></div>
+          <div class="note-checklist" id="note-checklist"></div>
         </div>
       </div>
     </dialog>
@@ -470,6 +467,6 @@
       <div class="notif-list" id="notif-list"></div>
     </div>
 
-    <script type="module" src="./app.js?v=20260627d"></script>
+    <script type="module" src="./app.js?v=20260627e"></script>
   </body>
 </html>

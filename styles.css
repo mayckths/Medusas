@@ -561,6 +561,21 @@ nav.menu a .m-icon { font-size: 20px; width: 22px; text-align: center; }
 .card.note-card .pin-card-btn:hover { color: var(--text); background: var(--border); }
 .card.note-card.pinned .pin-card-btn { background: var(--accent); color: var(--on-accent); border-color: transparent; opacity: 1; }
 .card.note-card .pin-card-btn .material-symbols-outlined { font-size: 18px; }
+
+/* Archive button — same chip style as the pin, seated just to its left. */
+.card.note-card .archive-card-btn {
+  position: absolute; top: 8px; right: 44px;
+  background: var(--surface-alt); border: 1px solid var(--border); border-radius: 6px;
+  width: 30px; height: 30px; cursor: pointer; color: var(--text-dim);
+  display: grid; place-items: center; padding: 0;
+  opacity: 0.7; transition: opacity 0.12s ease;
+}
+.card.note-card:hover .archive-card-btn { opacity: 1; }
+@media (hover: none) { .card.note-card .archive-card-btn { opacity: 1; } }
+.card.note-card .archive-card-btn:hover { color: var(--text); background: var(--border); }
+.card.note-card .archive-card-btn .material-symbols-outlined { font-size: 18px; }
+/* With two top-right buttons, reserve a bit more room so tags don't slide under them. */
+.card.note-card.has-archive .body .tag-row { max-width: calc(100% - 80px); }
 /* Reserve room for the absolutely-positioned pin button so the tag row
    doesn't slide UNDER it. Use max-width instead of padding-right so
    the visible tags aren't half-clipped at the right edge.
@@ -760,9 +775,10 @@ button.btn.pin-toggle.is-pinned {
 .card .gallery img { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); }
 .card .links { display: flex; gap: 0.35rem; flex-wrap: wrap; }
 .card .links a {
-  font-size: 0.75rem; color: var(--accent-2); text-decoration: none;
+  font-size: 0.75rem; color: var(--accent); font-weight: 500; text-decoration: none;
   background: var(--surface-alt); padding: 0.15rem 0.5rem; border-radius: 999px;
-  border: 1px solid var(--border); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  border: 1px solid var(--border-strong); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 0.25rem;
 }
 .card .badge {
   display: inline-flex; align-items: center; gap: 0.25rem;
@@ -1624,6 +1640,60 @@ dialog.ui-dialog .ui-prompt-input:focus {
   margin-bottom: 0.1rem;
   min-height: 0;
 }
+
+/* ===== iOS-style note editor ===== */
+/* Fixed top bar: discard (left) + archive/delete/save (right). Sticky so
+   it stays put while the body scrolls under it. */
+.note-editor-bar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0 0.6rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.9rem;
+}
+.note-editor-bar .note-bar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.note-bar-icon {
+  width: 36px; height: 36px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--surface-alt);
+  color: var(--text);
+  cursor: pointer;
+  display: grid; place-items: center;
+  padding: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.note-bar-icon:hover { background: var(--border); }
+.note-bar-icon .material-symbols-outlined { font-size: 20px; }
+.note-bar-icon.danger { color: var(--danger); }
+.note-bar-icon.danger:hover { background: rgba(168, 65, 42, 0.12); }
+/* Save = accent circle with a check, like iOS. */
+.note-bar-save {
+  width: 40px; height: 40px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--accent);
+  color: var(--on-accent);
+  cursor: pointer;
+  display: grid; place-items: center;
+  padding: 0;
+  transition: background 0.15s ease, transform 0.08s ease;
+}
+.note-bar-save:hover { background: var(--accent-hover); }
+.note-bar-save:active { transform: scale(0.94); }
+.note-bar-save .material-symbols-outlined { font-size: 22px; }
+/* The tag section sits first now; give it a touch of breathing room. */
+.note-editor-body .tag-section { margin-top: 0; margin-bottom: 0.9rem; }
 textarea.content-plain {
   width: 100%;
   /* Auto-grows via JS to fit content. The CSS bounds cap it: bigger

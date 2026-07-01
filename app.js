@@ -1628,7 +1628,7 @@ function renderNotas(root) {
   // The "+ Nueva nota" tile only appears in the active tab — creating
   // from inside the archived view is confusing.
   if (!showArchived) grid.appendChild(renderNewCtaTile('Nueva nota', () => openNoteEditor(null)));
-  filtered.forEach(n => grid.appendChild(renderNoteCard(n)));
+  filtered.forEach(n => grid.appendChild(renderNoteCard(n, { showArchive: true })));
   if (!filtered.length) {
     const empty = document.createElement('div');
     empty.className = 'empty';
@@ -1650,7 +1650,7 @@ function renderNewCtaTile(label, onOpen) {
   return tile;
 }
 
-function renderNoteCard(note) {
+function renderNoteCard(note, opts = {}) {
   const card = document.createElement('article');
   card.className = 'card clickable with-stripe note-card';
   card.dataset.id = note.id;
@@ -1685,6 +1685,32 @@ function renderNoteCard(note) {
     });
   });
   card.appendChild(pinBtn);
+
+  // Archive button — only in the Notas section list (opts.showArchive),
+  // sits just left of the pin. Toggles archived_at; icon/label reflect
+  // the current state so the same control archives and unarchives.
+  if (opts.showArchive) {
+    card.classList.add('has-archive');
+    const isArchived = !!note.archived_at;
+    const archiveBtn = document.createElement('button');
+    archiveBtn.className = 'archive-card-btn';
+    archiveBtn.type = 'button';
+    archiveBtn.title = isArchived ? 'Desarchivar' : 'Archivar';
+    archiveBtn.innerHTML = `<span class="material-symbols-outlined">${isArchived ? 'unarchive' : 'archive'}</span>`;
+    archiveBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const nextValue = isArchived ? null : new Date().toISOString();
+      try {
+        await supabase.from('notes').update({ archived_at: nextValue }).eq('id', note.id);
+        note.archived_at = nextValue;
+        uiToast(isArchived ? 'Nota desarchivada' : 'Nota archivada ✓');
+        rerenderCurrentPage();
+      } catch (err) {
+        uiToast(`Error: ${err.message || err}`, { error: true });
+      }
+    });
+    card.appendChild(archiveBtn);
+  }
 
   const body = document.createElement('div');
   body.className = 'body';
@@ -3437,14 +3463,18 @@ function openNoteEditor(note) {
   renderNoteTagSuggestions('');
   $('#note-tag-input').value = '';
   $('#note-status').textContent = '';
-  $('#note-save').textContent = note ? 'Actualizar nota' : 'Guardar nota';
+  // Save is an icon button now; update its accessible label only.
+  $('#note-save').setAttribute('aria-label', note ? 'Actualizar nota' : 'Guardar nota');
   $('#note-delete').hidden = !note;
-  // Archive button only makes sense for existing notes. Label flips
-  // depending on current state so the same button serves both ways.
+  // Archive button only makes sense for existing notes. Icon + label
+  // flip depending on current state so the same button serves both ways.
   const archiveBtn = $('#note-archive');
   if (archiveBtn) {
     archiveBtn.hidden = !note;
-    archiveBtn.textContent = noteDraft.archived_at ? 'Desarchivar' : 'Archivar';
+    const archived = !!noteDraft.archived_at;
+    archiveBtn.setAttribute('aria-label', archived ? 'Desarchivar' : 'Archivar');
+    const ic = archiveBtn.querySelector('.material-symbols-outlined');
+    if (ic) ic.textContent = archived ? 'unarchive' : 'archive';
   }
   dlgNote.showModal();
   // Focus the title synchronously (no setTimeout) so iOS keeps the
