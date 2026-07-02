@@ -2518,29 +2518,6 @@ async function deletePhotosBatch(photos) {
   }
 }
 
-function renderAlbumTile(name, photos) {
-  const tile = document.createElement('div');
-  tile.className = 'album-tile';
-  tile.setAttribute('role', 'button');
-  tile.setAttribute('tabindex', '0');
-  tile.setAttribute('aria-label', `Abrir álbum ${name}`);
-
-  const cover = photos[0];
-  tile.innerHTML = `
-    <div class="album-stack"></div>
-    <img src="${escapeHtml(publicImageUrl(cover.storage_path, { width: thumbWidth(240) }))}" alt="${escapeHtml(name)}" loading="lazy" />
-    <div class="album-info">
-      <div class="album-name">📁 ${escapeHtml(name)}</div>
-      <div class="album-count">${photos.length} foto${photos.length === 1 ? '' : 's'}</div>
-    </div>
-  `;
-  tile.addEventListener('click', () => openLightbox(photos, 0));
-  tile.addEventListener('keydown', e => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openLightbox(photos, 0); }
-  });
-  return tile;
-}
-
 function renderPhoto(p, list, index, opts = {}) {
   const tile = document.createElement('div');
   tile.className = 'photo';
@@ -2830,7 +2807,7 @@ function renderPlaceCard(p) {
 
   const actions = document.createElement('div');
   actions.className = 'card-actions';
-  actions.innerHTML = `<button title="${p.pinned ? 'Desanclar' : 'Anclar'}" class="${p.pinned ? 'is-on' : ''}" data-action="pin">📌</button>`;
+  actions.innerHTML = `<button title="${p.pinned ? 'Desanclar' : 'Anclar'}" aria-label="${p.pinned ? 'Desanclar' : 'Anclar'}" class="${p.pinned ? 'is-on' : ''}" data-action="pin"><span class="material-symbols-outlined" style="font-size:16px;">keep</span></button>`;
   actions.addEventListener('click', async (e) => {
     e.stopPropagation();
     const btn = e.target.closest('button[data-action="pin"]');
@@ -3525,20 +3502,13 @@ function setNoteVisibility(v) {
   noteDraft.visibility = v;
   $$('#note-visibility button').forEach(b => b.classList.toggle('active', b.dataset.vis === v));
 }
-function setNotePin(p) {
-  noteDraft.pinned = p;
-  const b = $('#note-pin-toggle');
-  b.classList.toggle('is-pinned', p);
-  b.textContent = p ? '📌 Anclada' : '📌 Anclar';
-}
-
 function renderNoteLinkChips() {
   const root = $('#note-links');
   root.innerHTML = '';
   noteDraft.links.forEach((link, i) => {
     const chip = document.createElement('span');
     chip.className = 'chip';
-    chip.innerHTML = `🔗 <a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.label || link.url)}</a> <button type="button" aria-label="Quitar">×</button>`;
+    chip.innerHTML = `<span class="material-symbols-outlined" style="font-size:14px;">link</span> <a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.label || link.url)}</a> <button type="button" aria-label="Quitar">×</button>`;
     chip.querySelector('button').addEventListener('click', () => { noteDraft.links.splice(i, 1); renderNoteLinkChips(); });
     root.appendChild(chip);
   });
@@ -4493,7 +4463,7 @@ function setPlacePin(p) {
   placeDraft.pinned = p;
   const b = $('#place-pin-toggle');
   b.classList.toggle('is-pinned', p);
-  b.textContent = p ? '📌 Anclado' : '📌 Anclar';
+  b.innerHTML = `<span class="material-symbols-outlined" style="font-size:16px;">keep</span> ${p ? 'Anclado' : 'Anclar'}`;
 }
 
 function renderPlaceTags() {
@@ -5350,7 +5320,7 @@ function renderMovieImage() {
     img.src = publicImageUrl(movieDraft.image_path, { width: thumbWidth(220) });
     el.appendChild(img);
   } else {
-    el.textContent = '🎬';
+    el.innerHTML = '<span class="material-symbols-outlined" style="font-size:2.2rem;opacity:0.5;">movie</span>';
   }
 }
 
