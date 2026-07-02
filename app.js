@@ -3466,6 +3466,7 @@ function openNoteEditor(note) {
   renderNoteTags();
   renderNoteTagSuggestions('');
   $('#note-tag-input').value = '';
+  $('#note-tag-input').hidden = true; // (+) chip in suggestions reveals it
   $('#note-status').textContent = '';
   // Save is an icon button now; update its accessible label only.
   $('#note-save').setAttribute('aria-label', note ? 'Actualizar nota' : 'Guardar nota');
@@ -3670,6 +3671,16 @@ function renderNoteTags() {
   });
 }
 
+// Reveal / hide the custom-tag input. Hidden by default — tapping the
+// existing-tag chips is the primary flow; the (+) chip at the end of the
+// suggestions opens this input for a brand-new tag.
+function showNoteTagInput(show) {
+  const input = $('#note-tag-input');
+  input.hidden = !show;
+  if (show) input.focus();
+  else input.value = '';
+}
+
 function renderNoteTagSuggestions(query) {
   const root = $('#note-tag-suggestions');
   root.innerHTML = '';
@@ -3689,6 +3700,20 @@ function renderNoteTagSuggestions(query) {
     el.addEventListener('click', () => addNoteTag(t));
     root.appendChild(el);
   });
+  // (+) chip → reveals the custom-tag input. Only while the input is
+  // hidden; once it's open the chip would be redundant.
+  if ($('#note-tag-input').hidden) {
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'tag-sugg tag-sugg-add';
+    add.setAttribute('aria-label', 'Nueva etiqueta');
+    add.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px;">add</span>';
+    add.addEventListener('click', () => {
+      showNoteTagInput(true);
+      renderNoteTagSuggestions('');
+    });
+    root.appendChild(add);
+  }
 }
 
 function addNoteTag(raw) {
@@ -3706,12 +3731,31 @@ $('#note-tag-input').addEventListener('keydown', (e) => {
     e.preventDefault();
     addNoteTag(e.target.value);
     e.target.value = '';
+    // Back to the chip-picking flow after adding a custom tag.
+    showNoteTagInput(false);
     renderNoteTagSuggestions('');
   } else if (e.key === 'Backspace' && !e.target.value && noteDraft.tags.length) {
     noteDraft.tags.pop();
     renderNoteTags();
     renderNoteTagSuggestions('');
+  } else if (e.key === 'Escape') {
+    // Close just the tag input, not the whole editor.
+    e.preventDefault();
+    e.stopPropagation();
+    showNoteTagInput(false);
+    renderNoteTagSuggestions('');
   }
+});
+// Empty + lost focus → tuck the input away again. Delayed so a tap on a
+// suggestion chip (which fires blur first) still lands on the chip.
+$('#note-tag-input').addEventListener('blur', () => {
+  setTimeout(() => {
+    const input = $('#note-tag-input');
+    if (!input.hidden && document.activeElement !== input && !input.value.trim()) {
+      showNoteTagInput(false);
+      renderNoteTagSuggestions('');
+    }
+  }, 200);
 });
 
 $('#note-add-link').addEventListener('click', async () => {
@@ -3758,6 +3802,34 @@ $('#note-image-input').addEventListener('change', async () => {
     setStatus($('#note-status'), 'Subida completa');
   } catch (e) { setStatus($('#note-status'), `Error al subir: ${e.message || e}`, true); }
 });
+
+// The inline save (below the inputs) delegates to the top-bar save —
+// it exists because the iOS keyboard can pan the top bar off-screen.
+$('#note-save-bottom').addEventListener('click', () => $('#note-save').click());
+
+// Keep the full-screen editor pinned to the VISUAL viewport on mobile:
+// the on-screen keyboard shrinks the visual viewport but not 100dvh, so
+// iOS pans the page and the sticky top bar slides out of view. Sizing
+// the dialog to visualViewport.height (+ following its offsetTop) keeps
+// the bar visible while typing.
+if (window.visualViewport) {
+  const vv = window.visualViewport;
+  const syncNoteDlgToViewport = () => {
+    if (!dlgNote.open || window.innerWidth > 760) {
+      dlgNote.style.height = '';
+      dlgNote.style.top = '';
+      return;
+    }
+    dlgNote.style.height = vv.height + 'px';
+    dlgNote.style.top = vv.offsetTop + 'px';
+  };
+  vv.addEventListener('resize', syncNoteDlgToViewport);
+  vv.addEventListener('scroll', syncNoteDlgToViewport);
+  dlgNote.addEventListener('close', () => {
+    dlgNote.style.height = '';
+    dlgNote.style.top = '';
+  });
+}
 
 $('#note-save').addEventListener('click', async () => {
   const title = $('#note-title-input').value.trim();

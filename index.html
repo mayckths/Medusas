@@ -28,7 +28,7 @@
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
 
-    <link rel="stylesheet" href="./styles.css?v=20260627h" />
+    <link rel="stylesheet" href="./styles.css?v=20260627i" />
 
     <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>
@@ -158,22 +158,29 @@
         </div>
 
         <div class="note-editor-body">
-          <!-- Tags first, above the title/body inputs. -->
+          <!-- Tags first, above the title/body inputs. The custom-tag
+               input stays hidden until the (+) chip (rendered at the end
+               of the suggestions) reveals it — picking existing tags is
+               the primary flow. -->
           <div class="tag-section">
             <div class="tags-selected" id="note-tags"></div>
-            <input type="text" id="note-tag-input" placeholder="Añadir etiqueta… (Enter)" maxlength="40" />
             <div class="tag-suggestions" id="note-tag-suggestions"></div>
+            <input type="text" id="note-tag-input" placeholder="Nueva etiqueta… (Enter)" maxlength="40" hidden />
           </div>
 
           <input type="text" class="title title-as-heading" id="note-title-input" placeholder="Título…" maxlength="200" autofocus />
           <textarea class="content-plain" id="note-plain" placeholder="Escribe algo…"></textarea>
 
+          <!-- Save also lives here, right under the inputs: with the iOS
+               keyboard open the top bar can get panned off-screen, so
+               this check is the always-reachable way to save. -->
           <div class="note-icon-row">
             <button class="icon-btn" id="note-add-link" title="Añadir enlace" type="button"><span class="material-symbols-outlined">link</span></button>
             <button class="icon-btn" id="note-add-image" title="Añadir imagen" type="button"><span class="material-symbols-outlined">image</span></button>
             <button class="icon-btn" id="note-add-checklist" title="Añadir lista" type="button"><span class="material-symbols-outlined">check_box</span></button>
             <input type="file" id="note-image-input" accept="image/*" multiple hidden />
             <span class="status" id="note-status"></span>
+            <button class="note-bar-save note-save-inline" id="note-save-bottom" type="button" aria-label="Guardar nota"><span class="material-symbols-outlined">check</span></button>
           </div>
 
           <div class="chips" id="note-links"></div>
@@ -467,6 +474,6 @@
       <div class="notif-list" id="notif-list"></div>
     </div>
 
-    <script type="module" src="./app.js?v=20260627h"></script>
+    <script type="module" src="./app.js?v=20260627i"></script>
   </body>
 </html>
