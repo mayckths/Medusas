@@ -3440,6 +3440,33 @@ const noteDraft = {
   links: [], images: [], tags: [], pinned: false, checklist: [],
 };
 
+// Snapshot of the editor state taken at open, used to detect unsaved
+// changes before a discard (X button, backdrop click, Escape). Includes
+// the live input values — title/body only land in noteDraft on save.
+let noteSnapshot = null;
+function serializeNoteDraft() {
+  return JSON.stringify({
+    t: $('#note-title-input').value,
+    c: $('#note-plain').value,
+    pendingTag: $('#note-tag-input').value.trim(),
+    links: noteDraft.links,
+    images: noteDraft.images,
+    tags: noteDraft.tags,
+    checklist: noteDraft.checklist,
+  });
+}
+function noteEditorDirty() {
+  return noteSnapshot !== null && serializeNoteDraft() !== noteSnapshot;
+}
+// Escape key fires 'cancel' on the dialog — intercept it when dirty so
+// a stray Esc doesn't silently eat the draft.
+dlgNote.addEventListener('cancel', (e) => {
+  if (!noteEditorDirty()) return;
+  e.preventDefault();
+  uiConfirm('¿Descartar los cambios de esta nota?', { title: 'Descartar cambios', confirmLabel: 'Descartar', danger: true })
+    .then(ok => { if (ok) { noteSnapshot = null; dlgNote.close(); } });
+});
+
 function openNoteEditor(note) {
   noteDraft.id = note?.id || null;
   noteDraft.title = note?.title || '';
@@ -3487,6 +3514,9 @@ function openNoteEditor(note) {
   // Size the body textarea to fit its content. Capped to ~70vh via CSS
   // so long notes don't force a tiny textbox with internal scroll.
   requestAnimationFrame(() => autoGrowTextarea($('#note-plain')));
+
+  // Baseline for the unsaved-changes guard (inputs are populated by now).
+  noteSnapshot = serializeNoteDraft();
 
   if (note && isUnread(note)) markSeen('notes', note);
 }
@@ -4639,12 +4669,20 @@ $('#place-delete').addEventListener('click', async () => {
 // Generic dialog backdrop/close behavior
 // ============================================================
 $$('dialog.modal').forEach(dlg => {
-  dlg.addEventListener('click', (e) => {
-    if (e.target === dlg) dlg.close();
+  dlg.addEventListener('click', async (e) => {
     // Use closest() instead of matches() so clicks on the icon inside
     // the close button (e.g. <span class="material-symbols-outlined">)
     // still trigger the close.
-    if (e.target.closest('[data-close]')) dlg.close();
+    const wantsClose = e.target === dlg || e.target.closest('[data-close]');
+    if (!wantsClose) return;
+    // Note editor: guard against losing an unsaved draft on a stray
+    // tap of the X / backdrop (sheet-dismiss-confirm).
+    if (dlg === dlgNote && noteEditorDirty()) {
+      const ok = await uiConfirm('¿Descartar los cambios de esta nota?', { title: 'Descartar cambios', confirmLabel: 'Descartar', danger: true });
+      if (!ok) return;
+      noteSnapshot = null;
+    }
+    dlg.close();
   });
 });
 

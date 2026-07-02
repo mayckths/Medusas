@@ -10,7 +10,9 @@
   --border: rgba(249, 246, 240, 0.08);
   --border-strong: rgba(249, 246, 240, 0.14);
   --text: #f9f6f0;          /* tertiary cream */
-  --text-dim: rgba(249, 246, 240, 0.55);
+  /* 0.72 alpha ≈ 5.6:1 on the green surface — 0.55 measured only ~3.4:1,
+     below WCAG AA for the small meta text this token is used on. */
+  --text-dim: rgba(249, 246, 240, 0.72);
   /* Accent is the brand-active color. Terracotta primary, with cream
      used for text/icons placed on top of it. */
   --accent: #c76d52;
@@ -35,6 +37,19 @@
 /* The HTML `hidden` attribute must win even when CSS sets an explicit display
    (e.g. .auth-overlay { display: grid } would otherwise show through). */
 [hidden] { display: none !important; }
+
+/* Keyboard focus ring — buttons, links, chips, tabs, cards. Terracotta
+   reads on both the green surfaces and the cream sidebar/modals. Text
+   inputs opt out: they already signal focus via accent border + bg. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+}
 /* Base background is BLACK, not the forest-green --bg. In photo mode the
    .bg-photo backdrop covers this completely, so the page still looks the
    same — but SFSafariViewController (the in-app browser from WhatsApp)
@@ -436,7 +451,7 @@ nav.menu.menu-bottom { margin-top: auto; padding-top: 0.5rem; border-top: 1px so
 .brand { padding: 0 0.5rem 0.75rem; }
 .brand .logo { display: flex; gap: 4px; align-items: center; }
 .brand .logo img { width: 32px; height: 32px; }
-.brand .tag { color: rgba(74, 69, 66, 0.65); font-size: 0.78rem; margin-top: 0.25rem; font-style: italic; }
+.brand .tag { color: rgba(74, 69, 66, 0.8); font-size: 0.78rem; margin-top: 0.25rem; font-style: italic; }
 
 .auth-hero-fallback {
   display: flex; align-items: center; justify-content: center; gap: 0.6rem;
@@ -447,7 +462,7 @@ nav.menu { display: flex; flex-direction: column; gap: 2px; }
 nav.menu a {
   display: flex; align-items: center; gap: 0.65rem;
   padding: 0.5rem 0.65rem; border-radius: 8px;
-  color: rgba(74, 69, 66, 0.75); text-decoration: none; font-size: 0.92rem;
+  color: rgba(74, 69, 66, 0.85); text-decoration: none; font-size: 0.92rem;
   position: relative;
 }
 nav.menu a > span:nth-child(2) { flex: 1; }
@@ -460,7 +475,7 @@ nav.menu a.active {
 nav.menu .icon { width: 1.2rem; display: inline-block; text-align: center; }
 nav.menu .section-label {
   font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
-  color: rgba(74, 69, 66, 0.55); padding: 0.85rem 0.65rem 0.3rem;
+  color: rgba(74, 69, 66, 0.75); padding: 0.85rem 0.65rem 0.3rem;
 }
 .badge-unread {
   background: var(--accent); color: var(--on-accent); font-size: 0.65rem;
@@ -1476,7 +1491,7 @@ dialog.modal {
   --surface-alt: #efeae0;
   --surface-2: #e4dcce;
   --text: #4a4542;
-  --text-dim: rgba(74, 69, 66, 0.65);
+  --text-dim: rgba(74, 69, 66, 0.8);
   --border: rgba(74, 69, 66, 0.14);
   --border-strong: rgba(74, 69, 66, 0.22);
   --glass-bg: rgba(74, 69, 66, 0.06);
