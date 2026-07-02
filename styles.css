@@ -1417,6 +1417,10 @@ dialog.theater::backdrop { background: rgba(0,0,0,0.85); }
   padding: 0;
   display: grid; place-items: center;
   opacity: 0;
+  /* While invisible the star must NOT intercept taps — opacity: 0
+     elements still hit-test, so a corner tap on mobile would silently
+     toggle featured instead of opening the photo. */
+  pointer-events: none;
   transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.1s ease;
   z-index: 2;
 }
@@ -1425,10 +1429,10 @@ dialog.theater::backdrop { background: rgba(0,0,0,0.85); }
    to open the lightbox and toggle featured from inside — otherwise
    showing the star on tap triggers iOS's "show hover first" gesture
    and the first tap never opens the photo. */
-.photo .photo-star.is-on { opacity: 1; }
+.photo .photo-star.is-on { opacity: 1; pointer-events: auto; }
 @media (hover: hover) {
   .photo:hover .photo-star,
-  .photo:focus-within .photo-star { opacity: 1; }
+  .photo:focus-within .photo-star { opacity: 1; pointer-events: auto; }
   .photo .photo-star:hover {
     background: rgba(0, 0, 0, 0.75);
     color: #f9b233;
@@ -3244,5 +3248,82 @@ a.btn.icon-pill .material-symbols-outlined { font-size: 20px; }
   dialog.ui-dialog .ui-prompt-input,
   .modal-inner input.title {
     font-size: 16px;
+  }
+}
+
+/* ======== Touch-target expansion (Apple HIG 44pt) ========
+   Small controls keep their visual size but grow an invisible hit area
+   via an absolutely-positioned pseudo-element. Insets are tuned per
+   control so adjacent zones touch without overlapping (pin/archive sit
+   6px apart; checklist rows are ~22px tall). */
+.card .card-actions button,
+.card-checklist .cl-pv .cl-check,
+.note-checklist .cl-check,
+.note-checklist .cl-del,
+.note-checklist .cl-grip,
+.chip button,
+.tag-chip-selected button,
+dialog.lightbox .lb-tag-chip button {
+  position: relative;
+}
+/* Isolated corner buttons → full 44×44 */
+.photo .photo-star::before,
+.photo-widget .pw-menu-btn::before {
+  content: "";
+  position: absolute;
+  inset: -7px;
+}
+/* Image-preview remove "×" (20px, isolated on an 80px thumb) */
+.images-preview .thumb button.remove::before {
+  content: "";
+  position: absolute;
+  inset: -10px;
+}
+/* Pin + archive sit 6px apart — expand ±3px horizontal so zones just
+   touch, full ±7px vertical (36×44 effective each, no ambiguity). */
+.card.note-card .pin-card-btn::before,
+.card.note-card .archive-card-btn::before {
+  content: "";
+  position: absolute;
+  inset: -7px -3px;
+}
+/* Card action buttons (media/movie feature-pin) — flex row w/ 3px gaps */
+.card .card-actions button::before {
+  content: "";
+  position: absolute;
+  inset: -8px -4px;
+}
+/* Card checklist checkboxes: rows are ~22px tall, so vertical expansion
+   is capped at 1px to avoid cross-row mis-taps; horizontal is free. */
+.card-checklist .cl-pv .cl-check::before {
+  content: "";
+  position: absolute;
+  inset: -1px -8px;
+}
+/* Editor checklist controls (grip 22px / check 28px / del) — taller rows
+   allow ±4px vertical; ±4px horizontal keeps grip/check zones distinct. */
+.note-checklist .cl-check::before,
+.note-checklist .cl-del::before,
+.note-checklist .cl-grip::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+}
+/* Chip remove "×" buttons (links, tags, lightbox tags) */
+.chip button::before,
+.tag-chip-selected button::before,
+dialog.lightbox .lb-tag-chip button::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+/* Lightbox toolbar on mobile: 34px buttons at 54px pitch → ±5px reaches
+   44px with 10px clearance between neighbors. */
+@media (max-width: 760px) {
+  .lb-pin::before, .lb-feature::before, .lb-move::before,
+  .lb-close::before, .lb-delete::before, .lb-nav::before {
+    content: "";
+    position: absolute;
+    inset: -5px;
   }
 }
