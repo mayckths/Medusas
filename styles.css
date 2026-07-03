@@ -2745,11 +2745,21 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
     width: 100%;
     margin-bottom: 0.6rem;
   }
-  /* The "+ Nueva nota" pill stays a full-width row above the columns. */
-  #notes-grid.grid-cards > .card.new-cta { column-span: all; }
+  /* The "+ Nueva nota" pill renders in #notes-cta-row ABOVE the grid on
+     mobile — column-span:all inside multicol breaks column balancing on
+     iOS Safari (right column starts mid-page). Hide the in-grid twin. */
+  #notes-grid.grid-cards > .card.new-cta { display: none; }
   /* Cap runaway cards (huge checklists) — the checklist fit logic trims
      items to the visible height and shows "+N más". */
   #notes-grid.grid-cards .card.note-card { max-height: 340px; }
+}
+
+/* Standalone "+ Nueva nota" row above the notes grid — mobile only;
+   desktop keeps the square tile inside the grid. */
+#notes-cta-row { display: none; }
+@media (max-width: 760px) {
+  #notes-cta-row { display: block; margin-bottom: 0.6rem; }
+  #notes-cta-row .card.new-cta { width: 100%; }
 }
 
 /* New-CTA tile matches note-card aspect to keep the grid uniform */

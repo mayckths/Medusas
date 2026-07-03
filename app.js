@@ -1629,6 +1629,7 @@ function renderNotas(root) {
         `).join('')}
       </div>
     ` : ''}
+    ${state.view.notas === 'cards' && !showArchived ? '<div id="notes-cta-row"></div>' : ''}
     <div class="${state.view.notas === 'cards' ? 'grid-cards' : 'grid-list'}" id="notes-grid"></div>
   `;
 
@@ -1663,7 +1664,13 @@ function renderNotas(root) {
 
   const grid = $('#notes-grid');
   // The "+ Nueva nota" tile only appears in the active tab — creating
-  // from inside the archived view is confusing.
+  // from inside the archived view is confusing. It exists TWICE in card
+  // view: as a standalone row above the grid (mobile) and as a square
+  // tile inside the grid (desktop) — CSS shows exactly one per viewport.
+  // iOS Safari mis-lays-out multicol when a column-span:all element
+  // lives inside it, so the mobile pill can't be a grid child.
+  const ctaRow = $('#notes-cta-row');
+  if (ctaRow) ctaRow.appendChild(renderNewCtaTile('Nueva nota', () => openNoteEditor(null)));
   if (!showArchived) grid.appendChild(renderNewCtaTile('Nueva nota', () => openNoteEditor(null)));
   filtered.forEach(n => grid.appendChild(renderNoteCard(n)));
   if (!filtered.length) {
