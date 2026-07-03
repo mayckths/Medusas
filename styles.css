@@ -2729,24 +2729,25 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 @media (max-width: 760px) {
   .card.note-card { aspect-ratio: auto; }
 
-  /* Notas page: 2-column masonry (Keep-style). CSS multicol gives the
-     staggered natural-height look; break-inside keeps each card whole.
-     Scoped to #notes-grid so the dashboard strip keeps its layout. */
-  #notes-grid.grid-cards {
-    display: block;
-    column-count: 2;
-    column-gap: 0.6rem;
+  /* Notas page: 2-column masonry (Keep-style) built in JS as two plain
+     flex columns — CSS multicol is broken on iOS WebKit (with
+     break-inside: avoid the second column starts mid-page with a
+     phantom gap at the top). Scoped to #notes-grid so the dashboard
+     strip keeps its layout. */
+  #notes-grid.grid-cards.masonry {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
   }
-  #notes-grid.grid-cards > .card,
-  #notes-grid.grid-cards > .empty {
-    break-inside: avoid;
-    -webkit-column-break-inside: avoid;
-    width: 100%;
-    margin-bottom: 0.6rem;
+  #notes-grid.grid-cards.masonry .masonry-col {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
   }
   /* The "+ Nueva nota" pill renders in #notes-cta-row ABOVE the grid on
-     mobile — column-span:all inside multicol breaks column balancing on
-     iOS Safari (right column starts mid-page). Hide the in-grid twin. */
+     mobile. Hide the in-grid twin (it's for desktop's square grid). */
   #notes-grid.grid-cards > .card.new-cta { display: none; }
   /* Cap runaway cards (huge checklists) — the checklist fit logic trims
      items to the visible height and shows "+N más". */

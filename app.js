@@ -1684,7 +1684,25 @@ function renderNotas(root) {
   const ctaRow = $('#notes-cta-row');
   if (ctaRow) ctaRow.appendChild(renderNewCtaTile('Nueva nota', () => openNoteEditor(null)));
   if (!showArchived) grid.appendChild(renderNewCtaTile('Nueva nota', () => openNoteEditor(null)));
-  filtered.forEach(n => grid.appendChild(renderNoteCard(n)));
+  // Mobile card view → 2-column masonry built with plain flex columns.
+  // CSS multicol is broken on iOS WebKit (with break-inside: avoid the
+  // second column starts mid-page, leaving a phantom gap), so we
+  // distribute greedily into the currently-shorter column instead.
+  const useMasonry = state.view.notas === 'cards' && window.matchMedia('(max-width: 760px)').matches;
+  if (useMasonry && filtered.length) {
+    grid.classList.add('masonry');
+    const colA = document.createElement('div');
+    const colB = document.createElement('div');
+    colA.className = 'masonry-col';
+    colB.className = 'masonry-col';
+    grid.append(colA, colB);
+    filtered.forEach(n => {
+      const target = colA.offsetHeight <= colB.offsetHeight ? colA : colB;
+      target.appendChild(renderNoteCard(n));
+    });
+  } else {
+    filtered.forEach(n => grid.appendChild(renderNoteCard(n)));
+  }
   if (!filtered.length) {
     const empty = document.createElement('div');
     empty.className = 'empty';
@@ -1713,6 +1731,14 @@ document.addEventListener('click', () => {
     p.classList.remove('open');
     p.closest('.card')?.classList.remove('menu-raised');
   });
+});
+
+// The notes masonry is built at render time (JS picks 2 columns vs
+// grid), so crossing the mobile breakpoint needs a re-render.
+window.matchMedia('(max-width: 760px)').addEventListener('change', () => {
+  if ((state.route || '').startsWith('#/notas') && !(state.route || '').startsWith('#/notas/editor')) {
+    rerenderCurrentPage();
+  }
 });
 
 // Nudge a just-opened popover back inside the viewport (they're
