@@ -28,7 +28,7 @@
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
 
-    <link rel="stylesheet" href="./styles.css?v=20260703c" />
+    <link rel="stylesheet" href="./styles.css?v=20260703d" />
 
     <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>
@@ -149,13 +149,11 @@
          scrolls with the document so the iOS keyboard can't pan a
          top-layer element off-screen, and back/deep-links work. -->
     <section class="note-editor-page" id="note-editor-page" hidden>
-      <!-- Sticky top bar: volver (left), título centrado, archive/delete/save (right). -->
+      <!-- Sticky top bar: volver (left), título de la nota centrado, save (right). -->
       <div class="note-editor-bar">
         <button class="note-bar-icon" id="note-close" type="button" aria-label="Volver"><span class="material-symbols-outlined">close</span></button>
         <span class="note-bar-title" id="note-bar-title">Nueva nota</span>
         <div class="note-bar-actions">
-          <button class="note-bar-icon" id="note-archive" type="button" hidden aria-label="Archivar"><span class="material-symbols-outlined">archive</span></button>
-          <button class="note-bar-icon danger" id="note-delete" type="button" hidden aria-label="Eliminar"><span class="material-symbols-outlined">delete</span></button>
           <button class="note-bar-save" id="note-save" type="button" aria-label="Guardar nota"><span class="material-symbols-outlined">check</span></button>
         </div>
       </div>
@@ -179,14 +177,17 @@
         <div class="chips" id="note-links"></div>
         <div class="images-preview" id="note-images"></div>
 
-        <!-- Attach toolbar closes the page; the inline check is the
-             always-reachable save while the keyboard covers the top bar. -->
+        <!-- Attach toolbar closes the page. Archive/delete live here (not
+             in the top bar), beside the inline check — the always-reachable
+             save while the keyboard covers the top bar. -->
         <div class="note-icon-row">
           <button class="icon-btn" id="note-add-link" title="Añadir enlace" type="button"><span class="material-symbols-outlined">link</span></button>
           <button class="icon-btn" id="note-add-image" title="Añadir imagen" type="button"><span class="material-symbols-outlined">image</span></button>
           <button class="icon-btn" id="note-add-checklist" title="Añadir lista" type="button"><span class="material-symbols-outlined">check_box</span></button>
           <input type="file" id="note-image-input" accept="image/*" multiple hidden />
           <span class="status" id="note-status"></span>
+          <button class="icon-btn" id="note-archive" type="button" hidden aria-label="Archivar"><span class="material-symbols-outlined">archive</span></button>
+          <button class="icon-btn danger" id="note-delete" type="button" hidden aria-label="Eliminar"><span class="material-symbols-outlined">delete</span></button>
           <button class="note-bar-save note-save-inline" id="note-save-bottom" type="button" aria-label="Guardar nota"><span class="material-symbols-outlined">check</span></button>
         </div>
       </div>
@@ -476,6 +477,6 @@
       <div class="notif-list" id="notif-list"></div>
     </div>
 
-    <script type="module" src="./app.js?v=20260703c"></script>
+    <script type="module" src="./app.js?v=20260703d"></script>
   </body>
 </html>

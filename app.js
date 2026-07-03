@@ -3479,7 +3479,11 @@ function showNoteEditorPage(note) {
   $('#note-tag-input').value = '';
   $('#note-tag-input').hidden = true; // (+) chip in suggestions reveals it
   $('#note-status').textContent = '';
-  $('#note-bar-title').textContent = note ? 'Editar nota' : 'Nueva nota';
+  // Bar title mirrors the actual note title (live-synced while typing);
+  // falls back to a generic label while it's empty.
+  const barTitle = $('#note-bar-title');
+  barTitle.dataset.fallback = note ? 'Editar nota' : 'Nueva nota';
+  barTitle.textContent = (note?.title || '').trim() || barTitle.dataset.fallback;
   // Save is an icon button now; update its accessible label only.
   $('#note-save').setAttribute('aria-label', note ? 'Actualizar nota' : 'Guardar nota');
   $('#note-delete').hidden = !note;
@@ -3825,6 +3829,12 @@ $('#note-save-bottom').addEventListener('click', () => $('#note-save').click());
 // draft has unsaved changes.
 $('#note-close').addEventListener('click', () => {
   location.hash = noteEditorReturnHash;
+});
+
+// Keep the bar title mirroring the title input while the user types.
+$('#note-title-input').addEventListener('input', (e) => {
+  const barTitle = $('#note-bar-title');
+  barTitle.textContent = e.target.value.trim() || barTitle.dataset.fallback || 'Nueva nota';
 });
 
 $('#note-save').addEventListener('click', async () => {

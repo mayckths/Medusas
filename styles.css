@@ -548,6 +548,9 @@ nav.menu a .m-icon { font-size: 20px; width: 22px; text-align: center; }
 }
 .icon-btn:hover { background: var(--border); color: var(--text); }
 .icon-btn .material-symbols-outlined { font-size: 20px; }
+/* Destructive icon button (e.g. eliminar nota in the editor toolbar) */
+.icon-btn.danger { color: var(--danger); }
+.icon-btn.danger:hover { background: rgba(168, 65, 42, 0.12); color: var(--danger); }
 
 .note-icon-row {
   display: flex; gap: 0.4rem; align-items: center;
@@ -1776,6 +1779,26 @@ body.note-editor-open .app-shell { display: none; }
 .note-bar-save .material-symbols-outlined { font-size: 22px; }
 /* The tag section sits first now; give it a touch of breathing room. */
 .note-editor-body .tag-section { margin-top: 0; margin-bottom: 0.9rem; }
+/* Tag rows: a single line each, bleeding to the page edges and panning
+   horizontally (no wrapping stack) — swipe to reach the rest. */
+.note-editor-body .tags-selected,
+.note-editor-body .tag-suggestions {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  margin-left: -1.1rem;
+  margin-right: -1.1rem;
+  padding-left: 1.1rem;
+  padding-right: 1.1rem;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.note-editor-body .tags-selected::-webkit-scrollbar,
+.note-editor-body .tag-suggestions::-webkit-scrollbar { display: none; }
+.note-editor-body .tags-selected .tag-chip-selected,
+.note-editor-body .tag-suggestions .tag-sugg {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 textarea.content-plain {
   width: 100%;
   /* Auto-grows via JS to fit content. The CSS bounds cap it: bigger
