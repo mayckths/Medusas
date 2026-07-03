@@ -881,6 +881,43 @@ function syncMenu() {
 async function router() {
   if (!state.currentUser) { showLogin(); return; }
   const hash = location.hash || '#/inicio';
+
+  // ---- Note editor page routing --------------------------------------
+  // Hash changes we triggered with the DOM already correct (synchronous
+  // open from a tap, or hash restore after a declined discard) only need
+  // the route recorded — re-rendering would wipe the user's draft.
+  if (noteEditorRouteBypass) {
+    noteEditorRouteBypass = false;
+    state.route = hash;
+    syncMenu();
+    return;
+  }
+  const leavingEditor = (state.route || '').startsWith('#/notas/editor') && !hash.startsWith('#/notas/editor');
+  // Leaving with unsaved changes → confirm first (the page equivalent of
+  // sheet-dismiss-confirm). Declining restores the editor URL.
+  if (leavingEditor && noteEditorDirty()) {
+    const ok = await uiConfirm('¿Descartar los cambios de esta nota?', { title: 'Descartar cambios', confirmLabel: 'Descartar', danger: true });
+    if (!ok) {
+      noteEditorRouteBypass = true;
+      location.hash = state.route;
+      return;
+    }
+  }
+  if (leavingEditor) hideNoteEditorPage();
+  if (hash.startsWith('#/notas/editor')) {
+    // Deep link / refresh / history nav into the editor (normal opens go
+    // through openNoteEditor, which renders before the hash changes).
+    state.route = hash;
+    syncMenu();
+    if (!state.notes.length) await loadAll();
+    const id = hash.slice('#/notas/editor/'.length);
+    const note = (hash === '#/notas/editor') ? null : state.notes.find(n => n.id === id);
+    if (hash !== '#/notas/editor' && !note) { location.hash = '#/notas'; return; }
+    showNoteEditorPage(note);
+    return;
+  }
+  // ---------------------------------------------------------------------
+
   state.route = hash;
   syncMenu();
   const content = $('#content');
@@ -3409,9 +3446,18 @@ function setupReorder() {
 }
 
 // ============================================================
-// Note editor
+// Note editor — full page (#/notas/editor[/{id}]), not a dialog.
+// The page participates in document flow, so the iOS keyboard just
+// scrolls it like any web page instead of panning a top-layer dialog.
 // ============================================================
-const dlgNote = $('#dlg-note');
+const noteEditorPage = $('#note-editor-page');
+// Where the X / save / delete should navigate back to. Defaults to the
+// notes list (also the fallback after a refresh on a deep link).
+let noteEditorReturnHash = '#/notas';
+// Set when WE change the hash while the DOM is already correct (opening
+// synchronously from a tap, or restoring the hash after a declined
+// discard) — tells router() to only record the route, not re-render.
+let noteEditorRouteBypass = false;
 const noteDraft = {
   id: null, title: '', content: '', visibility: 'public',
   links: [], images: [], tags: [], pinned: false, checklist: [],
@@ -3435,16 +3481,36 @@ function serializeNoteDraft() {
 function noteEditorDirty() {
   return noteSnapshot !== null && serializeNoteDraft() !== noteSnapshot;
 }
-// Escape key fires 'cancel' on the dialog — intercept it when dirty so
-// a stray Esc doesn't silently eat the draft.
-dlgNote.addEventListener('cancel', (e) => {
-  if (!noteEditorDirty()) return;
-  e.preventDefault();
-  uiConfirm('¿Descartar los cambios de esta nota?', { title: 'Descartar cambios', confirmLabel: 'Descartar', danger: true })
-    .then(ok => { if (ok) { noteSnapshot = null; dlgNote.close(); } });
+// Esc closes the editor page (desktop nicety). The router's dirty guard
+// still confirms before an unsaved draft is lost. Skipped while a
+// ui-dialog (confirm/prompt) is open so Esc dismisses THAT first.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || noteEditorPage.hidden) return;
+  if (document.querySelector('dialog[open]')) return;
+  location.hash = noteEditorReturnHash;
 });
 
+// Entry point used by cards / the "Nueva nota" CTA. Renders the page
+// synchronously (so iOS keeps the tap gesture and opens the keyboard on
+// focus) and then records the route in the URL for back/deep-linking.
 function openNoteEditor(note) {
+  const cur = state.route || location.hash || '#/notas';
+  noteEditorReturnHash = cur.startsWith('#/notas/editor') ? '#/notas' : cur;
+  showNoteEditorPage(note);
+  const target = note ? `#/notas/editor/${note.id}` : '#/notas/editor';
+  if (location.hash !== target) {
+    noteEditorRouteBypass = true; // page already rendered — router just records
+    location.hash = target;
+  }
+}
+
+function hideNoteEditorPage() {
+  noteEditorPage.hidden = true;
+  document.body.classList.remove('note-editor-open');
+  noteSnapshot = null;
+}
+
+function showNoteEditorPage(note) {
   noteDraft.id = note?.id || null;
   noteDraft.title = note?.title || '';
   noteDraft.content = note?.content || '';
@@ -3481,7 +3547,9 @@ function openNoteEditor(note) {
     const ic = archiveBtn.querySelector('.material-symbols-outlined');
     if (ic) ic.textContent = archived ? 'unarchive' : 'archive';
   }
-  dlgNote.showModal();
+  noteEditorPage.hidden = false;
+  document.body.classList.add('note-editor-open'); // hides the app shell
+  window.scrollTo(0, 0);
   // Focus the title synchronously (no setTimeout) so iOS keeps the
   // user-gesture context and actually opens the keyboard.
   const titleInput = $('#note-title-input');
@@ -3807,29 +3875,11 @@ $('#note-image-input').addEventListener('change', async () => {
 // it exists because the iOS keyboard can pan the top bar off-screen.
 $('#note-save-bottom').addEventListener('click', () => $('#note-save').click());
 
-// Keep the full-screen editor pinned to the VISUAL viewport on mobile:
-// the on-screen keyboard shrinks the visual viewport but not 100dvh, so
-// iOS pans the page and the sticky top bar slides out of view. Sizing
-// the dialog to visualViewport.height (+ following its offsetTop) keeps
-// the bar visible while typing.
-if (window.visualViewport) {
-  const vv = window.visualViewport;
-  const syncNoteDlgToViewport = () => {
-    if (!dlgNote.open || window.innerWidth > 760) {
-      dlgNote.style.height = '';
-      dlgNote.style.top = '';
-      return;
-    }
-    dlgNote.style.height = vv.height + 'px';
-    dlgNote.style.top = vv.offsetTop + 'px';
-  };
-  vv.addEventListener('resize', syncNoteDlgToViewport);
-  vv.addEventListener('scroll', syncNoteDlgToViewport);
-  dlgNote.addEventListener('close', () => {
-    dlgNote.style.height = '';
-    dlgNote.style.top = '';
-  });
-}
+// X / volver — navigate back; the router's dirty guard confirms if the
+// draft has unsaved changes.
+$('#note-close').addEventListener('click', () => {
+  location.hash = noteEditorReturnHash;
+});
 
 $('#note-save').addEventListener('click', async () => {
   const title = $('#note-title-input').value.trim();
@@ -3856,8 +3906,9 @@ $('#note-save').addEventListener('click', async () => {
     checklist: cleanedChecklist,
   };
   setStatus($('#note-status'), 'Guardando…');
+  const isUpdate = !!noteDraft.id;
   try {
-    if (noteDraft.id) {
+    if (isUpdate) {
       const { error } = await supabase.from('notes').update(payload).eq('id', noteDraft.id);
       if (error) throw error;
     } else {
@@ -3866,8 +3917,9 @@ $('#note-save').addEventListener('click', async () => {
       const { error } = await supabase.from('notes').insert(payload);
       if (error) throw error;
     }
-    dlgNote.close();
-    await router();
+    hideNoteEditorPage();
+    uiToast(isUpdate ? 'Nota actualizada ✓' : 'Nota guardada ✓');
+    location.hash = noteEditorReturnHash; // hashchange → router re-renders
   } catch (e) { setStatus($('#note-status'), `Error al guardar: ${e.message || e}`, true); }
 });
 
@@ -3883,8 +3935,9 @@ $('#note-delete').addEventListener('click', async () => {
     }
     const { error } = await supabase.from('notes').delete().eq('id', note.id);
     if (error) throw error;
-    dlgNote.close();
-    await router();
+    hideNoteEditorPage();
+    uiToast('Nota eliminada');
+    location.hash = noteEditorReturnHash;
   } catch (e) { setStatus($('#note-status'), `Error al eliminar: ${e.message || e}`, true); }
 });
 
@@ -3904,8 +3957,9 @@ $('#note-archive').addEventListener('click', async () => {
     if (error) throw error;
     note.archived_at = nextValue;
     noteDraft.archived_at = nextValue;
-    dlgNote.close();
-    rerenderCurrentPage();
+    hideNoteEditorPage();
+    uiToast(nextValue ? 'Nota archivada' : 'Nota desarchivada');
+    location.hash = noteEditorReturnHash;
   } catch (e) {
     setStatus($('#note-status'), `Error al ${isArchived ? 'desarchivar' : 'archivar'}: ${e.message || e}`, true);
   }
@@ -4717,13 +4771,6 @@ $$('dialog.modal').forEach(dlg => {
     // still trigger the close.
     const wantsClose = e.target === dlg || e.target.closest('[data-close]');
     if (!wantsClose) return;
-    // Note editor: guard against losing an unsaved draft on a stray
-    // tap of the X / backdrop (sheet-dismiss-confirm).
-    if (dlg === dlgNote && noteEditorDirty()) {
-      const ok = await uiConfirm('¿Descartar los cambios de esta nota?', { title: 'Descartar cambios', confirmLabel: 'Descartar', danger: true });
-      if (!ok) return;
-      noteSnapshot = null;
-    }
     dlg.close();
   });
 });

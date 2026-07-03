@@ -28,7 +28,7 @@
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
 
-    <link rel="stylesheet" href="./styles.css?v=20260627i" />
+    <link rel="stylesheet" href="./styles.css?v=20260702a" />
 
     <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>
@@ -144,51 +144,52 @@
       </nav>
     </div>
 
-    <!-- ==================== Note editor ==================== -->
-    <dialog class="modal modal-note" id="dlg-note">
-      <div class="modal-inner">
-        <!-- Fixed top bar (iOS-style): discard left, actions + save right. -->
-        <div class="note-editor-bar">
-          <button class="note-bar-icon" data-close type="button" aria-label="Descartar"><span class="material-symbols-outlined">close</span></button>
-          <div class="note-bar-actions">
-            <button class="note-bar-icon" id="note-archive" type="button" hidden aria-label="Archivar"><span class="material-symbols-outlined">archive</span></button>
-            <button class="note-bar-icon danger" id="note-delete" type="button" hidden aria-label="Eliminar"><span class="material-symbols-outlined">delete</span></button>
-            <button class="note-bar-save" id="note-save" type="button" aria-label="Guardar nota"><span class="material-symbols-outlined">check</span></button>
-          </div>
-        </div>
-
-        <div class="note-editor-body">
-          <!-- Tags first, above the title/body inputs. The custom-tag
-               input stays hidden until the (+) chip (rendered at the end
-               of the suggestions) reveals it — picking existing tags is
-               the primary flow. -->
-          <div class="tag-section">
-            <div class="tags-selected" id="note-tags"></div>
-            <div class="tag-suggestions" id="note-tag-suggestions"></div>
-            <input type="text" id="note-tag-input" placeholder="Nueva etiqueta… (Enter)" maxlength="40" hidden />
-          </div>
-
-          <input type="text" class="title title-as-heading" id="note-title-input" placeholder="Título…" maxlength="200" autofocus />
-          <textarea class="content-plain" id="note-plain" placeholder="Escribe algo…"></textarea>
-
-          <!-- Save also lives here, right under the inputs: with the iOS
-               keyboard open the top bar can get panned off-screen, so
-               this check is the always-reachable way to save. -->
-          <div class="note-icon-row">
-            <button class="icon-btn" id="note-add-link" title="Añadir enlace" type="button"><span class="material-symbols-outlined">link</span></button>
-            <button class="icon-btn" id="note-add-image" title="Añadir imagen" type="button"><span class="material-symbols-outlined">image</span></button>
-            <button class="icon-btn" id="note-add-checklist" title="Añadir lista" type="button"><span class="material-symbols-outlined">check_box</span></button>
-            <input type="file" id="note-image-input" accept="image/*" multiple hidden />
-            <span class="status" id="note-status"></span>
-            <button class="note-bar-save note-save-inline" id="note-save-bottom" type="button" aria-label="Guardar nota"><span class="material-symbols-outlined">check</span></button>
-          </div>
-
-          <div class="chips" id="note-links"></div>
-          <div class="images-preview" id="note-images"></div>
-          <div class="note-checklist" id="note-checklist"></div>
+    <!-- ==================== Note editor (full page) ====================
+         A routed page (#/notas/editor[/{id}]), NOT a dialog: the page
+         scrolls with the document so the iOS keyboard can't pan a
+         top-layer element off-screen, and back/deep-links work. -->
+    <section class="note-editor-page" id="note-editor-page" hidden>
+      <!-- Sticky top bar: volver (left), archive/delete/save (right). -->
+      <div class="note-editor-bar">
+        <button class="note-bar-icon" id="note-close" type="button" aria-label="Volver"><span class="material-symbols-outlined">close</span></button>
+        <div class="note-bar-actions">
+          <button class="note-bar-icon" id="note-archive" type="button" hidden aria-label="Archivar"><span class="material-symbols-outlined">archive</span></button>
+          <button class="note-bar-icon danger" id="note-delete" type="button" hidden aria-label="Eliminar"><span class="material-symbols-outlined">delete</span></button>
+          <button class="note-bar-save" id="note-save" type="button" aria-label="Guardar nota"><span class="material-symbols-outlined">check</span></button>
         </div>
       </div>
-    </dialog>
+
+      <div class="note-editor-body">
+        <!-- Tags first, above the title/body inputs. The custom-tag
+             input stays hidden until the (+) chip (rendered at the end
+             of the suggestions) reveals it — picking existing tags is
+             the primary flow. -->
+        <div class="tag-section">
+          <div class="tags-selected" id="note-tags"></div>
+          <div class="tag-suggestions" id="note-tag-suggestions"></div>
+          <input type="text" id="note-tag-input" placeholder="Nueva etiqueta… (Enter)" maxlength="40" hidden />
+        </div>
+
+        <input type="text" class="title title-as-heading" id="note-title-input" placeholder="Título…" maxlength="200" />
+        <textarea class="content-plain" id="note-plain" placeholder="Escribe algo…"></textarea>
+
+        <!-- Content blocks live right under the text, in reading order. -->
+        <div class="note-checklist" id="note-checklist"></div>
+        <div class="chips" id="note-links"></div>
+        <div class="images-preview" id="note-images"></div>
+
+        <!-- Attach toolbar closes the page; the inline check is the
+             always-reachable save while the keyboard covers the top bar. -->
+        <div class="note-icon-row">
+          <button class="icon-btn" id="note-add-link" title="Añadir enlace" type="button"><span class="material-symbols-outlined">link</span></button>
+          <button class="icon-btn" id="note-add-image" title="Añadir imagen" type="button"><span class="material-symbols-outlined">image</span></button>
+          <button class="icon-btn" id="note-add-checklist" title="Añadir lista" type="button"><span class="material-symbols-outlined">check_box</span></button>
+          <input type="file" id="note-image-input" accept="image/*" multiple hidden />
+          <span class="status" id="note-status"></span>
+          <button class="note-bar-save note-save-inline" id="note-save-bottom" type="button" aria-label="Guardar nota"><span class="material-symbols-outlined">check</span></button>
+        </div>
+      </div>
+    </section>
 
     <!-- ==================== Media editor ==================== -->
     <dialog class="modal" id="dlg-media">
@@ -474,6 +475,6 @@
       <div class="notif-list" id="notif-list"></div>
     </div>
 
-    <script type="module" src="./app.js?v=20260627i"></script>
+    <script type="module" src="./app.js?v=20260702a"></script>
   </body>
 </html>

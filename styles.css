@@ -1653,17 +1653,18 @@ dialog.ui-dialog .ui-prompt-input:focus {
 .field textarea { min-height: 70px; resize: vertical; }
 .coord-readout { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; color: var(--text-dim); }
 
-.modal-inner input.title {
+.modal-inner input.title,
+.note-editor-body input.title {
   width: 100%; border: 0; background: transparent; color: var(--text);
   font-size: 1.15rem; font-weight: 600; padding: 0.25rem 0 0.5rem; outline: none;
 }
-.modal-inner input.title::placeholder { color: var(--text-dim); }
+.modal-inner input.title::placeholder,
+.note-editor-body input.title::placeholder { color: var(--text-dim); }
 
-/* When the title input plays the role of the modal heading: bumped to
-   page-head h1 size (Playfair Display, larger), tighter tracking. The
-   modal-head above it is empty except for the close-x, so we collapse
-   its bottom margin. */
-.modal-inner input.title.title-as-heading {
+/* When the title input plays the role of the page heading: bumped to
+   page-head h1 size (Playfair Display, larger), tighter tracking. */
+.modal-inner input.title.title-as-heading,
+.note-editor-body input.title.title-as-heading {
   font-family: 'Playfair Display', Georgia, serif;
   font-size: 1.55rem;
   font-weight: 600;
@@ -1676,21 +1677,61 @@ dialog.ui-dialog .ui-prompt-input:focus {
   min-height: 0;
 }
 
-/* ===== iOS-style note editor ===== */
-/* Fixed top bar: discard (left) + archive/delete/save (right). Sticky so
-   it stays put while the body scrolls under it. */
+/* ===== Note editor — full page (#/notas/editor) ===== */
+/* A routed page instead of a dialog: it lives in normal document flow,
+   so the iOS keyboard scrolls it like any web page (no top-layer
+   panning) and back/deep-links work. Re-scopes the same cream notebook
+   tokens as dialog.modal so all the shared controls pick up the warm
+   theme. */
+.note-editor-page {
+  --surface: #f9f6f0;
+  --surface-alt: #efeae0;
+  --surface-2: #e4dcce;
+  --text: #4a4542;
+  --text-dim: rgba(74, 69, 66, 0.8);
+  --border: rgba(74, 69, 66, 0.14);
+  --border-strong: rgba(74, 69, 66, 0.22);
+  --glass-bg: rgba(74, 69, 66, 0.06);
+  --glass-bg-hover: rgba(74, 69, 66, 0.12);
+  --glass-border: rgba(74, 69, 66, 0.18);
+  --glass-text: #4a4542;
+  color-scheme: light;
+  position: relative;
+  /* Above the bg-photo backdrop (z:0) and the mobile top gradient (z:1). */
+  z-index: 2;
+  min-height: 100dvh;
+  background: var(--surface);
+  color: var(--text);
+}
+/* The editor replaces the app shell entirely while open. */
+body.note-editor-open .app-shell { display: none; }
+@media (max-width: 760px) {
+  /* The dark status-bar gradient would paint over the cream page. */
+  body.note-editor-open::before { display: none; }
+}
+
+/* Sticky top bar: volver (left) + archive/delete/save (right). Sticks to
+   the viewport while the page scrolls; padded past the notch/status bar. */
 .note-editor-bar {
   position: sticky;
   top: 0;
-  z-index: 3;
+  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  padding: 0.35rem 0 0.6rem;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: calc(0.6rem + env(safe-area-inset-top, 0px)) 1.1rem 0.6rem;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  margin-bottom: 0.9rem;
+}
+/* Centered reading column; roomy bottom padding so the last control
+   clears the gesture bar. */
+.note-editor-body {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 1rem 1.1rem calc(3rem + env(safe-area-inset-bottom, 0px));
 }
 .note-editor-bar .note-bar-actions {
   display: inline-flex;
@@ -1748,6 +1789,29 @@ textarea.content-plain {
   line-height: 1.5;
 }
 textarea.content-plain:focus { border-color: var(--accent); background: var(--surface); }
+/* On the editor page the body text is borderless — text on paper, like
+   iOS Notes, instead of a heavy filled box floating on cream. */
+.note-editor-page textarea.content-plain {
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  padding: 0.1rem 0 0.5rem;
+  resize: none;
+}
+/* Checklist-driven notes: the body is usually empty, so don't reserve a
+   140px blank block between the title and the list. */
+.note-editor-page:has(#note-checklist .cl-row) textarea.content-plain {
+  min-height: 56px;
+}
+.note-editor-page textarea.content-plain:focus { border: 0; background: transparent; }
+
+/* Attach toolbar reads as the page footer: hairline on top, save at the
+   far right end of the reading flow. */
+.note-editor-page .note-icon-row {
+  border-top: 1px solid var(--border);
+  padding-top: 0.8rem;
+  margin-top: 1.2rem;
+}
 
 .modal-toolbar {
   display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
@@ -3293,7 +3357,8 @@ a.btn.icon-pill .material-symbols-outlined { font-size: 20px; }
   .album-picker input,
   .places-search-row input,
   dialog.ui-dialog .ui-prompt-input,
-  .modal-inner input.title {
+  .modal-inner input.title,
+  .note-editor-body input.title {
     font-size: 16px;
   }
 }
