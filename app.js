@@ -1608,9 +1608,12 @@ function renderNotas(root) {
         <h1>Notas</h1>
         <div class="sub">Lo que recordamos</div>
       </div>
-      <div class="view-toggle" id="notes-view-toggle">
-        <button data-v="cards" class="${state.view.notas === 'cards' ? 'active' : ''}">Tarjetas</button>
-        <button data-v="list" class="${state.view.notas === 'list' ? 'active' : ''}">Lista</button>
+      <div class="album-menu-wrap notes-view-menu">
+        <button class="btn icon-pill" id="notes-view-btn" type="button" title="Cambiar vista" aria-label="Cambiar vista"><span class="material-symbols-outlined">more_horiz</span></button>
+        <div class="album-menu-popover card-menu-popover" id="notes-view-pop">
+          <button data-v="cards" type="button"><span class="material-symbols-outlined">grid_view</span> Tarjetas ${state.view.notas === 'cards' ? '<span class="material-symbols-outlined menu-check">check</span>' : ''}</button>
+          <button data-v="list" type="button"><span class="material-symbols-outlined">view_list</span> Lista ${state.view.notas === 'list' ? '<span class="material-symbols-outlined menu-check">check</span>' : ''}</button>
+        </div>
       </div>
     </div>
     ${archivedCount > 0 ? `
@@ -1633,11 +1636,19 @@ function renderNotas(root) {
     <div class="${state.view.notas === 'cards' ? 'grid-cards' : 'grid-list'}" id="notes-grid"></div>
   `;
 
-  $('#notes-view-toggle').addEventListener('click', (e) => {
+  $('#notes-view-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    $('#notes-view-pop').classList.toggle('open');
+  });
+  $('#notes-view-pop').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-v]');
     if (!b) return;
-    state.view.notas = b.dataset.v;
-    renderNotas(root);
+    e.stopPropagation();
+    $('#notes-view-pop').classList.remove('open');
+    if (state.view.notas !== b.dataset.v) {
+      state.view.notas = b.dataset.v;
+      renderNotas(root);
+    }
   });
   const archiveTabs = $('#notes-archive-tabs');
   if (archiveTabs) {
@@ -1694,6 +1705,15 @@ function renderNewCtaTile(label, onOpen) {
   return tile;
 }
 
+// Any tap outside an open card/page menu closes it. Single delegated
+// listener — per-card document listeners would pile up on re-renders.
+document.addEventListener('click', () => {
+  $$('.card-menu-popover.open').forEach(p => {
+    p.classList.remove('open');
+    p.closest('.card')?.classList.remove('menu-raised');
+  });
+});
+
 function renderNoteCard(note) {
   const card = document.createElement('article');
   card.className = 'card clickable with-stripe note-card';
@@ -1713,38 +1733,74 @@ function renderNoteCard(note) {
     card.appendChild(dot);
   }
 
-  // Pin icon on the card (Material icon)
-  const pinBtn = document.createElement('button');
-  pinBtn.className = 'pin-card-btn';
-  pinBtn.type = 'button';
-  pinBtn.title = note.pinned ? 'Desanclar' : 'Anclar';
-  pinBtn.innerHTML = `<span class="material-symbols-outlined">${note.pinned ? 'keep' : 'keep_off'}</span>`;
-  pinBtn.addEventListener('click', async (e) => {
+  // Ellipsis menu on the card: anclar / archivar / eliminar.
+  const isArchived = !!note.archived_at;
+  const menuWrap = document.createElement('div');
+  menuWrap.className = 'album-menu-wrap card-menu-wrap';
+  menuWrap.innerHTML = `
+    <button class="card-menu-btn" type="button" aria-label="Opciones de la nota"><span class="material-symbols-outlined">more_horiz</span></button>
+    <div class="album-menu-popover card-menu-popover">
+      <button data-action="pin" type="button"><span class="material-symbols-outlined">${note.pinned ? 'keep_off' : 'keep'}</span> ${note.pinned ? 'Desanclar' : 'Anclar'}</button>
+      <button data-action="archive" type="button"><span class="material-symbols-outlined">${isArchived ? 'unarchive' : 'archive'}</span> ${isArchived ? 'Desarchivar' : 'Archivar'}</button>
+      <button data-action="delete" type="button" class="danger"><span class="material-symbols-outlined">delete</span> Eliminar</button>
+    </div>`;
+  const menuBtn = menuWrap.querySelector('.card-menu-btn');
+  const menuPop = menuWrap.querySelector('.card-menu-popover');
+  menuBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    const next = !note.pinned;
-    await togglePinWithTransition(async () => {
-      note.pinned = next;
-      await supabase.from('notes').update({ pinned: next }).eq('id', note.id);
-      await router();
+    // One open card menu at a time.
+    $$('.card-menu-popover.open').forEach(p => {
+      if (p !== menuPop) { p.classList.remove('open'); p.closest('.card')?.classList.remove('menu-raised'); }
     });
+    const open = menuPop.classList.toggle('open');
+    // Each card is its own stacking context (view-transition-name), so
+    // the popover can't out-z-index sibling cards — raise the whole card.
+    card.classList.toggle('menu-raised', open);
   });
-  card.appendChild(pinBtn);
+  menuPop.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    e.stopPropagation();
+    menuPop.classList.remove('open');
+    card.classList.remove('menu-raised');
+    if (btn.dataset.action === 'pin') {
+      const next = !note.pinned;
+      await togglePinWithTransition(async () => {
+        note.pinned = next;
+        await supabase.from('notes').update({ pinned: next }).eq('id', note.id);
+        await router();
+      });
+    } else if (btn.dataset.action === 'archive') {
+      const nextValue = isArchived ? null : new Date().toISOString();
+      try {
+        await supabase.from('notes').update({ archived_at: nextValue }).eq('id', note.id);
+        note.archived_at = nextValue;
+        uiToast(isArchived ? 'Nota desarchivada' : 'Nota archivada ✓');
+        rerenderCurrentPage();
+      } catch (err) {
+        uiToast(`Error: ${err.message || err}`, { error: true });
+      }
+    } else if (btn.dataset.action === 'delete') {
+      if (!(await uiConfirm(`¿Eliminar "${note.title}"? Esta acción no se puede deshacer.`, { title: 'Eliminar nota', confirmLabel: 'Eliminar', danger: true }))) return;
+      try {
+        if (Array.isArray(note.images) && note.images.length) {
+          try { await supabase.storage.from(BUCKET).remove(note.images); } catch {}
+        }
+        const { error } = await supabase.from('notes').delete().eq('id', note.id);
+        if (error) throw error;
+        const i = state.notes.findIndex(n => n.id === note.id);
+        if (i !== -1) state.notes.splice(i, 1);
+        uiToast('Nota eliminada');
+        rerenderCurrentPage();
+      } catch (err) {
+        uiToast(`Error al eliminar: ${err.message || err}`, { error: true });
+      }
+    }
+  });
+  card.appendChild(menuWrap);
 
   const body = document.createElement('div');
   body.className = 'body';
-
-  if (note.tags && note.tags.length) {
-    const tr = document.createElement('div');
-    tr.className = 'tag-row';
-    note.tags.forEach(t => {
-      const tEl = document.createElement('span');
-      tEl.className = 'tag';
-      tEl.style.setProperty('--tag-color', tagColor(t));
-      tEl.textContent = '#' + t;
-      tr.appendChild(tEl);
-    });
-    body.appendChild(tr);
-  }
 
   const h = document.createElement('h3');
   h.textContent = note.title;
@@ -3748,6 +3804,10 @@ function addNoteTag(raw) {
   noteDraft.tags.push(t);
   renderNoteTags();
   renderNoteTagSuggestions($('#note-tag-input').value);
+  // Selected chips live at the FRONT of the strip — snap back so the
+  // user sees their pick land there.
+  const strip = document.querySelector('.note-editor-body .tag-strip');
+  if (strip) strip.scrollLeft = 0;
 }
 
 $('#note-tag-input').addEventListener('input', (e) => renderNoteTagSuggestions(e.target.value));

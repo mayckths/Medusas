@@ -28,7 +28,7 @@
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
 
-    <link rel="stylesheet" href="./styles.css?v=20260703e" />
+    <link rel="stylesheet" href="./styles.css?v=20260703g" />
 
     <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>
@@ -164,8 +164,13 @@
              of the suggestions) reveals it — picking existing tags is
              the primary flow. -->
         <div class="tag-section">
-          <div class="tags-selected" id="note-tags"></div>
-          <div class="tag-suggestions" id="note-tag-suggestions"></div>
+          <!-- One horizontal strip: selected chips FIRST, then suggestions,
+               then the (+) chip. The two inner divs are display:contents so
+               everything flows in a single swipeable row. -->
+          <div class="tag-strip">
+            <div class="tags-selected" id="note-tags"></div>
+            <div class="tag-suggestions" id="note-tag-suggestions"></div>
+          </div>
           <input type="text" id="note-tag-input" placeholder="Nueva etiqueta… (Enter)" maxlength="40" hidden />
         </div>
 
@@ -477,6 +482,6 @@
       <div class="notif-list" id="notif-list"></div>
     </div>
 
-    <script type="module" src="./app.js?v=20260703e"></script>
+    <script type="module" src="./app.js?v=20260703g"></script>
   </body>
 </html>

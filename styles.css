@@ -578,27 +578,28 @@ nav.menu a .m-icon { font-size: 20px; width: 22px; text-align: center; }
 @keyframes ui-fade-out { to { opacity: 0; } }
 @keyframes ui-fade-in { from { opacity: 0; } }
 
-/* Pin icon overlay on note cards */
-.card.note-card .pin-card-btn {
-  position: absolute; top: 8px; right: 8px;
+/* Ellipsis menu overlay on note cards (anclar / archivar / eliminar) */
+.card .card-menu-wrap { position: absolute; top: 8px; right: 8px; z-index: 3; }
+.card .card-menu-btn {
   background: var(--surface-alt); border: 1px solid var(--border); border-radius: 6px;
   width: 30px; height: 30px; cursor: pointer; color: var(--text-dim);
   display: grid; place-items: center; padding: 0;
-  opacity: 0; transition: opacity 0.12s ease;
+  opacity: 0.7; transition: opacity 0.12s ease;
 }
-.card.note-card .pin-card-btn { opacity: 0.7; }
-.card.note-card:hover .pin-card-btn, .card.note-card.pinned .pin-card-btn { opacity: 1; }
-@media (hover: none) { .card.note-card .pin-card-btn { opacity: 1; } }
-.card.note-card .pin-card-btn:hover { color: var(--text); background: var(--border); }
-.card.note-card.pinned .pin-card-btn { background: var(--accent); color: var(--on-accent); border-color: transparent; opacity: 1; }
-.card.note-card .pin-card-btn .material-symbols-outlined { font-size: 18px; }
-
-/* Reserve room for the absolutely-positioned pin button so the tag row
-   doesn't slide UNDER it. Use max-width instead of padding-right so
-   the visible tags aren't half-clipped at the right edge.
-   flex-shrink: 0 keeps the row at its natural height even when the
-   body's `overflow: hidden` would otherwise squash it down to ~3px. */
-.card.note-card .body .tag-row { max-width: calc(100% - 42px); flex-shrink: 0; }
+.card:hover .card-menu-btn { opacity: 1; }
+@media (hover: none) { .card .card-menu-btn { opacity: 1; } }
+.card .card-menu-btn:hover { color: var(--text); background: var(--border); }
+.card .card-menu-btn .material-symbols-outlined { font-size: 18px; }
+/* Card popovers open below-right of the button (the card's top-right
+   corner), not below-left like the album header menu. */
+.card-menu-popover { left: auto; right: 0; min-width: 190px; }
+/* Each note card is its own stacking context (view-transition-name), so
+   the popover can't paint above sibling cards on z-index alone — the
+   whole card gets raised while its menu is open. */
+.card.menu-raised { z-index: 30; }
+.card-menu-popover .menu-check { margin-left: auto; color: var(--accent); }
+/* Reserve room for the corner menu so long titles don't slide under it. */
+.card.note-card .body h3 { max-width: calc(100% - 34px); }
 .page-head {
   display: flex; align-items: baseline; justify-content: space-between;
   flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;
@@ -729,16 +730,6 @@ button.btn.pin-toggle.is-pinned {
   background: transparent; border: 0; color: var(--text);
   cursor: pointer; padding: 0; font: inherit; text-decoration: underline;
 }
-
-.view-toggle {
-  display: inline-flex; background: var(--surface-alt); border-radius: 999px; padding: 3px;
-  border: 1px solid var(--border);
-}
-.view-toggle button {
-  background: transparent; border: 0; padding: 0.35rem 0.9rem; cursor: pointer;
-  color: var(--text-dim); border-radius: 999px; font-size: 0.85rem;
-}
-.view-toggle button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
 
 /* ======== Shared cards ======== */
 .grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.6rem; }
@@ -1779,23 +1770,27 @@ body.note-editor-open .app-shell { display: none; }
 .note-bar-save .material-symbols-outlined { font-size: 22px; }
 /* The tag section sits first now; give it a touch of breathing room. */
 .note-editor-body .tag-section { margin-top: 0; margin-bottom: 0.9rem; }
-/* Tag rows: a single line each, bleeding to the page edges and panning
-   horizontally (no wrapping stack) — swipe to reach the rest. */
-.note-editor-body .tags-selected,
-.note-editor-body .tag-suggestions {
+/* One horizontal tag strip: selected chips first, then suggestions, then
+   the (+) chip — a single line bleeding to the page edges that pans
+   horizontally (swipe to reach the rest). The inner selected/suggestions
+   containers are display:contents so their chips share the same row. */
+.note-editor-body .tag-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   flex-wrap: nowrap;
   overflow-x: auto;
   margin-left: -1.1rem;
   margin-right: -1.1rem;
-  padding-left: 1.1rem;
-  padding-right: 1.1rem;
+  padding: 0.15rem 1.1rem;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
 }
-.note-editor-body .tags-selected::-webkit-scrollbar,
-.note-editor-body .tag-suggestions::-webkit-scrollbar { display: none; }
-.note-editor-body .tags-selected .tag-chip-selected,
-.note-editor-body .tag-suggestions .tag-sugg {
+.note-editor-body .tag-strip::-webkit-scrollbar { display: none; }
+.note-editor-body .tag-strip .tags-selected,
+.note-editor-body .tag-strip .tag-suggestions { display: contents; }
+.note-editor-body .tag-strip .tag-chip-selected,
+.note-editor-body .tag-strip .tag-sugg {
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -2715,9 +2710,11 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 }
 
 /* ======== Notes layout fixes ======== */
+/* No overflow:hidden on the card itself — the .body clips its own
+   content (bounded flex + overflow hidden), and the corner ellipsis
+   popover must be able to extend past the card edge. */
 .card.note-card {
   aspect-ratio: 1 / 1;
-  overflow: hidden;
 }
 .card.note-card .body { overflow: hidden; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 0.35rem; }
 .card.note-card .preview { -webkit-line-clamp: 3; flex: 0 0 auto; }
@@ -2786,10 +2783,12 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
   .card.new-cta .label { font-size: 0.9rem; }
 }
 
-/* List mode: every row same height, hide visual extras */
+/* List mode: every row same height, hide visual extras. No overflow
+   clipping — inner text truncates itself and the ellipsis popover needs
+   to escape the 72px row. */
 .grid-list .card.note-card {
   padding-bottom: 1rem; min-height: 0; height: 72px;
-  align-items: center; overflow: hidden;
+  align-items: center;
 }
 /* New-CTA in list mode matches the 72px row height (override the
    square aspect-ratio from card mode). */
@@ -2806,7 +2805,6 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 .grid-list .card.note-card .gallery,
 .grid-list .card.note-card .links,
 .grid-list .card.note-card .card-checklist { display: none; }
-.grid-list .card.note-card .tag-row { flex-shrink: 0; max-width: 220px; overflow: hidden; flex-wrap: nowrap; }
 .grid-list .card.note-card h3 { font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38%; }
 
 .tag-row { margin-bottom: 0.25rem; }
@@ -3413,8 +3411,11 @@ dialog.lightbox .lb-tag-chip button {
   position: absolute;
   inset: -10px;
 }
-/* Pin is the only corner control now — expand to a full 44×44 zone. */
-.card.note-card .pin-card-btn::before {
+/* Corner ellipsis menu — expand to a full 44×44 zone. */
+.card .card-menu-btn {
+  position: relative;
+}
+.card .card-menu-btn::before {
   content: "";
   position: absolute;
   inset: -7px;
