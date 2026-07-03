@@ -591,8 +591,10 @@ nav.menu a .m-icon { font-size: 20px; width: 22px; text-align: center; }
 .card .card-menu-btn:hover { color: var(--text); background: var(--border); }
 .card .card-menu-btn .material-symbols-outlined { font-size: 18px; }
 /* Card popovers open below-right of the button (the card's top-right
-   corner), not below-left like the album header menu. */
-.card-menu-popover { left: auto; right: 0; min-width: 190px; }
+   corner), not below-left like the album header menu. Doubled class for
+   specificity — the base .album-menu-popover { left: 0 } rule lives
+   LATER in the file and would win a specificity tie. */
+.album-menu-popover.card-menu-popover { left: auto; right: 0; min-width: 190px; }
 /* Each note card is its own stacking context (view-transition-name), so
    the popover can't paint above sibling cards on z-index alone — the
    whole card gets raised while its menu is open. */

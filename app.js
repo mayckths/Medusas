@@ -1638,7 +1638,8 @@ function renderNotas(root) {
 
   $('#notes-view-btn').addEventListener('click', (e) => {
     e.stopPropagation();
-    $('#notes-view-pop').classList.toggle('open');
+    const pop = $('#notes-view-pop');
+    if (pop.classList.toggle('open')) clampPopoverX(pop);
   });
   $('#notes-view-pop').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-v]');
@@ -1714,6 +1715,18 @@ document.addEventListener('click', () => {
   });
 });
 
+// Nudge a just-opened popover back inside the viewport (they're
+// edge-aligned to their trigger, which can sit at a screen edge).
+function clampPopoverX(pop) {
+  pop.style.transform = '';
+  const r = pop.getBoundingClientRect();
+  const vw = window.innerWidth;
+  let dx = 0;
+  if (r.right > vw - 8) dx = (vw - 8) - r.right;
+  else if (r.left < 8) dx = 8 - r.left;
+  if (dx) pop.style.transform = `translateX(${dx}px)`;
+}
+
 function renderNoteCard(note) {
   const card = document.createElement('article');
   card.className = 'card clickable with-stripe note-card';
@@ -1756,6 +1769,7 @@ function renderNoteCard(note) {
     // Each card is its own stacking context (view-transition-name), so
     // the popover can't out-z-index sibling cards — raise the whole card.
     card.classList.toggle('menu-raised', open);
+    if (open) clampPopoverX(menuPop);
   });
   menuPop.addEventListener('click', async (e) => {
     const btn = e.target.closest('button[data-action]');
@@ -2412,6 +2426,7 @@ function wireAlbumMenu(rootEl, name, photos) {
       }
     });
     menu.classList.toggle('open');
+    if (menu.classList.contains('open')) clampPopoverX(menu);
     syncOpenClass();
   });
   document.addEventListener('click', () => {
