@@ -1828,21 +1828,6 @@ function renderNoteCard(note) {
     body.appendChild(lk);
   }
 
-  const meta = document.createElement('div');
-  meta.className = 'meta';
-  // Compact checklist badge — shown next to the date so the user can
-  // see at a glance whether a note has a checklist (and how far along
-  // it is). The .card-checklist preview is hidden in list view, this
-  // badge replaces it.
-  let checklistBadge = '';
-  if (Array.isArray(note.checklist) && note.checklist.length) {
-    const total = note.checklist.length;
-    const done = note.checklist.filter(it => it && it.done).length;
-    checklistBadge = `<span class="checklist-badge ${done === total ? 'is-complete' : ''}"><span class="material-symbols-outlined">${done === total ? 'check_box' : 'check_box_outline_blank'}</span> ${done}/${total}</span>`;
-  }
-  meta.innerHTML = `<span>${fmtDateWithDay(note.updated_at || note.created_at)} · ${escapeHtml(note.created_by || '?')}</span>${checklistBadge}`;
-  body.appendChild(meta);
-
   card.appendChild(body);
   card.addEventListener('click', () => openNoteEditor(note));
   card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openNoteEditor(note); } });
@@ -1908,20 +1893,6 @@ function fitCardChecklist(card, note) {
     card._fitObs = new ResizeObserver(() => apply());
     card._fitObs.observe(card);
   }
-}
-
-// Date+time helper for note cards (always show day, plus time if today)
-function fmtDateWithDay(iso) {
-  const d = new Date(iso);
-  const now = new Date();
-  const sameDay = d.toDateString() === now.toDateString();
-  if (sameDay) {
-    return d.toLocaleTimeString('es', { hour: 'numeric', minute: '2-digit' });
-  }
-  const sameYear = d.getFullYear() === now.getFullYear();
-  const datePart = d.toLocaleDateString('es', { day: 'numeric', month: 'short', year: sameYear ? undefined : 'numeric' });
-  const timePart = d.toLocaleTimeString('es', { hour: 'numeric', minute: '2-digit' });
-  return `${datePart} · ${timePart}`;
 }
 
 // ============================================================
