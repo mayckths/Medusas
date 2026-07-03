@@ -590,20 +590,6 @@ nav.menu a .m-icon { font-size: 20px; width: 22px; text-align: center; }
 .card.note-card.pinned .pin-card-btn { background: var(--accent); color: var(--on-accent); border-color: transparent; opacity: 1; }
 .card.note-card .pin-card-btn .material-symbols-outlined { font-size: 18px; }
 
-/* Archive button — same chip style as the pin, seated just to its left. */
-.card.note-card .archive-card-btn {
-  position: absolute; top: 8px; right: 44px;
-  background: var(--surface-alt); border: 1px solid var(--border); border-radius: 6px;
-  width: 30px; height: 30px; cursor: pointer; color: var(--text-dim);
-  display: grid; place-items: center; padding: 0;
-  opacity: 0.7; transition: opacity 0.12s ease;
-}
-.card.note-card:hover .archive-card-btn { opacity: 1; }
-@media (hover: none) { .card.note-card .archive-card-btn { opacity: 1; } }
-.card.note-card .archive-card-btn:hover { color: var(--text); background: var(--border); }
-.card.note-card .archive-card-btn .material-symbols-outlined { font-size: 18px; }
-/* With two top-right buttons, reserve a bit more room so tags don't slide under them. */
-.card.note-card.has-archive .body .tag-row { max-width: calc(100% - 80px); }
 /* Reserve room for the absolutely-positioned pin button so the tag row
    doesn't slide UNDER it. Use max-width instead of padding-right so
    the visible tags aren't half-clipped at the right edge.
@@ -2730,6 +2716,27 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
    body is in overflow, pushing the date below the visible card. */
 @media (max-width: 760px) {
   .card.note-card { aspect-ratio: auto; }
+
+  /* Notas page: 2-column masonry (Keep-style). CSS multicol gives the
+     staggered natural-height look; break-inside keeps each card whole.
+     Scoped to #notes-grid so the dashboard strip keeps its layout. */
+  #notes-grid.grid-cards {
+    display: block;
+    column-count: 2;
+    column-gap: 0.6rem;
+  }
+  #notes-grid.grid-cards > .card,
+  #notes-grid.grid-cards > .empty {
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+    width: 100%;
+    margin-bottom: 0.6rem;
+  }
+  /* The "+ Nueva nota" pill stays a full-width row above the columns. */
+  #notes-grid.grid-cards > .card.new-cta { column-span: all; }
+  /* Cap runaway cards (huge checklists) — the checklist fit logic trims
+     items to the visible height and shows "+N más". */
+  #notes-grid.grid-cards .card.note-card { max-height: 340px; }
 }
 
 /* New-CTA tile matches note-card aspect to keep the grid uniform */
@@ -3411,13 +3418,11 @@ dialog.lightbox .lb-tag-chip button {
   position: absolute;
   inset: -10px;
 }
-/* Pin + archive sit 6px apart — expand ±3px horizontal so zones just
-   touch, full ±7px vertical (36×44 effective each, no ambiguity). */
-.card.note-card .pin-card-btn::before,
-.card.note-card .archive-card-btn::before {
+/* Pin is the only corner control now — expand to a full 44×44 zone. */
+.card.note-card .pin-card-btn::before {
   content: "";
   position: absolute;
-  inset: -7px -3px;
+  inset: -7px;
 }
 /* Card action buttons (media/movie feature-pin) — flex row w/ 3px gaps */
 .card .card-actions button::before {
