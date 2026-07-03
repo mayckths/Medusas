@@ -578,18 +578,18 @@ nav.menu a .m-icon { font-size: 20px; width: 22px; text-align: center; }
 @keyframes ui-fade-out { to { opacity: 0; } }
 @keyframes ui-fade-in { from { opacity: 0; } }
 
-/* Ellipsis menu overlay on note cards (anclar / archivar / eliminar) */
+/* Ellipsis menu overlay on note cards (anclar / archivar / eliminar).
+   Bare icon — no chip background/border; the 44pt hit area comes from
+   the ::before expansion further down. */
 .card .card-menu-wrap { position: absolute; top: 8px; right: 8px; z-index: 3; }
 .card .card-menu-btn {
-  background: var(--surface-alt); border: 1px solid var(--border); border-radius: 6px;
+  background: transparent; border: 0;
   width: 30px; height: 30px; cursor: pointer; color: var(--text-dim);
   display: grid; place-items: center; padding: 0;
-  opacity: 0.7; transition: opacity 0.12s ease;
+  transition: color 0.12s ease;
 }
-.card:hover .card-menu-btn { opacity: 1; }
-@media (hover: none) { .card .card-menu-btn { opacity: 1; } }
-.card .card-menu-btn:hover { color: var(--text); background: var(--border); }
-.card .card-menu-btn .material-symbols-outlined { font-size: 18px; }
+.card .card-menu-btn:hover { color: var(--text); }
+.card .card-menu-btn .material-symbols-outlined { font-size: 20px; }
 /* Card popovers open below-right of the button (the card's top-right
    corner), not below-left like the album header menu. Doubled class for
    specificity — the base .album-menu-popover { left: 0 } rule lives
