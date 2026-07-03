@@ -3534,6 +3534,7 @@ function showNoteEditorPage(note) {
   $('#note-tag-input').value = '';
   $('#note-tag-input').hidden = true; // (+) chip in suggestions reveals it
   $('#note-status').textContent = '';
+  $('#note-bar-title').textContent = note ? 'Editar nota' : 'Nueva nota';
   // Save is an icon button now; update its accessible label only.
   $('#note-save').setAttribute('aria-label', note ? 'Actualizar nota' : 'Guardar nota');
   $('#note-delete').hidden = !note;

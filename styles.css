@@ -1738,6 +1738,26 @@ body.note-editor-open .app-shell { display: none; }
   align-items: center;
   gap: 0.4rem;
 }
+/* Centered page title, iOS-style. Absolutely centered so the asymmetric
+   sides (one icon left, up to three right) don't skew it; pointer-events
+   off so it never eats taps meant for the buttons behind it on narrow
+   screens. */
+.note-editor-bar .note-bar-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Playfair Display', Georgia, serif;
+  /* 1rem (not larger) so "Editar nota" clears the three action buttons
+     on a 375px screen with comfortable air. */
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+  pointer-events: none;
+  white-space: nowrap;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .note-bar-icon {
   width: 36px; height: 36px;
   border-radius: 999px;

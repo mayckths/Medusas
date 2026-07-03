@@ -28,7 +28,7 @@
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
 
-    <link rel="stylesheet" href="./styles.css?v=20260702a" />
+    <link rel="stylesheet" href="./styles.css?v=20260703a" />
 
     <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>
@@ -149,9 +149,10 @@
          scrolls with the document so the iOS keyboard can't pan a
          top-layer element off-screen, and back/deep-links work. -->
     <section class="note-editor-page" id="note-editor-page" hidden>
-      <!-- Sticky top bar: volver (left), archive/delete/save (right). -->
+      <!-- Sticky top bar: volver (left), título centrado, archive/delete/save (right). -->
       <div class="note-editor-bar">
         <button class="note-bar-icon" id="note-close" type="button" aria-label="Volver"><span class="material-symbols-outlined">close</span></button>
+        <span class="note-bar-title" id="note-bar-title">Nueva nota</span>
         <div class="note-bar-actions">
           <button class="note-bar-icon" id="note-archive" type="button" hidden aria-label="Archivar"><span class="material-symbols-outlined">archive</span></button>
           <button class="note-bar-icon danger" id="note-delete" type="button" hidden aria-label="Eliminar"><span class="material-symbols-outlined">delete</span></button>
@@ -475,6 +476,6 @@
       <div class="notif-list" id="notif-list"></div>
     </div>
 
-    <script type="module" src="./app.js?v=20260702a"></script>
+    <script type="module" src="./app.js?v=20260703a"></script>
   </body>
 </html>
