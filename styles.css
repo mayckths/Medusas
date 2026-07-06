@@ -867,19 +867,20 @@ button.btn.pin-toggle.is-pinned {
   border-color: transparent;
 }
 
-/* New CTA tile */
+/* New CTA tile — verde sólido (rediseño Figma): sin borde punteado. */
 .card.new-cta {
-  background: var(--surface-alt); border: 1.5px dashed var(--border); box-shadow: none;
+  background: rgba(61, 87, 74, 0.85);
+  border: 1.5px solid rgba(130, 156, 140, 0.7);
+  box-shadow: none;
   align-items: center; justify-content: center; min-height: 140px;
-  color: var(--text-dim); text-align: center; gap: 0.35rem; cursor: pointer;
+  color: #f9f6f0; text-align: center; gap: 0.35rem; cursor: pointer;
 }
-.card.new-cta:hover { border-color: var(--accent); border-style: solid; color: var(--accent); background: var(--surface); }
+.card.new-cta:hover { border-color: rgba(130, 156, 140, 1); background: rgba(61, 87, 74, 1); color: #f9f6f0; }
 .card.new-cta .plus {
   width: 36px; height: 36px; border-radius: 999px;
-  background: var(--surface); border: 1.5px dashed var(--border);
+  background: transparent; border: 0;
   display: grid; place-items: center; font-size: 1.3rem; line-height: 1; color: inherit;
 }
-.card.new-cta:hover .plus { border-style: solid; border-color: currentColor; }
 .card.new-cta .label { font-size: 0.95rem; font-weight: 600; color: inherit; }
 .grid-list .card.new-cta { min-height: 0; flex-direction: row; justify-content: flex-start; padding: 0.75rem 1rem; }
 .grid-list .card.new-cta .plus { width: 28px; height: 28px; font-size: 1.05rem; }
@@ -1273,6 +1274,22 @@ button.btn.pin-toggle.is-pinned {
 
 /* ======== Tags filter row ======== */
 .tag-filter-row { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; }
+/* Mobile: una sola fila full-bleed con swipe horizontal en vez del
+   stack con saltos de línea (rediseño Figma). */
+@media (max-width: 760px) {
+  .tag-filter-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin-left: -16px;
+    margin-right: -16px;
+    padding-left: 16px;
+    padding-right: 16px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tag-filter-row::-webkit-scrollbar { display: none; }
+  .tag-filter-row .tag-chip { flex-shrink: 0; white-space: nowrap; }
+}
 .tag-filter-row .tag-chip {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -2728,6 +2745,38 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 .card.note-card {
   aspect-ratio: 1 / 1;
 }
+
+/* Cream notebook note cards (rediseño Figma 8:2): dark-on-cream. The
+   local token re-scope (same trick as dialog.modal) flips every
+   descendant that reads var(--text)/var(--text-dim)/var(--border) —
+   checklist text, "+N más", gallery borders — without per-rule
+   overrides. The popover inside the card inherits the cream too. */
+.card.note-card {
+  --surface: #f9f6f0;
+  --surface-alt: #efeae0;
+  --text: #1c1c26;
+  --text-dim: rgba(28, 28, 38, 0.55);
+  --border: rgba(28, 28, 38, 0.12);
+  --border-strong: rgba(28, 28, 38, 0.22);
+  color-scheme: light;
+  background: #f9f6f0;
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.card.note-card .preview { color: rgba(28, 28, 38, 0.92); }
+/* Checkbox pendiente en tinta oscura (los hechos siguen en terracota). */
+.card.note-card .card-checklist .cl-pv .cl-check { color: #1c1c26; }
+.card.note-card .card-checklist .cl-pv .cl-check.is-done { color: var(--accent); }
+/* Menú (⋯) en gris cálido sobre crema. */
+.card.note-card .card-menu-btn { color: #bcb5b2; }
+.card.note-card .card-menu-btn:hover { color: #1c1c26; }
+/* Links como pill verde compacta con texto crema. */
+.card.note-card .links a {
+  background: rgba(61, 87, 74, 0.9);
+  color: #f9f6f0;
+  border: 0;
+  padding: 0.3rem 0.75rem;
+}
 .card.note-card .body { overflow: hidden; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 0.35rem; }
 .card.note-card .preview { -webkit-line-clamp: 3; flex: 0 0 auto; }
 .card.note-card .gallery img { width: 42px; height: 42px; }
@@ -2778,13 +2827,14 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
   min-height: 0;
 }
 /* On mobile the 1:1 tile takes half the screen — way too much real
-   estate for an entry point. Collapse to a slim 56px pill across the
-   row so the actual notes lead the layout. */
+   estate for an entry point. Collapse to a slim full-round pill across
+   the row so the actual notes lead the layout. */
 @media (max-width: 760px) {
   .card.new-cta {
     aspect-ratio: auto;
     grid-column: 1 / -1;
-    height: 56px;
+    height: 52px;
+    border-radius: 999px;
     flex-direction: row;
     justify-content: center;
     gap: 0.6rem;
@@ -2793,7 +2843,7 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
   .card.new-cta .plus {
     width: 24px; height: 24px;
   }
-  .card.new-cta .label { font-size: 0.9rem; }
+  .card.new-cta .label { font-size: 0.95rem; }
 }
 
 /* List mode: every row same height, hide visual extras. No overflow

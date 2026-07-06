@@ -1618,16 +1618,16 @@ function renderNotas(root) {
     </div>
     ${archivedCount > 0 ? `
       <div class="seg-tabs" id="notes-archive-tabs">
-        <button class="seg-tab ${!showArchived ? 'active' : ''}" data-archived="0">Activas <span class="count">${activeCount}</span></button>
-        <button class="seg-tab ${showArchived ? 'active' : ''}" data-archived="1">Archivadas <span class="count">${archivedCount}</span></button>
+        <button class="seg-tab ${!showArchived ? 'active' : ''}" data-archived="0">Activas</button>
+        <button class="seg-tab ${showArchived ? 'active' : ''}" data-archived="1">Archivadas</button>
       </div>
     ` : ''}
     ${sortedTags.length ? `
       <div class="tag-filter-row" id="tag-filter-row">
         <button class="tag-chip tag-chip-all ${!filterTag ? 'active' : ''}" data-tag="">Todas</button>
-        ${sortedTags.map(([tag, count]) => `
+        ${sortedTags.map(([tag]) => `
           <button class="tag-chip ${filterTag === tag ? 'active' : ''}" data-tag="${escapeHtml(tag)}" style="--tag-color: ${tagColor(tag)};">
-            #${escapeHtml(tag)} <span class="count">${count}</span>
+            #${escapeHtml(tag)}
           </button>
         `).join('')}
       </div>
@@ -1755,14 +1755,13 @@ function clampPopoverX(pop) {
 
 function renderNoteCard(note) {
   const card = document.createElement('article');
-  card.className = 'card clickable with-stripe note-card';
+  // Cream notebook card (rediseño Figma) — no tag stripe.
+  card.className = 'card clickable note-card';
   card.dataset.id = note.id;
   // Unique transition name so the browser can morph this card between
   // positions when the list re-renders (e.g., on pin/unpin).
   card.style.viewTransitionName = `note-${cssSafeId(note.id)}`;
   if (note.pinned) card.classList.add('pinned');
-  const stripeColor = (note.tags && note.tags.length) ? tagColor(note.tags[0]) : 'var(--border)';
-  card.style.setProperty('--stripe', stripeColor);
   card.setAttribute('role', 'button');
   card.setAttribute('tabindex', '0');
 
@@ -1924,7 +1923,9 @@ function renderNoteCard(note) {
     note.links.forEach(link => {
       const a = document.createElement('a');
       a.href = link.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
-      a.textContent = link.label || link.url;
+      // Compact pill: the label if there is one, otherwise just "Link" —
+      // raw URLs in the preview were noise (rediseño Figma).
+      a.textContent = link.label || 'Link';
       a.addEventListener('click', e => e.stopPropagation());
       lk.appendChild(a);
     });
