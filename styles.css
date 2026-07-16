@@ -2341,8 +2341,24 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 /* ======== Settings ======== */
 .settings-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; max-width: 640px; }
 .settings-card {
+  /* Cream notebook — mismo re-scope de tokens que las cards de notas y
+     dialog.modal: todo el interior (reorder items, botones, inputs)
+     lee estas variables y se adapta solo. */
+  --surface: #f9f6f0;
+  --surface-alt: #efeae0;
+  --surface-2: #e4dcce;
+  --text: #4a4542;
+  --text-dim: rgba(74, 69, 66, 0.8);
+  --border: rgba(74, 69, 66, 0.14);
+  --border-strong: rgba(74, 69, 66, 0.22);
+  --glass-bg: rgba(74, 69, 66, 0.06);
+  --glass-bg-hover: rgba(74, 69, 66, 0.12);
+  --glass-border: rgba(74, 69, 66, 0.18);
+  --glass-text: #4a4542;
+  color-scheme: light;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 1rem 1.1rem; box-shadow: var(--shadow);
+  color: var(--text);
 }
 .settings-card h3 { margin: 0 0 0.6rem; font-size: 1rem; }
 .settings-card .row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
