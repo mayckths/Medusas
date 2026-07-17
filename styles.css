@@ -1251,16 +1251,18 @@ button.btn.pin-toggle.is-pinned {
   transition: color 0.15s ease;
 }
 .seg-tabs .seg-tab:hover { color: var(--text); }
+/* Tab activa en blanco (rediseño Figma) — el terracota queda para
+   acciones, no para estado de navegación. */
 .seg-tabs .seg-tab.active {
-  color: var(--accent);
+  color: #ffffff;
   font-weight: 600;
 }
 .seg-tabs .seg-tab.active::after {
   content: "";
   position: absolute;
   left: 0.4rem; right: 0.4rem; bottom: -1px;
-  height: 2px;
-  background: var(--accent);
+  height: 2.5px;
+  background: #ffffff;
   border-radius: 2px;
 }
 .seg-tabs .seg-tab .count {
@@ -1271,6 +1273,24 @@ button.btn.pin-toggle.is-pinned {
   border-radius: 999px;
 }
 .seg-tabs .seg-tab.active .count { background: rgba(199, 109, 82, 0.18); color: var(--accent); }
+
+/* Botón (+) de nueva nota en el header (rediseño Figma): círculo
+   terracota de 40px con el plus blanco. */
+.note-add-btn {
+  width: 40px; height: 40px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #cb825d;
+  color: #ffffff;
+  cursor: pointer;
+  display: grid; place-items: center;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background 0.15s ease, transform 0.08s ease;
+}
+.note-add-btn:hover { background: #c76d52; }
+.note-add-btn:active { transform: scale(0.94); }
+.note-add-btn .material-symbols-outlined { font-size: 22px; }
 
 /* ======== Tags filter row ======== */
 .tag-filter-row { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; }
@@ -2821,20 +2841,9 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
     flex-direction: column;
     gap: 0.6rem;
   }
-  /* The "+ Nueva nota" pill renders in #notes-cta-row ABOVE the grid on
-     mobile. Hide the in-grid twin (it's for desktop's square grid). */
-  #notes-grid.grid-cards > .card.new-cta { display: none; }
   /* Cap runaway cards (huge checklists) — the checklist fit logic trims
      items to the visible height and shows "+N más". */
   #notes-grid.grid-cards .card.note-card { max-height: 340px; }
-}
-
-/* Standalone "+ Nueva nota" row above the notes grid — mobile only;
-   desktop keeps the square tile inside the grid. */
-#notes-cta-row { display: none; }
-@media (max-width: 760px) {
-  #notes-cta-row { display: block; margin-bottom: 0.6rem; }
-  #notes-cta-row .card.new-cta { width: 100%; }
 }
 
 /* New-CTA tile matches note-card aspect to keep the grid uniform */
@@ -2861,30 +2870,6 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
   }
   .card.new-cta .label { font-size: 0.95rem; }
 }
-
-/* List mode: every row same height, hide visual extras. No overflow
-   clipping — inner text truncates itself and the ellipsis popover needs
-   to escape the 72px row. */
-.grid-list .card.note-card {
-  padding-bottom: 1rem; min-height: 0; height: 72px;
-  align-items: center;
-}
-/* New-CTA in list mode matches the 72px row height (override the
-   square aspect-ratio from card mode). */
-.grid-list .card.new-cta {
-  aspect-ratio: auto;
-  height: 72px;
-  min-height: 0;
-}
-.grid-list .card.note-card .body {
-  display: flex; flex-direction: row; align-items: center; gap: 0.7rem;
-  width: 100%; min-width: 0;
-}
-.grid-list .card.note-card .preview { -webkit-line-clamp: 1; max-height: 1.4em; flex: 1; min-width: 0; }
-.grid-list .card.note-card .gallery,
-.grid-list .card.note-card .links,
-.grid-list .card.note-card .card-checklist { display: none; }
-.grid-list .card.note-card h3 { font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38%; }
 
 .tag-row { margin-bottom: 0.25rem; }
 

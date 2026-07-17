@@ -1606,15 +1606,8 @@ function renderNotas(root) {
     <div class="page-head">
       <div>
         <h1>Notas</h1>
-        <div class="sub">Lo que recordamos</div>
       </div>
-      <div class="album-menu-wrap notes-view-menu">
-        <button class="btn icon-pill" id="notes-view-btn" type="button" title="Cambiar vista" aria-label="Cambiar vista"><span class="material-symbols-outlined">more_horiz</span></button>
-        <div class="album-menu-popover card-menu-popover" id="notes-view-pop">
-          <button data-v="cards" type="button"><span class="material-symbols-outlined">grid_view</span> Tarjetas ${state.view.notas === 'cards' ? '<span class="material-symbols-outlined menu-check">check</span>' : ''}</button>
-          <button data-v="list" type="button"><span class="material-symbols-outlined">view_list</span> Lista ${state.view.notas === 'list' ? '<span class="material-symbols-outlined menu-check">check</span>' : ''}</button>
-        </div>
-      </div>
+      <button class="note-add-btn" id="notes-add-btn" type="button" title="Nueva nota" aria-label="Nueva nota"><span class="material-symbols-outlined">add</span></button>
     </div>
     ${archivedCount > 0 ? `
       <div class="seg-tabs" id="notes-archive-tabs">
@@ -1632,25 +1625,10 @@ function renderNotas(root) {
         `).join('')}
       </div>
     ` : ''}
-    ${state.view.notas === 'cards' && !showArchived ? '<div id="notes-cta-row"></div>' : ''}
-    <div class="${state.view.notas === 'cards' ? 'grid-cards' : 'grid-list'}" id="notes-grid"></div>
+    <div class="grid-cards" id="notes-grid"></div>
   `;
 
-  $('#notes-view-btn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    const pop = $('#notes-view-pop');
-    if (pop.classList.toggle('open')) clampPopoverX(pop);
-  });
-  $('#notes-view-pop').addEventListener('click', (e) => {
-    const b = e.target.closest('button[data-v]');
-    if (!b) return;
-    e.stopPropagation();
-    $('#notes-view-pop').classList.remove('open');
-    if (state.view.notas !== b.dataset.v) {
-      state.view.notas = b.dataset.v;
-      renderNotas(root);
-    }
-  });
+  $('#notes-add-btn').addEventListener('click', () => openNoteEditor(null));
   const archiveTabs = $('#notes-archive-tabs');
   if (archiveTabs) {
     archiveTabs.addEventListener('click', (e) => {
@@ -1675,20 +1653,11 @@ function renderNotas(root) {
   }
 
   const grid = $('#notes-grid');
-  // The "+ Nueva nota" tile only appears in the active tab — creating
-  // from inside the archived view is confusing. It exists TWICE in card
-  // view: as a standalone row above the grid (mobile) and as a square
-  // tile inside the grid (desktop) — CSS shows exactly one per viewport.
-  // iOS Safari mis-lays-out multicol when a column-span:all element
-  // lives inside it, so the mobile pill can't be a grid child.
-  const ctaRow = $('#notes-cta-row');
-  if (ctaRow) ctaRow.appendChild(renderNewCtaTile('Nueva nota', () => openNoteEditor(null)));
-  if (!showArchived) grid.appendChild(renderNewCtaTile('Nueva nota', () => openNoteEditor(null)));
-  // Mobile card view → 2-column masonry built with plain flex columns.
+  // Mobile → 2-column masonry built with plain flex columns.
   // CSS multicol is broken on iOS WebKit (with break-inside: avoid the
   // second column starts mid-page, leaving a phantom gap), so we
   // distribute greedily into the currently-shorter column instead.
-  const useMasonry = state.view.notas === 'cards' && window.matchMedia('(max-width: 760px)').matches;
+  const useMasonry = window.matchMedia('(max-width: 760px)').matches;
   if (useMasonry && filtered.length) {
     grid.classList.add('masonry');
     const colA = document.createElement('div');
