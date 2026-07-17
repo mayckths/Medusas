@@ -1607,7 +1607,7 @@ function renderNotas(root) {
       <div>
         <h1>Notas</h1>
       </div>
-      <button class="note-add-btn" id="notes-add-btn" type="button" title="Nueva nota" aria-label="Nueva nota"><span class="material-symbols-outlined">add</span></button>
+      <button class="add-btn" id="notes-add-btn" type="button" title="Nueva nota" aria-label="Nueva nota"><span class="material-symbols-outlined">add</span></button>
     </div>
     ${archivedCount > 0 ? `
       <div class="seg-tabs" id="notes-archive-tabs">
@@ -1679,18 +1679,6 @@ function renderNotas(root) {
     else if (showArchived) empty.textContent = 'Todavía no hay notas archivadas.';
     grid.appendChild(empty);
   }
-}
-
-function renderNewCtaTile(label, onOpen) {
-  const tile = document.createElement('article');
-  tile.className = 'card new-cta';
-  tile.setAttribute('role', 'button');
-  tile.setAttribute('tabindex', '0');
-  tile.setAttribute('aria-label', label);
-  tile.innerHTML = `<div class="plus" aria-hidden="true"><span class="material-symbols-outlined">add</span></div><div class="label">${escapeHtml(label)}</div>`;
-  tile.addEventListener('click', onOpen);
-  tile.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } });
-  return tile;
 }
 
 // Any tap outside an open card/page menu closes it. Single delegated
@@ -1998,7 +1986,7 @@ function renderMusica(root) {
         <div class="sub">Canciones, playlists y videos</div>
       </div>
       <div class="actions">
-        <button class="btn primary" id="new-media-btn">+ Nuevo</button>
+        <button class="add-btn" id="new-media-btn" type="button" title="Nuevo" aria-label="Nuevo"><span class="material-symbols-outlined">add</span></button>
       </div>
     </div>
     ${featured.length ? `
@@ -2028,7 +2016,6 @@ function renderMusica(root) {
   }
 
   const grid = $('#media-grid');
-  grid.appendChild(renderNewCtaTile('Nuevo', () => openMediaEditor(null)));
   items.forEach(m => grid.appendChild(renderMediaCard(m)));
 }
 
@@ -2198,7 +2185,7 @@ function renderFotos(root) {
         <div class="sub">${scoped.length} foto${scoped.length === 1 ? '' : 's'} · ${totalAlbums} álbum${totalAlbums === 1 ? '' : 'es'}</div>
       </div>
       <div class="actions">
-        <button class="btn primary" id="upload-btn">+ Subir fotos</button>
+        <button class="add-btn" id="upload-btn" type="button" title="Subir fotos" aria-label="Subir fotos"><span class="material-symbols-outlined">add</span></button>
       </div>
     </div>
     ${sortedTags.length ? `
@@ -2279,7 +2266,7 @@ function renderAlbumDetail(root, slug) {
       </div>
       <div class="actions">
         ${photos.length ? `<button class="btn icon-pill" id="view-all-btn" type="button" title="Ver en presentación" aria-label="Ver en presentación"><span class="material-symbols-outlined">slideshow</span></button>` : ''}
-        <button class="btn icon-pill primary" id="upload-btn" type="button" title="Subir fotos" aria-label="Subir fotos"><span class="material-symbols-outlined">add</span></button>
+        <button class="add-btn" id="upload-btn" type="button" title="Subir fotos" aria-label="Subir fotos"><span class="material-symbols-outlined">add</span></button>
       </div>
     </div>
     <div class="photo-grid" id="photo-grid"></div>
@@ -5216,7 +5203,7 @@ function renderPelis(root) {
         <div class="sub">Lo que queremos ver y lo que ya vimos</div>
       </div>
       <div class="actions">
-        <button class="btn primary" id="new-movie-btn">+ Nueva peli</button>
+        <button class="add-btn" id="new-movie-btn" type="button" title="Nueva peli" aria-label="Nueva peli"><span class="material-symbols-outlined">add</span></button>
       </div>
     </div>
     <div class="seg-tabs" id="pelis-tabs">

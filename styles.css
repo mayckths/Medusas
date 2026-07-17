@@ -524,7 +524,6 @@ nav.menu a .m-icon { font-size: 20px; width: 22px; text-align: center; }
 .lb-feature .material-symbols-outlined,
 .lb-delete .material-symbols-outlined { font-size: 20px; }
 .media-card .play-overlay .play .material-symbols-outlined { font-size: 26px; }
-.card.new-cta .plus .material-symbols-outlined { font-size: 22px; }
 .config-tabs button .material-symbols-outlined { font-size: 18px; }
 .bubble-actions .material-symbols-outlined { font-size: 16px; }
 .chat-filter .material-symbols-outlined { font-size: 14px; }
@@ -866,24 +865,6 @@ button.btn.pin-toggle.is-pinned {
   background: #f9b233;
   border-color: transparent;
 }
-
-/* New CTA tile — verde sólido (rediseño Figma): sin borde punteado. */
-.card.new-cta {
-  background: rgba(61, 87, 74, 0.85);
-  border: 1.5px solid rgba(130, 156, 140, 0.7);
-  box-shadow: none;
-  align-items: center; justify-content: center; min-height: 140px;
-  color: #f9f6f0; text-align: center; gap: 0.35rem; cursor: pointer;
-}
-.card.new-cta:hover { border-color: rgba(130, 156, 140, 1); background: rgba(61, 87, 74, 1); color: #f9f6f0; }
-.card.new-cta .plus {
-  width: 36px; height: 36px; border-radius: 999px;
-  background: transparent; border: 0;
-  display: grid; place-items: center; font-size: 1.3rem; line-height: 1; color: inherit;
-}
-.card.new-cta .label { font-size: 0.95rem; font-weight: 600; color: inherit; }
-.grid-list .card.new-cta { min-height: 0; flex-direction: row; justify-content: flex-start; padding: 0.75rem 1rem; }
-.grid-list .card.new-cta .plus { width: 28px; height: 28px; font-size: 1.05rem; }
 
 /* ======== Dashboard ======== */
 /* Relationship stats widget — a single rounded strip at the top of the
@@ -1276,7 +1257,7 @@ button.btn.pin-toggle.is-pinned {
 
 /* Botón (+) de nueva nota en el header (rediseño Figma): círculo
    terracota de 40px con el plus blanco. */
-.note-add-btn {
+.add-btn {
   width: 40px; height: 40px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -1288,9 +1269,9 @@ button.btn.pin-toggle.is-pinned {
   flex-shrink: 0;
   transition: background 0.15s ease, transform 0.08s ease;
 }
-.note-add-btn:hover { background: #c76d52; }
-.note-add-btn:active { transform: scale(0.94); }
-.note-add-btn .material-symbols-outlined { font-size: 22px; }
+.add-btn:hover { background: #c76d52; }
+.add-btn:active { transform: scale(0.94); }
+.add-btn .material-symbols-outlined { font-size: 22px; }
 
 /* ======== Tags filter row ======== */
 .tag-filter-row { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; }
@@ -2844,31 +2825,6 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
   /* Cap runaway cards (huge checklists) — the checklist fit logic trims
      items to the visible height and shows "+N más". */
   #notes-grid.grid-cards .card.note-card { max-height: 340px; }
-}
-
-/* New-CTA tile matches note-card aspect to keep the grid uniform */
-.card.new-cta {
-  aspect-ratio: 1 / 1;
-  min-height: 0;
-}
-/* On mobile the 1:1 tile takes half the screen — way too much real
-   estate for an entry point. Collapse to a slim full-round pill across
-   the row so the actual notes lead the layout. */
-@media (max-width: 760px) {
-  .card.new-cta {
-    aspect-ratio: auto;
-    grid-column: 1 / -1;
-    height: 52px;
-    border-radius: 999px;
-    flex-direction: row;
-    justify-content: center;
-    gap: 0.6rem;
-    padding: 0 1rem;
-  }
-  .card.new-cta .plus {
-    width: 24px; height: 24px;
-  }
-  .card.new-cta .label { font-size: 0.95rem; }
 }
 
 .tag-row { margin-bottom: 0.25rem; }
