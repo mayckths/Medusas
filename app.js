@@ -2222,11 +2222,14 @@ function renderTripBookings(root, trip) {
   }
 }
 
+// Un adjunto puede ser un archivo subido al storage ({path}) o un link
+// externo, p. ej. Google Drive ({url}).
 function attachmentChips(item) {
   const atts = Array.isArray(item.attachments) ? item.attachments : [];
-  return atts.filter(a => a && a.path).map(a =>
-    `<a class="ticket-chip solid" href="${escapeHtml(publicImageUrl(a.path))}" target="_blank" rel="noopener noreferrer"><span class="material-symbols-outlined">confirmation_number</span> ${escapeHtml(a.person || 'Ticket')}</a>`
-  ).join('');
+  return atts.filter(a => a && (a.path || a.url)).map(a => {
+    const href = a.url || publicImageUrl(a.path);
+    return `<a class="ticket-chip solid" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(a.name || '')}"><span class="material-symbols-outlined">confirmation_number</span> ${escapeHtml(a.person || 'Ticket')}</a>`;
+  }).join('');
 }
 
 function wireConfChip(card, code) {
@@ -2323,13 +2326,13 @@ async function uploadTripFile(tripId, person, file) {
 // `#{prefix}-file-jaime/mayck`. Reemplaza (y borra del storage) el
 // adjunto previo de esa persona si sube uno nuevo.
 async function collectTripAttachments(prefix, tripId, existing) {
-  const atts = Array.isArray(existing) ? existing.filter(a => a && a.path) : [];
+  const atts = Array.isArray(existing) ? existing.filter(a => a && (a.path || a.url)) : [];
   for (const person of ['Jaime', 'Mayck']) {
     const input = $(`#${prefix}-file-${person.toLowerCase()}`);
     const file = input && input.files && input.files[0];
     if (!file) continue;
     const prevIdx = atts.findIndex(a => a.person === person);
-    if (prevIdx >= 0) {
+    if (prevIdx >= 0 && atts[prevIdx].path) {
       try { await supabase.storage.from(BUCKET).remove([atts[prevIdx].path]); } catch {}
     }
     const uploaded = await uploadTripFile(tripId, person, file);
