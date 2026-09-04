@@ -28,7 +28,7 @@
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
 
-    <link rel="stylesheet" href="./styles.css?v=20260707c" />
+    <link rel="stylesheet" href="./styles.css?v=20260716a" />
 
     <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>
@@ -120,6 +120,9 @@
             <span class="material-symbols-outlined m-icon">movie</span><span>Pelis y Series</span>
             <span class="badge-unread" data-unread="pelis" hidden></span>
           </a>
+          <a href="#/viajes" data-route="#/viajes">
+            <span class="material-symbols-outlined m-icon">flight_takeoff</span><span>Viajes</span>
+          </a>
         </nav>
       </aside>
 
@@ -140,6 +143,9 @@
         </a>
         <a href="#/pelis" data-route="#/pelis" class="m-item">
           <span class="material-symbols-outlined m-icon">movie</span><span class="m-label">Pelis y Series</span>
+        </a>
+        <a href="#/viajes" data-route="#/viajes" class="m-item">
+          <span class="material-symbols-outlined m-icon">flight_takeoff</span><span class="m-label">Viajes</span>
         </a>
       </nav>
     </div>
@@ -394,6 +400,172 @@
       </div>
     </dialog>
 
+    <!-- ==================== Trip editor ==================== -->
+    <dialog class="modal" id="dlg-trip">
+      <div class="modal-inner">
+        <div class="modal-head">
+          <h2>Nuevo viaje</h2>
+          <button class="close-x" data-close><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div class="field">
+          <label for="trip-title">Destino</label>
+          <input type="text" id="trip-title" placeholder="Ej: Los Ángeles" maxlength="120" />
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="trip-start">Inicio</label>
+            <input type="date" id="trip-start" />
+          </div>
+          <div class="field">
+            <label for="trip-end">Fin</label>
+            <input type="date" id="trip-end" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="trip-people">Personas</label>
+          <input type="text" id="trip-people" placeholder="Jaime & Mayck" maxlength="120" value="Jaime & Mayck" />
+        </div>
+        <div class="field">
+          <label for="trip-base">Base (hospedaje, opcional)</label>
+          <input type="text" id="trip-base" placeholder="Dirección del Airbnb / hotel" maxlength="200" />
+        </div>
+        <div class="modal-actions">
+          <div class="left"><span class="status" id="trip-status"></span></div>
+          <div class="right">
+            <button class="btn ghost" data-close>Cancelar</button>
+            <button class="btn primary" id="trip-save">Guardar viaje</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- ==================== Booking editor ==================== -->
+    <dialog class="modal" id="dlg-booking">
+      <div class="modal-inner">
+        <div class="modal-head">
+          <h2 id="dlg-booking-title">Nueva reserva</h2>
+          <button class="close-x" data-close><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div class="field">
+          <label for="booking-title">Reserva</label>
+          <input type="text" id="booking-title" placeholder="Ej: The Getty Center" maxlength="160" />
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="booking-date">Fecha</label>
+            <input type="date" id="booking-date" />
+          </div>
+          <div class="field">
+            <label for="booking-time">Hora</label>
+            <input type="time" id="booking-time" />
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="booking-usd">USD</label>
+            <input type="number" id="booking-usd" placeholder="0" min="0" step="0.01" />
+          </div>
+          <div class="field">
+            <label for="booking-cop">COP</label>
+            <input type="number" id="booking-cop" placeholder="0" min="0" step="1" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="booking-confirmation">Número de confirmación</label>
+          <input type="text" id="booking-confirmation" placeholder="Código o localizador" maxlength="120" />
+        </div>
+        <div class="field">
+          <label for="booking-day">Día del itinerario</label>
+          <select id="booking-day"><option value="">Sin día asignado</option></select>
+        </div>
+        <div class="field">
+          <label>Tickets / adjuntos (pkpass, pdf, imagen)</label>
+          <div class="attach-row">
+            <label class="btn ghost attach-btn" for="booking-file-jaime"><span class="material-symbols-outlined">confirmation_number</span> Jaime <span class="attach-name" id="booking-file-jaime-name"></span></label>
+            <input type="file" id="booking-file-jaime" hidden />
+            <label class="btn ghost attach-btn" for="booking-file-mayck"><span class="material-symbols-outlined">confirmation_number</span> Mayck <span class="attach-name" id="booking-file-mayck-name"></span></label>
+            <input type="file" id="booking-file-mayck" hidden />
+          </div>
+        </div>
+        <div class="modal-actions">
+          <div class="left"><span class="status" id="booking-status"></span></div>
+          <button class="btn danger" id="booking-delete" hidden>Eliminar</button>
+          <div class="right">
+            <button class="btn ghost" data-close>Cancelar</button>
+            <button class="btn primary" id="booking-save">Guardar reserva</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- ==================== Flight editor ==================== -->
+    <dialog class="modal" id="dlg-flight">
+      <div class="modal-inner">
+        <div class="modal-head">
+          <h2 id="dlg-flight-title">Nuevo vuelo</h2>
+          <button class="close-x" data-close><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="flight-direction">Tramo</label>
+            <select id="flight-direction">
+              <option value="ida">Ida</option>
+              <option value="vuelta">Vuelta</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="flight-number">Vuelo</label>
+            <input type="text" id="flight-number" placeholder="AV 88" maxlength="20" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="flight-airline">Aerolínea</label>
+          <input type="text" id="flight-airline" placeholder="Avianca" maxlength="80" />
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="flight-from">Origen</label>
+            <input type="text" id="flight-from" placeholder="BOG" maxlength="60" />
+          </div>
+          <div class="field">
+            <label for="flight-to">Destino</label>
+            <input type="text" id="flight-to" placeholder="LAX" maxlength="60" />
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="flight-depart">Salida</label>
+            <input type="datetime-local" id="flight-depart" />
+          </div>
+          <div class="field">
+            <label for="flight-arrive">Llegada</label>
+            <input type="datetime-local" id="flight-arrive" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="flight-confirmation">Número de confirmación</label>
+          <input type="text" id="flight-confirmation" placeholder="Código de reserva" maxlength="120" />
+        </div>
+        <div class="field">
+          <label>Pases de abordar (pkpass, pdf, imagen)</label>
+          <div class="attach-row">
+            <label class="btn ghost attach-btn" for="flight-file-jaime"><span class="material-symbols-outlined">confirmation_number</span> Jaime <span class="attach-name" id="flight-file-jaime-name"></span></label>
+            <input type="file" id="flight-file-jaime" hidden />
+            <label class="btn ghost attach-btn" for="flight-file-mayck"><span class="material-symbols-outlined">confirmation_number</span> Mayck <span class="attach-name" id="flight-file-mayck-name"></span></label>
+            <input type="file" id="flight-file-mayck" hidden />
+          </div>
+        </div>
+        <div class="modal-actions">
+          <div class="left"><span class="status" id="flight-status"></span></div>
+          <button class="btn danger" id="flight-delete" hidden>Eliminar</button>
+          <div class="right">
+            <button class="btn ghost" data-close>Cancelar</button>
+            <button class="btn primary" id="flight-save">Guardar vuelo</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
     <!-- ==================== Movie editor ==================== -->
     <dialog class="modal" id="dlg-movie">
       <div class="modal-inner">
@@ -482,6 +654,6 @@
       <div class="notif-list" id="notif-list"></div>
     </div>
 
-    <script type="module" src="./app.js?v=20260707c"></script>
+    <script type="module" src="./app.js?v=20260716a"></script>
   </body>
 </html>

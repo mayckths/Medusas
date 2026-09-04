@@ -526,6 +526,15 @@ const state = {
   movies: [],
   chats: [],
   postits: [],
+  trips: [],
+  tripDays: [],
+  tripBookings: [],
+  tripFlights: [],
+  /* False when the trip tables don't exist yet in Supabase (the section
+     shows a setup hint instead of an empty list). */
+  tripsReady: false,
+  /* Pestaña activa del detalle de viaje. */
+  viajeTab: 'itinerario',
   settings: {
     photo_widget: { mode: 'featured', interval_ms: 6000 },
   },
@@ -766,6 +775,10 @@ async function loadAll() {
     { data: movies },
     { data: chats },
     { data: postits },
+    { data: trips, error: tripsErr },
+    { data: tripDays },
+    { data: tripBookings },
+    { data: tripFlights },
   ] = await Promise.all([
     supabase.from('notes').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('media').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
@@ -774,6 +787,10 @@ async function loadAll() {
     supabase.from('movies').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('chats').select('*').order('created_at', { ascending: true }).limit(200),
     supabase.from('postits').select('*').order('z_index', { ascending: true }).order('created_at', { ascending: true }),
+    supabase.from('trips').select('*').order('start_date', { ascending: true }),
+    supabase.from('trip_days').select('*').order('day_number', { ascending: true }),
+    supabase.from('trip_bookings').select('*').order('datetime', { ascending: true }),
+    supabase.from('trip_flights').select('*').order('depart_at', { ascending: true }),
   ]);
   state.notes = notes || [];
   state.media = media || [];
@@ -782,6 +799,11 @@ async function loadAll() {
   state.movies = movies || [];
   state.chats = chats || [];
   state.postits = postits || [];
+  state.trips = trips || [];
+  state.tripDays = tripDays || [];
+  state.tripBookings = tripBookings || [];
+  state.tripFlights = tripFlights || [];
+  state.tripsReady = !tripsErr;
   updateSidebarBadges();
   // Seed the ambient blurred backdrop from a featured photo (or any photo)
   // so it's already there even on non-dashboard routes
@@ -935,6 +957,8 @@ async function router() {
     case hash === '#/fotos': renderFotos(content); break;
     case hash.startsWith('#/fotos/album/'): renderAlbumDetail(content, hash.slice('#/fotos/album/'.length)); break;
     case hash === '#/pelis': renderPelis(content); break;
+    case hash === '#/viajes': renderViajes(content); break;
+    case hash.startsWith('#/viajes/'): renderViajeDetail(content, hash.slice('#/viajes/'.length)); break;
     case hash === '#/configuracion': renderConfig(content); break;
     default: location.hash = '#/inicio';
   }
@@ -945,6 +969,12 @@ async function router() {
   markSectionVisited(hash);
 }
 window.addEventListener('hashchange', router);
+
+// Debug hooks (QA en preview): permiten inspeccionar el estado e
+// invocar un re-render sin pasar por loadAll. No exponen nada sensible
+// — la app es privada y el estado ya vive en el cliente.
+window.medusasState = state;
+window.medusasRerender = () => rerenderCurrentPage();
 
 // Re-render the current page WITHOUT going through router/loadAll.
 // Used when the only change is local state (e.g. after closing the lightbox
@@ -963,6 +993,8 @@ function rerenderCurrentPage() {
     case hash === '#/fotos': renderFotos(content); break;
     case hash.startsWith('#/fotos/album/'): renderAlbumDetail(content, hash.slice('#/fotos/album/'.length)); break;
     case hash === '#/pelis': renderPelis(content); break;
+    case hash === '#/viajes': renderViajes(content); break;
+    case hash.startsWith('#/viajes/'): renderViajeDetail(content, hash.slice('#/viajes/'.length)); break;
     case hash === '#/configuracion': renderConfig(content); break;
   }
 }
@@ -1955,6 +1987,536 @@ function fitCardChecklist(card, note) {
     card._fitObs.observe(card);
   }
 }
+
+// ============================================================
+// Page: Viajes
+// ============================================================
+const TRIP_TYPE_LABELS = { libre: 'LIBRE', trabajo: 'TRABAJO', clase: 'CLASE', transito: 'TRÁNSITO' };
+// Días expandidos del itinerario (persiste dentro de la sesión).
+const expandedTripDays = new Set();
+// Reserva a resaltar al saltar desde un chip del itinerario.
+let highlightBookingId = null;
+
+function tripCountdown(trip) {
+  if (!trip.start_date) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const start = new Date(trip.start_date + 'T00:00:00');
+  const end = trip.end_date ? new Date(trip.end_date + 'T23:59:59') : start;
+  if (today > end) return { label: 'Viaje pasado', past: true };
+  if (today >= start) return { label: '¡En viaje! ✈️', now: true };
+  const days = Math.ceil((start - today) / 86400000);
+  return { label: `Falta${days === 1 ? '' : 'n'} ${days} día${days === 1 ? '' : 's'} ✈️` };
+}
+
+// '2026-09-25' → '25 sep'
+function fmtTripDate(iso) {
+  if (!iso) return '';
+  return new Date(iso + 'T00:00:00').toLocaleDateString('es', { day: 'numeric', month: 'short' });
+}
+// '2026-09-26' → 'Sáb 26 sep'
+function fmtTripDateLong(iso) {
+  if (!iso) return '';
+  const s = new Date(iso + 'T00:00:00').toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+// Timestamp SIN zona ('2026-09-26T10:00:00') → 'Sáb 26 sep · 10:00 am'.
+// Las columnas son TIMESTAMP (sin tz) a propósito: la hora es hora local
+// del destino y debe mostrarse igual en cualquier dispositivo.
+function fmtTripTs(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (Number.isNaN(d.getTime())) return '';
+  const date = d.toLocaleDateString('es', { weekday: 'short', day: 'numeric', month: 'short' });
+  const hasTime = d.getHours() !== 0 || d.getMinutes() !== 0;
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toLowerCase();
+  return `${date.charAt(0).toUpperCase() + date.slice(1)}${hasTime ? ` · ${time}` : ''}`;
+}
+
+function renderViajes(root) {
+  root.innerHTML = `
+    <div class="page-head">
+      <div><h1>Viajes</h1></div>
+      <button class="add-btn" id="trips-add-btn" type="button" title="Nuevo viaje" aria-label="Nuevo viaje"><span class="material-symbols-outlined">add</span></button>
+    </div>
+    <div class="trips-list" id="trips-list"></div>
+  `;
+  $('#trips-add-btn').addEventListener('click', () => openTripEditor());
+  const list = $('#trips-list');
+  if (!state.tripsReady) {
+    list.innerHTML = '<div class="empty">Faltan las tablas de viajes en Supabase — corre el SQL de configuración y recarga.</div>';
+    return;
+  }
+  if (!state.trips.length) {
+    list.innerHTML = '<div class="empty">Aún no hay viajes. Crea el primero con el botón +.</div>';
+    return;
+  }
+  state.trips.forEach(trip => list.appendChild(renderTripCard(trip)));
+}
+
+function renderTripCard(trip) {
+  const card = document.createElement('article');
+  card.className = 'trip-card cream-panel';
+  card.setAttribute('role', 'button');
+  card.tabIndex = 0;
+  const cd = tripCountdown(trip);
+  const days = trip.start_date && trip.end_date
+    ? Math.round((new Date(trip.end_date) - new Date(trip.start_date)) / 86400000) + 1
+    : null;
+  const bookings = state.tripBookings.filter(b => b.trip_id === trip.id);
+  const usd = bookings.reduce((s, b) => s + (Number(b.cost_usd) || 0), 0);
+  const year = trip.start_date ? ` ${new Date(trip.start_date + 'T00:00:00').getFullYear()}` : '';
+  card.innerHTML = `
+    ${cd ? `<span class="trip-countdown${cd.past ? ' past' : ''}">${escapeHtml(cd.label)}</span>` : ''}
+    <h2>${escapeHtml(trip.title)}</h2>
+    <div class="trip-dates">${fmtTripDate(trip.start_date)} – ${fmtTripDate(trip.end_date)}${year}${trip.people ? ` · ${escapeHtml(trip.people)}` : ''}</div>
+    <div class="trip-meta">
+      ${days ? `<span>${days} días</span>` : ''}
+      <span>${bookings.length} reserva${bookings.length === 1 ? '' : 's'}</span>
+      ${usd ? `<span>$${usd.toLocaleString('en-US')} USD</span>` : ''}
+    </div>`;
+  const open = () => { location.hash = '#/viajes/' + trip.id; };
+  card.addEventListener('click', open);
+  card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+  return card;
+}
+
+function renderViajeDetail(root, id) {
+  const trip = state.trips.find(t => t.id === id);
+  if (!trip) { location.hash = '#/viajes'; return; }
+  const cd = tripCountdown(trip);
+  const tab = state.viajeTab;
+  const subParts = [];
+  if (trip.start_date) subParts.push(`${fmtTripDateLong(trip.start_date)} – ${fmtTripDateLong(trip.end_date)}`);
+  if (trip.base) subParts.push(`Base: ${escapeHtml(trip.base)}`);
+  if (cd) subParts.push(escapeHtml(cd.label));
+  root.innerHTML = `
+    <div class="trip-detail-head">
+      <a class="trip-back" href="#/viajes" aria-label="Volver a viajes"><span class="material-symbols-outlined">arrow_back_ios_new</span></a>
+      <h1>${escapeHtml(trip.title)}</h1>
+    </div>
+    <div class="trip-subline">${subParts.join(' · ')}</div>
+    <div class="seg-tabs" id="trip-tabs">
+      <button class="seg-tab ${tab === 'itinerario' ? 'active' : ''}" data-tab="itinerario">Itinerario</button>
+      <button class="seg-tab ${tab === 'reservas' ? 'active' : ''}" data-tab="reservas">Reservas</button>
+      <button class="seg-tab ${tab === 'vuelos' ? 'active' : ''}" data-tab="vuelos">Vuelos</button>
+    </div>
+    <div id="trip-tab-body"></div>
+  `;
+  $('#trip-tabs').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-tab]');
+    if (!b || b.dataset.tab === state.viajeTab) return;
+    state.viajeTab = b.dataset.tab;
+    renderViajeDetail(root, id);
+  });
+  const body = $('#trip-tab-body');
+  if (tab === 'itinerario') renderTripItinerary(body, trip);
+  else if (tab === 'reservas') renderTripBookings(body, trip);
+  else renderTripFlights(body, trip);
+}
+
+// ---- Itinerario -----------------------------------------------------------
+const DAY_PREVIEW_BLOCKS = 4;
+
+function renderTripItinerary(root, trip) {
+  const days = state.tripDays
+    .filter(d => d.trip_id === trip.id)
+    .sort((a, b) => (a.day_number || 0) - (b.day_number || 0));
+  if (!days.length) {
+    root.innerHTML = '<div class="empty">Este viaje aún no tiene itinerario.</div>';
+    return;
+  }
+  days.forEach(day => root.appendChild(renderTripDayCard(trip, day)));
+}
+
+function renderTripDayCard(trip, day) {
+  const card = document.createElement('article');
+  card.className = 'day-card cream-panel';
+  const expanded = expandedTripDays.has(day.id);
+  const blocks = Array.isArray(day.blocks) ? day.blocks : [];
+  const visible = expanded ? blocks : blocks.slice(0, DAY_PREVIEW_BLOCKS);
+  const linked = state.tripBookings.filter(b => b.day_id === day.id);
+  const collapsible = blocks.length > DAY_PREVIEW_BLOCKS || day.note || blocks.some(b => b.note);
+  card.innerHTML = `
+    <div class="day-top">
+      ${day.day_number ? `<span class="day-num">${day.day_number}</span>` : ''}
+      <span class="day-title">${fmtTripDateLong(day.date)}${day.title ? ` — ${escapeHtml(day.title)}` : ''}</span>
+      ${day.highlight ? '<span class="type-chip destacado">DESTACADO</span>' : ''}
+      <span class="type-chip ${escapeHtml(day.day_type || 'libre')}">${TRIP_TYPE_LABELS[day.day_type] || 'LIBRE'}</span>
+    </div>
+    ${visible.map(b => `
+      <div class="day-block">
+        <span class="db-time">${escapeHtml(b.time || '')}</span>
+        <span class="db-text">${escapeHtml(b.text || '')}${expanded && b.note ? `<span class="db-note">${escapeHtml(b.note)}</span>` : ''}</span>
+      </div>`).join('')}
+    ${expanded && day.note ? `<div class="day-note">${escapeHtml(day.note)}</div>` : ''}
+    ${linked.length ? `<div class="day-tickets">${linked.map(b =>
+      `<button class="ticket-chip" type="button" data-booking="${b.id}"><span class="material-symbols-outlined">confirmation_number</span> ${escapeHtml(b.title)}</button>`).join('')}</div>` : ''}
+    ${collapsible ? `<button class="day-toggle" type="button">${expanded ? 'Ver menos ↑' : 'Ver día completo ›'}</button>` : ''}
+  `;
+  const toggle = card.querySelector('.day-toggle');
+  if (toggle) toggle.addEventListener('click', () => {
+    if (expanded) expandedTripDays.delete(day.id); else expandedTripDays.add(day.id);
+    card.replaceWith(renderTripDayCard(trip, day));
+  });
+  // Un chip de reserva salta a la pestaña Reservas y resalta esa card.
+  card.querySelectorAll('.ticket-chip').forEach(ch => ch.addEventListener('click', () => {
+    state.viajeTab = 'reservas';
+    highlightBookingId = ch.dataset.booking;
+    rerenderCurrentPage();
+  }));
+  return card;
+}
+
+// ---- Reservas -------------------------------------------------------------
+function renderTripBookings(root, trip) {
+  const bookings = state.tripBookings.filter(b => b.trip_id === trip.id);
+  const usd = bookings.reduce((s, b) => s + (Number(b.cost_usd) || 0), 0);
+  const cop = bookings.reduce((s, b) => s + (Number(b.cost_cop) || 0), 0);
+  root.innerHTML = `
+    ${bookings.length ? `
+      <div class="trip-total">
+        <span>Total: $${usd.toLocaleString('en-US')} USD${cop ? ` · $${cop.toLocaleString('es-CO')} COP` : ''}</span>
+        <span class="pp">$${Math.round(usd / 2).toLocaleString('en-US')} pp</span>
+      </div>` : ''}
+    <button class="trip-add-row" id="add-booking" type="button"><span class="material-symbols-outlined">add</span> Agregar reserva</button>
+    <div class="trip-cards" id="bookings-list"></div>
+  `;
+  $('#add-booking').addEventListener('click', () => openBookingEditor(trip, null));
+  const list = $('#bookings-list');
+  if (!bookings.length) {
+    list.innerHTML = '<div class="empty">Sin reservas todavía.</div>';
+    return;
+  }
+  bookings.forEach(b => list.appendChild(renderBookingCard(trip, b)));
+  if (highlightBookingId) {
+    const target = list.querySelector(`[data-id="${highlightBookingId}"]`);
+    highlightBookingId = null;
+    if (target) {
+      target.classList.add('flash');
+      requestAnimationFrame(() => target.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+      setTimeout(() => target.classList.remove('flash'), 1600);
+    }
+  }
+}
+
+function attachmentChips(item) {
+  const atts = Array.isArray(item.attachments) ? item.attachments : [];
+  return atts.filter(a => a && a.path).map(a =>
+    `<a class="ticket-chip solid" href="${escapeHtml(publicImageUrl(a.path))}" target="_blank" rel="noopener noreferrer"><span class="material-symbols-outlined">confirmation_number</span> ${escapeHtml(a.person || 'Ticket')}</a>`
+  ).join('');
+}
+
+function wireConfChip(card, code) {
+  const chip = card.querySelector('.conf-chip');
+  if (!chip) return;
+  chip.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      uiToast('Confirmación copiada ✓');
+    } catch {
+      uiToast('No se pudo copiar', { error: true });
+    }
+  });
+}
+
+function renderBookingCard(trip, b) {
+  const card = document.createElement('article');
+  card.className = 'booking-card cream-panel';
+  card.dataset.id = b.id;
+  const day = state.tripDays.find(d => d.id === b.day_id);
+  const free = !Number(b.cost_usd);
+  const subParts = [];
+  if (b.datetime) subParts.push(fmtTripTs(b.datetime));
+  if (day) subParts.push(`<span class="bk-day">Día ${day.day_number}</span>`);
+  if (!free && Number(b.cost_cop)) subParts.push(`$${Number(b.cost_cop).toLocaleString('es-CO')} COP`);
+  card.innerHTML = `
+    <div class="bk-top">
+      <span class="bk-title">${escapeHtml(b.title)}</span>
+      <span class="bk-cost ${free ? 'free' : ''}">${free ? 'Gratis' : '$' + Number(b.cost_usd).toLocaleString('en-US')}</span>
+    </div>
+    ${subParts.length ? `<div class="bk-sub">${subParts.join(' · ')}</div>` : ''}
+    <div class="bk-chips">
+      ${b.confirmation ? `<button class="conf-chip" type="button" title="Copiar confirmación"><span class="material-symbols-outlined">content_copy</span> ${escapeHtml(b.confirmation)}</button>` : ''}
+      ${attachmentChips(b)}
+      <button class="bk-edit" type="button" aria-label="Editar reserva"><span class="material-symbols-outlined">more_horiz</span></button>
+    </div>`;
+  wireConfChip(card, b.confirmation);
+  card.querySelector('.bk-edit').addEventListener('click', () => openBookingEditor(trip, b));
+  return card;
+}
+
+// ---- Vuelos ---------------------------------------------------------------
+function renderTripFlights(root, trip) {
+  const flights = state.tripFlights.filter(f => f.trip_id === trip.id);
+  root.innerHTML = `
+    <button class="trip-add-row" id="add-flight" type="button"><span class="material-symbols-outlined">add</span> Agregar vuelo</button>
+    <div class="trip-cards" id="flights-list"></div>
+  `;
+  $('#add-flight').addEventListener('click', () => openFlightEditor(trip, null));
+  const list = $('#flights-list');
+  if (!flights.length) {
+    list.innerHTML = '<div class="empty">Aún no hay vuelos. Agrégalos cuando los compren ✈️</div>';
+    return;
+  }
+  flights.forEach(f => list.appendChild(renderFlightCard(trip, f)));
+}
+
+function renderFlightCard(trip, f) {
+  const card = document.createElement('article');
+  card.className = 'flight-card cream-panel';
+  const name = [f.airline, f.flight_number].filter(Boolean).join(' ');
+  const subParts = [];
+  if (f.depart_at) subParts.push('Sale ' + fmtTripTs(f.depart_at));
+  if (f.arrive_at) subParts.push('Llega ' + fmtTripTs(f.arrive_at));
+  card.innerHTML = `
+    <div class="bk-top">
+      <span class="dir-chip ${f.direction === 'vuelta' ? 'vuelta' : ''}">${f.direction === 'vuelta' ? 'VUELTA' : 'IDA'}</span>
+      <span class="bk-title">${escapeHtml(name || 'Vuelo')}</span>
+      ${f.depart_airport || f.arrive_airport ? `<span class="fl-route">${escapeHtml(f.depart_airport || '')} → ${escapeHtml(f.arrive_airport || '')}</span>` : ''}
+    </div>
+    ${subParts.length ? `<div class="bk-sub">${subParts.join(' · ')}</div>` : ''}
+    <div class="bk-chips">
+      ${f.confirmation ? `<button class="conf-chip" type="button" title="Copiar confirmación"><span class="material-symbols-outlined">content_copy</span> ${escapeHtml(f.confirmation)}</button>` : ''}
+      ${attachmentChips(f)}
+      <button class="bk-edit" type="button" aria-label="Editar vuelo"><span class="material-symbols-outlined">more_horiz</span></button>
+    </div>`;
+  wireConfChip(card, f.confirmation);
+  card.querySelector('.bk-edit').addEventListener('click', () => openFlightEditor(trip, f));
+  return card;
+}
+
+// ---- Adjuntos (tickets / pases) -------------------------------------------
+async function uploadTripFile(tripId, person, file) {
+  const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
+  const path = `trips/${tripId}/${crypto.randomUUID()}-${person.toLowerCase()}.${ext}`;
+  const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
+    cacheControl: '3600', upsert: false, contentType: file.type || 'application/octet-stream',
+  });
+  if (error) throw error;
+  return { person, path, name: file.name };
+}
+
+// Junta adjuntos existentes + archivos recién elegidos en los inputs
+// `#{prefix}-file-jaime/mayck`. Reemplaza (y borra del storage) el
+// adjunto previo de esa persona si sube uno nuevo.
+async function collectTripAttachments(prefix, tripId, existing) {
+  const atts = Array.isArray(existing) ? existing.filter(a => a && a.path) : [];
+  for (const person of ['Jaime', 'Mayck']) {
+    const input = $(`#${prefix}-file-${person.toLowerCase()}`);
+    const file = input && input.files && input.files[0];
+    if (!file) continue;
+    const prevIdx = atts.findIndex(a => a.person === person);
+    if (prevIdx >= 0) {
+      try { await supabase.storage.from(BUCKET).remove([atts[prevIdx].path]); } catch {}
+    }
+    const uploaded = await uploadTripFile(tripId, person, file);
+    if (prevIdx >= 0) atts[prevIdx] = uploaded; else atts.push(uploaded);
+  }
+  return atts;
+}
+
+function tripAttachmentName(item, person) {
+  const a = (item?.attachments || []).find(x => x && x.person === person);
+  return a ? '· ' + (a.name || 'archivo') : '';
+}
+
+// ---- Modal: nuevo viaje ----------------------------------------------------
+const dlgTrip = $('#dlg-trip');
+
+function openTripEditor() {
+  $('#trip-title').value = '';
+  $('#trip-start').value = '';
+  $('#trip-end').value = '';
+  $('#trip-people').value = 'Jaime & Mayck';
+  $('#trip-base').value = '';
+  $('#trip-status').textContent = '';
+  dlgTrip.showModal();
+  $('#trip-title').focus();
+}
+
+$('#trip-save').addEventListener('click', async () => {
+  const title = $('#trip-title').value.trim();
+  if (!title) { setStatus($('#trip-status'), 'El destino es obligatorio', true); $('#trip-title').focus(); return; }
+  setStatus($('#trip-status'), 'Guardando…');
+  try {
+    const { data, error } = await supabase.from('trips').insert({
+      title,
+      start_date: $('#trip-start').value || null,
+      end_date: $('#trip-end').value || null,
+      people: $('#trip-people').value.trim() || null,
+      base: $('#trip-base').value.trim() || null,
+      created_by: state.currentUser,
+    }).select().single();
+    if (error) throw error;
+    dlgTrip.close();
+    uiToast('Viaje creado ✓');
+    location.hash = '#/viajes/' + data.id;
+  } catch (e) { setStatus($('#trip-status'), `Error: ${e.message || e}`, true); }
+});
+
+// ---- Modal: reserva --------------------------------------------------------
+const dlgBooking = $('#dlg-booking');
+let bookingCtx = { trip: null, booking: null };
+
+function openBookingEditor(trip, booking) {
+  bookingCtx = { trip, booking };
+  $('#dlg-booking-title').textContent = booking ? 'Editar reserva' : 'Nueva reserva';
+  $('#booking-title').value = booking?.title || '';
+  const dt = booking?.datetime ? String(booking.datetime) : '';
+  $('#booking-date').value = dt ? dt.slice(0, 10) : '';
+  $('#booking-time').value = dt.length >= 16 ? dt.slice(11, 16) : '';
+  $('#booking-usd').value = booking?.cost_usd ?? '';
+  $('#booking-cop').value = booking?.cost_cop ?? '';
+  $('#booking-confirmation').value = booking?.confirmation || '';
+  const days = state.tripDays
+    .filter(d => d.trip_id === trip.id)
+    .sort((a, b) => (a.day_number || 0) - (b.day_number || 0));
+  $('#booking-day').innerHTML = '<option value="">Sin día asignado</option>' + days.map(d =>
+    `<option value="${d.id}" ${booking?.day_id === d.id ? 'selected' : ''}>Día ${d.day_number} · ${fmtTripDateLong(d.date)}${d.title ? ` — ${escapeHtml(d.title)}` : ''}</option>`
+  ).join('');
+  $('#booking-file-jaime').value = '';
+  $('#booking-file-mayck').value = '';
+  $('#booking-file-jaime-name').textContent = tripAttachmentName(booking, 'Jaime');
+  $('#booking-file-mayck-name').textContent = tripAttachmentName(booking, 'Mayck');
+  $('#booking-delete').hidden = !booking;
+  $('#booking-status').textContent = '';
+  dlgBooking.showModal();
+  $('#booking-title').focus();
+}
+
+$('#booking-file-jaime').addEventListener('change', (e) => {
+  $('#booking-file-jaime-name').textContent = e.target.files[0] ? '· ' + e.target.files[0].name : tripAttachmentName(bookingCtx.booking, 'Jaime');
+});
+$('#booking-file-mayck').addEventListener('change', (e) => {
+  $('#booking-file-mayck-name').textContent = e.target.files[0] ? '· ' + e.target.files[0].name : tripAttachmentName(bookingCtx.booking, 'Mayck');
+});
+
+$('#booking-save').addEventListener('click', async () => {
+  const { trip, booking } = bookingCtx;
+  if (!trip) return;
+  const title = $('#booking-title').value.trim();
+  if (!title) { setStatus($('#booking-status'), 'El nombre es obligatorio', true); $('#booking-title').focus(); return; }
+  const date = $('#booking-date').value;
+  const time = $('#booking-time').value;
+  setStatus($('#booking-status'), 'Guardando…');
+  try {
+    const attachments = await collectTripAttachments('booking', trip.id, booking?.attachments);
+    const payload = {
+      trip_id: trip.id,
+      day_id: $('#booking-day').value || null,
+      title,
+      datetime: date ? `${date}T${time || '00:00'}:00` : null,
+      cost_usd: $('#booking-usd').value === '' ? null : Number($('#booking-usd').value),
+      cost_cop: $('#booking-cop').value === '' ? null : Number($('#booking-cop').value),
+      confirmation: $('#booking-confirmation').value.trim() || null,
+      attachments,
+    };
+    if (booking) {
+      const { error } = await supabase.from('trip_bookings').update(payload).eq('id', booking.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('trip_bookings').insert(payload);
+      if (error) throw error;
+    }
+    dlgBooking.close();
+    uiToast(booking ? 'Reserva actualizada ✓' : 'Reserva guardada ✓');
+    await router();
+  } catch (e) { setStatus($('#booking-status'), `Error: ${e.message || e}`, true); }
+});
+
+$('#booking-delete').addEventListener('click', async () => {
+  const { booking } = bookingCtx;
+  if (!booking) return;
+  if (!(await uiConfirm(`¿Eliminar la reserva "${booking.title}"?`, { title: 'Eliminar reserva', confirmLabel: 'Eliminar', danger: true }))) return;
+  setStatus($('#booking-status'), 'Eliminando…');
+  try {
+    const paths = (booking.attachments || []).map(a => a && a.path).filter(Boolean);
+    if (paths.length) { try { await supabase.storage.from(BUCKET).remove(paths); } catch {} }
+    const { error } = await supabase.from('trip_bookings').delete().eq('id', booking.id);
+    if (error) throw error;
+    dlgBooking.close();
+    uiToast('Reserva eliminada');
+    await router();
+  } catch (e) { setStatus($('#booking-status'), `Error: ${e.message || e}`, true); }
+});
+
+// ---- Modal: vuelo ----------------------------------------------------------
+const dlgFlight = $('#dlg-flight');
+let flightCtx = { trip: null, flight: null };
+
+function openFlightEditor(trip, flight) {
+  flightCtx = { trip, flight };
+  $('#dlg-flight-title').textContent = flight ? 'Editar vuelo' : 'Nuevo vuelo';
+  $('#flight-direction').value = flight?.direction || 'ida';
+  $('#flight-airline').value = flight?.airline || '';
+  $('#flight-number').value = flight?.flight_number || '';
+  $('#flight-from').value = flight?.depart_airport || '';
+  $('#flight-to').value = flight?.arrive_airport || '';
+  $('#flight-depart').value = flight?.depart_at ? String(flight.depart_at).slice(0, 16) : '';
+  $('#flight-arrive').value = flight?.arrive_at ? String(flight.arrive_at).slice(0, 16) : '';
+  $('#flight-confirmation').value = flight?.confirmation || '';
+  $('#flight-file-jaime').value = '';
+  $('#flight-file-mayck').value = '';
+  $('#flight-file-jaime-name').textContent = tripAttachmentName(flight, 'Jaime');
+  $('#flight-file-mayck-name').textContent = tripAttachmentName(flight, 'Mayck');
+  $('#flight-delete').hidden = !flight;
+  $('#flight-status').textContent = '';
+  dlgFlight.showModal();
+}
+
+$('#flight-file-jaime').addEventListener('change', (e) => {
+  $('#flight-file-jaime-name').textContent = e.target.files[0] ? '· ' + e.target.files[0].name : tripAttachmentName(flightCtx.flight, 'Jaime');
+});
+$('#flight-file-mayck').addEventListener('change', (e) => {
+  $('#flight-file-mayck-name').textContent = e.target.files[0] ? '· ' + e.target.files[0].name : tripAttachmentName(flightCtx.flight, 'Mayck');
+});
+
+$('#flight-save').addEventListener('click', async () => {
+  const { trip, flight } = flightCtx;
+  if (!trip) return;
+  setStatus($('#flight-status'), 'Guardando…');
+  try {
+    const attachments = await collectTripAttachments('flight', trip.id, flight?.attachments);
+    const payload = {
+      trip_id: trip.id,
+      direction: $('#flight-direction').value,
+      airline: $('#flight-airline').value.trim() || null,
+      flight_number: $('#flight-number').value.trim() || null,
+      depart_airport: $('#flight-from').value.trim() || null,
+      arrive_airport: $('#flight-to').value.trim() || null,
+      depart_at: $('#flight-depart').value ? $('#flight-depart').value + ':00' : null,
+      arrive_at: $('#flight-arrive').value ? $('#flight-arrive').value + ':00' : null,
+      confirmation: $('#flight-confirmation').value.trim() || null,
+      attachments,
+    };
+    if (flight) {
+      const { error } = await supabase.from('trip_flights').update(payload).eq('id', flight.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('trip_flights').insert(payload);
+      if (error) throw error;
+    }
+    dlgFlight.close();
+    uiToast(flight ? 'Vuelo actualizado ✓' : 'Vuelo guardado ✓');
+    await router();
+  } catch (e) { setStatus($('#flight-status'), `Error: ${e.message || e}`, true); }
+});
+
+$('#flight-delete').addEventListener('click', async () => {
+  const { flight } = flightCtx;
+  if (!flight) return;
+  if (!(await uiConfirm('¿Eliminar este vuelo?', { title: 'Eliminar vuelo', confirmLabel: 'Eliminar', danger: true }))) return;
+  setStatus($('#flight-status'), 'Eliminando…');
+  try {
+    const paths = (flight.attachments || []).map(a => a && a.path).filter(Boolean);
+    if (paths.length) { try { await supabase.storage.from(BUCKET).remove(paths); } catch {} }
+    const { error } = await supabase.from('trip_flights').delete().eq('id', flight.id);
+    if (error) throw error;
+    dlgFlight.close();
+    uiToast('Vuelo eliminado');
+    await router();
+  } catch (e) { setStatus($('#flight-status'), `Error: ${e.message || e}`, true); }
+});
 
 // ============================================================
 // Page: Música
