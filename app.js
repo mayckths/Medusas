@@ -2123,6 +2123,7 @@ function renderViajeDetail(root, id) {
     <div class="trip-detail-head">
       <a class="trip-back" href="#/viajes" aria-label="Volver a viajes"><span class="material-symbols-outlined">arrow_back_ios_new</span></a>
       <h1>${escapeHtml(trip.title)}</h1>
+      <button class="trip-edit-btn" id="trip-edit-btn" type="button" aria-label="Editar viaje"><span class="material-symbols-outlined">edit</span></button>
     </div>
     <div class="trip-subline">${subParts.join(' · ')}</div>
     <div class="seg-tabs" id="trip-tabs">
@@ -2132,6 +2133,7 @@ function renderViajeDetail(root, id) {
     </div>
     <div id="trip-tab-body"></div>
   `;
+  $('#trip-edit-btn').addEventListener('click', () => openTripEditor(trip));
   $('#trip-tabs').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-tab]');
     if (!b || b.dataset.tab === state.viajeTab) return;
@@ -2149,11 +2151,17 @@ function renderTripItinerary(root, trip) {
   const days = state.tripDays
     .filter(d => d.trip_id === trip.id)
     .sort((a, b) => (a.day_number || 0) - (b.day_number || 0));
+  root.innerHTML = `
+    <button class="trip-add-row" id="add-day" type="button"><span class="material-symbols-outlined">add</span> Agregar día</button>
+    <div class="trip-cards" id="days-list"></div>
+  `;
+  $('#add-day').addEventListener('click', () => openDayEditor(trip, null));
+  const list = $('#days-list');
   if (!days.length) {
-    root.innerHTML = '<div class="empty">Este viaje aún no tiene itinerario.</div>';
+    list.innerHTML = '<div class="empty">Este viaje aún no tiene itinerario. Agrega el primer día.</div>';
     return;
   }
-  days.forEach(day => root.appendChild(renderTripDayCard(trip, day)));
+  days.forEach(day => list.appendChild(renderTripDayCard(trip, day)));
 }
 
 // Acordeón: colapsado solo muestra icono + "Sáb 26 sept — Getty y costa";
@@ -2165,11 +2173,12 @@ function renderTripDayCard(trip, day) {
   const blocks = Array.isArray(day.blocks) ? day.blocks : [];
   const linked = state.tripBookings.filter(b => b.day_id === day.id);
   card.innerHTML = `
-    <button class="day-head" type="button" aria-expanded="${expanded}">
+    <div class="day-head" role="button" tabindex="0" aria-expanded="${expanded}">
       <span class="day-icon${day.highlight ? ' hl' : ''}"><span class="material-symbols-outlined">${tripDayIcon(day)}</span></span>
       <span class="day-title">${fmtTripDateLong(day.date)}${day.title ? ` — ${escapeHtml(day.title)}` : ''}</span>
+      <button class="day-edit" type="button" aria-label="Editar día"><span class="material-symbols-outlined">edit</span></button>
       <span class="material-symbols-outlined day-chevron">expand_more</span>
-    </button>
+    </div>
     ${expanded ? `
       <div class="day-body">
         ${blocks.map(b => `
@@ -2183,9 +2192,16 @@ function renderTripDayCard(trip, day) {
       </div>
     ` : ''}
   `;
-  card.querySelector('.day-head').addEventListener('click', () => {
+  const head = card.querySelector('.day-head');
+  const toggle = () => {
     if (expanded) expandedTripDays.delete(day.id); else expandedTripDays.add(day.id);
     card.replaceWith(renderTripDayCard(trip, day));
+  };
+  head.addEventListener('click', toggle);
+  head.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+  card.querySelector('.day-edit').addEventListener('click', (e) => {
+    e.stopPropagation();
+    openDayEditor(trip, day);
   });
   // Un chip de reserva salta a la pestaña Reservas y resalta esa card.
   card.querySelectorAll('.ticket-chip').forEach(ch => ch.addEventListener('click', (e) => {
@@ -2196,6 +2212,113 @@ function renderTripDayCard(trip, day) {
   }));
   return card;
 }
+
+// Renumera los días del viaje por fecha (1..n) para que "Día N" siga
+// siendo correcto después de agregar, editar o eliminar días.
+async function renumberTripDays(tripId) {
+  const { data } = await supabase.from('trip_days').select('id, date, day_number').eq('trip_id', tripId);
+  const days = (data || []).sort((a, b) =>
+    (a.date || '9999-99-99').localeCompare(b.date || '9999-99-99') || (a.day_number || 0) - (b.day_number || 0));
+  for (let i = 0; i < days.length; i++) {
+    if (days[i].day_number !== i + 1) {
+      await supabase.from('trip_days').update({ day_number: i + 1 }).eq('id', days[i].id);
+    }
+  }
+}
+
+// ---- Modal: día del itinerario ----------------------------------------------
+const dlgDay = $('#dlg-day');
+let dayCtx = { trip: null, day: null };
+
+function dayBlockRow(block = {}) {
+  const row = document.createElement('div');
+  row.className = 'blk-row';
+  row.innerHTML = `
+    <input class="blk-time" type="text" placeholder="10:00 am" maxlength="20" value="${escapeHtml(block.time || '')}" />
+    <input class="blk-text" type="text" placeholder="Actividad" maxlength="200" value="${escapeHtml(block.text || '')}" />
+    <button class="blk-del" type="button" aria-label="Quitar bloque"><span class="material-symbols-outlined">close</span></button>
+    <input class="blk-note" type="text" placeholder="Nota (opcional)" maxlength="300" value="${escapeHtml(block.note || '')}" />
+  `;
+  row.querySelector('.blk-del').addEventListener('click', () => row.remove());
+  return row;
+}
+
+function readDayBlocks() {
+  return $$('#day-blocks .blk-row').map(row => ({
+    time: row.querySelector('.blk-time').value.trim(),
+    text: row.querySelector('.blk-text').value.trim(),
+    note: row.querySelector('.blk-note').value.trim(),
+  })).filter(b => b.time || b.text || b.note)
+    .map(b => (b.note ? b : { time: b.time, text: b.text }));
+}
+
+function openDayEditor(trip, day) {
+  dayCtx = { trip, day };
+  $('#dlg-day-title').textContent = day ? 'Editar día' : 'Nuevo día';
+  $('#day-date').value = day?.date || '';
+  $('#day-type').value = day?.day_type || 'libre';
+  $('#day-title').value = day?.title || '';
+  $('#day-highlight').checked = !!day?.highlight;
+  $('#day-note').value = day?.note || '';
+  const blocksRoot = $('#day-blocks');
+  blocksRoot.innerHTML = '';
+  const blocks = Array.isArray(day?.blocks) && day.blocks.length ? day.blocks : [{}];
+  blocks.forEach(b => blocksRoot.appendChild(dayBlockRow(b)));
+  $('#day-delete').hidden = !day;
+  $('#day-status').textContent = '';
+  dlgDay.showModal();
+}
+
+$('#day-add-block').addEventListener('click', () => {
+  const row = dayBlockRow();
+  $('#day-blocks').appendChild(row);
+  row.querySelector('.blk-time').focus();
+});
+
+$('#day-save').addEventListener('click', async () => {
+  const { trip, day } = dayCtx;
+  if (!trip) return;
+  setStatus($('#day-status'), 'Guardando…');
+  try {
+    const payload = {
+      trip_id: trip.id,
+      date: $('#day-date').value || null,
+      title: $('#day-title').value.trim() || null,
+      day_type: $('#day-type').value,
+      highlight: $('#day-highlight').checked,
+      note: $('#day-note').value.trim() || null,
+      blocks: readDayBlocks(),
+    };
+    if (day) {
+      const { error } = await supabase.from('trip_days').update(payload).eq('id', day.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('trip_days').insert(payload);
+      if (error) throw error;
+    }
+    await renumberTripDays(trip.id);
+    dlgDay.close();
+    uiToast(day ? 'Día actualizado ✓' : 'Día agregado ✓');
+    await router();
+  } catch (e) { setStatus($('#day-status'), `Error: ${e.message || e}`, true); }
+});
+
+$('#day-delete').addEventListener('click', async () => {
+  const { trip, day } = dayCtx;
+  if (!day) return;
+  const linked = state.tripBookings.filter(b => b.day_id === day.id).length;
+  const extra = linked ? ` Sus ${linked} reserva${linked === 1 ? '' : 's'} ligada${linked === 1 ? '' : 's'} quedará${linked === 1 ? '' : 'n'} sin día asignado.` : '';
+  if (!(await uiConfirm(`¿Eliminar este día del itinerario?${extra}`, { title: 'Eliminar día', confirmLabel: 'Eliminar', danger: true }))) return;
+  setStatus($('#day-status'), 'Eliminando…');
+  try {
+    const { error } = await supabase.from('trip_days').delete().eq('id', day.id);
+    if (error) throw error;
+    await renumberTripDays(trip.id);
+    dlgDay.close();
+    uiToast('Día eliminado');
+    await router();
+  } catch (e) { setStatus($('#day-status'), `Error: ${e.message || e}`, true); }
+});
 
 // ---- Reservas -------------------------------------------------------------
 function renderTripBookings(root, trip) {
@@ -2346,15 +2469,19 @@ function tripAttachmentName(item, person) {
   return a ? '· ' + (a.name || 'archivo') : '';
 }
 
-// ---- Modal: nuevo viaje ----------------------------------------------------
+// ---- Modal: viaje (crear / editar) ------------------------------------------
 const dlgTrip = $('#dlg-trip');
+let tripCtx = null; // viaje en edición (null = nuevo)
 
-function openTripEditor() {
-  $('#trip-title').value = '';
-  $('#trip-start').value = '';
-  $('#trip-end').value = '';
-  $('#trip-people').value = 'Jaime & Mayck';
-  $('#trip-base').value = '';
+function openTripEditor(trip = null) {
+  tripCtx = trip;
+  $('#dlg-trip-title').textContent = trip ? 'Editar viaje' : 'Nuevo viaje';
+  $('#trip-title').value = trip?.title || '';
+  $('#trip-start').value = trip?.start_date || '';
+  $('#trip-end').value = trip?.end_date || '';
+  $('#trip-people').value = trip?.people ?? 'Jaime & Mayck';
+  $('#trip-base').value = trip?.base || '';
+  $('#trip-delete').hidden = !trip;
   $('#trip-status').textContent = '';
   dlgTrip.showModal();
   $('#trip-title').focus();
@@ -2364,19 +2491,51 @@ $('#trip-save').addEventListener('click', async () => {
   const title = $('#trip-title').value.trim();
   if (!title) { setStatus($('#trip-status'), 'El destino es obligatorio', true); $('#trip-title').focus(); return; }
   setStatus($('#trip-status'), 'Guardando…');
+  const payload = {
+    title,
+    start_date: $('#trip-start').value || null,
+    end_date: $('#trip-end').value || null,
+    people: $('#trip-people').value.trim() || null,
+    base: $('#trip-base').value.trim() || null,
+  };
   try {
-    const { data, error } = await supabase.from('trips').insert({
-      title,
-      start_date: $('#trip-start').value || null,
-      end_date: $('#trip-end').value || null,
-      people: $('#trip-people').value.trim() || null,
-      base: $('#trip-base').value.trim() || null,
-      created_by: state.currentUser,
-    }).select().single();
+    if (tripCtx) {
+      const { error } = await supabase.from('trips').update(payload).eq('id', tripCtx.id);
+      if (error) throw error;
+      dlgTrip.close();
+      uiToast('Viaje actualizado ✓');
+      await router();
+    } else {
+      payload.created_by = state.currentUser;
+      const { data, error } = await supabase.from('trips').insert(payload).select().single();
+      if (error) throw error;
+      dlgTrip.close();
+      uiToast('Viaje creado ✓');
+      location.hash = '#/viajes/' + data.id;
+    }
+  } catch (e) { setStatus($('#trip-status'), `Error: ${e.message || e}`, true); }
+});
+
+$('#trip-delete').addEventListener('click', async () => {
+  if (!tripCtx) return;
+  const ok = await uiConfirm(
+    `¿Eliminar el viaje "${tripCtx.title}"? Se borra todo su itinerario, reservas y vuelos. Esta acción no se puede deshacer.`,
+    { title: 'Eliminar viaje', confirmLabel: 'Eliminar todo', danger: true }
+  );
+  if (!ok) return;
+  setStatus($('#trip-status'), 'Eliminando…');
+  try {
+    // Limpia del storage los adjuntos subidos (los links externos no aplican).
+    const paths = [...state.tripBookings, ...state.tripFlights]
+      .filter(x => x.trip_id === tripCtx.id)
+      .flatMap(x => (x.attachments || []).map(a => a && a.path).filter(Boolean));
+    if (paths.length) { try { await supabase.storage.from(BUCKET).remove(paths); } catch {} }
+    const { error } = await supabase.from('trips').delete().eq('id', tripCtx.id);
     if (error) throw error;
     dlgTrip.close();
-    uiToast('Viaje creado ✓');
-    location.hash = '#/viajes/' + data.id;
+    uiToast('Viaje eliminado');
+    location.hash = '#/viajes';
+    if (state.route === '#/viajes') await router();
   } catch (e) { setStatus($('#trip-status'), `Error: ${e.message || e}`, true); }
 });
 

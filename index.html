@@ -28,7 +28,7 @@
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
 
-    <link rel="stylesheet" href="./styles.css?v=20260716e" />
+    <link rel="stylesheet" href="./styles.css?v=20260716f" />
 
     <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>
@@ -404,7 +404,7 @@
     <dialog class="modal" id="dlg-trip">
       <div class="modal-inner">
         <div class="modal-head">
-          <h2>Nuevo viaje</h2>
+          <h2 id="dlg-trip-title">Nuevo viaje</h2>
           <button class="close-x" data-close><span class="material-symbols-outlined">close</span></button>
         </div>
         <div class="field">
@@ -431,9 +431,59 @@
         </div>
         <div class="modal-actions">
           <div class="left"><span class="status" id="trip-status"></span></div>
+          <button class="btn danger" id="trip-delete" hidden>Eliminar</button>
           <div class="right">
             <button class="btn ghost" data-close>Cancelar</button>
             <button class="btn primary" id="trip-save">Guardar viaje</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- ==================== Day editor (itinerario) ==================== -->
+    <dialog class="modal" id="dlg-day">
+      <div class="modal-inner">
+        <div class="modal-head">
+          <h2 id="dlg-day-title">Nuevo día</h2>
+          <button class="close-x" data-close><span class="material-symbols-outlined">close</span></button>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="day-date">Fecha</label>
+            <input type="date" id="day-date" />
+          </div>
+          <div class="field">
+            <label for="day-type">Tipo</label>
+            <select id="day-type">
+              <option value="libre">Libre</option>
+              <option value="trabajo">Trabajo</option>
+              <option value="clase">Clase</option>
+              <option value="transito">Tránsito</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="day-title">Título del día</label>
+          <input type="text" id="day-title" placeholder="Ej: Getty y costa" maxlength="120" />
+        </div>
+        <div class="field">
+          <label class="check-label"><input type="checkbox" id="day-highlight" /> Día destacado</label>
+        </div>
+        <div class="field">
+          <label>Bloques del día (hora + actividad)</label>
+          <div class="day-blocks-editor" id="day-blocks"></div>
+          <button class="btn ghost blk-add" id="day-add-block" type="button"><span class="material-symbols-outlined">add</span> Añadir bloque</button>
+        </div>
+        <div class="field">
+          <label for="day-note">Nota del día (opcional)</label>
+          <textarea id="day-note" placeholder="Contexto, tips, logística…"></textarea>
+        </div>
+        <div class="modal-actions">
+          <div class="left"><span class="status" id="day-status"></span></div>
+          <button class="btn danger" id="day-delete" hidden>Eliminar</button>
+          <div class="right">
+            <button class="btn ghost" data-close>Cancelar</button>
+            <button class="btn primary" id="day-save">Guardar día</button>
           </div>
         </div>
       </div>
@@ -654,6 +704,6 @@
       <div class="notif-list" id="notif-list"></div>
     </div>
 
-    <script type="module" src="./app.js?v=20260716e"></script>
+    <script type="module" src="./app.js?v=20260716f"></script>
   </body>
 </html>

@@ -2927,6 +2927,18 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 }
 .trip-back::before { content: ""; position: absolute; inset: -6px; }
 .trip-back .material-symbols-outlined { font-size: 19px; }
+/* Lápiz de editar viaje, al lado del título del detalle. */
+.trip-edit-btn {
+  background: transparent; border: 0;
+  color: var(--text-dim); cursor: pointer;
+  width: 34px; height: 34px;
+  display: grid; place-items: center;
+  position: relative; padding: 0;
+  flex-shrink: 0;
+}
+.trip-edit-btn::before { content: ""; position: absolute; inset: -5px; }
+.trip-edit-btn:hover { color: var(--text); }
+.trip-edit-btn .material-symbols-outlined { font-size: 18px; }
 .trip-subline { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 1rem; }
 
 #trip-tab-body { display: flex; flex-direction: column; gap: 0.7rem; max-width: 640px; }
@@ -2955,6 +2967,18 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 .day-icon.hl { background: rgba(199, 109, 82, 0.16); color: var(--accent); }
 .day-icon .material-symbols-outlined { font-size: 19px; }
 .day-title { font-weight: 600; font-size: 0.95rem; flex: 1; min-width: 0; }
+/* Lápiz de editar día — aparece tenue dentro de la fila del acordeón. */
+.day-edit {
+  background: transparent; border: 0;
+  color: #bcb5b2; cursor: pointer;
+  width: 28px; height: 28px;
+  display: grid; place-items: center;
+  position: relative; padding: 0;
+  flex-shrink: 0;
+}
+.day-edit::before { content: ""; position: absolute; inset: -7px; }
+.day-edit:hover { color: var(--text); }
+.day-edit .material-symbols-outlined { font-size: 16px; }
 .day-chevron {
   font-size: 20px; color: var(--text-dim);
   transition: transform 0.18s ease;
@@ -3064,6 +3088,34 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
   font-size: 0.72rem; color: var(--text-dim);
   max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* Editor de bloques del día (modal) */
+.day-blocks-editor { display: flex; flex-direction: column; gap: 0.65rem; margin-bottom: 0.5rem; }
+.blk-row {
+  display: grid;
+  grid-template-columns: 92px 1fr 32px;
+  gap: 0.4rem;
+  align-items: center;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px dashed var(--border);
+}
+.blk-row .blk-note { grid-column: 1 / -1; }
+.blk-row input {
+  border: 1px solid var(--border); background: var(--surface-alt); color: var(--text);
+  padding: 0.45rem 0.55rem; border-radius: 8px; font-size: 0.88rem; outline: none;
+  min-width: 0; width: 100%; font-family: inherit;
+}
+.blk-row input:focus { border-color: var(--accent); background: var(--surface); }
+.blk-row .blk-del {
+  background: transparent; border: 0; color: var(--text-dim); cursor: pointer;
+  width: 32px; height: 32px; display: grid; place-items: center; padding: 0;
+  border-radius: 8px;
+}
+.blk-row .blk-del:hover { color: var(--danger); background: rgba(168, 65, 42, 0.1); }
+.blk-row .blk-del .material-symbols-outlined { font-size: 17px; }
+.blk-add { display: inline-flex; align-items: center; gap: 0.3rem; }
+.check-label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem !important; color: var(--text) !important; cursor: pointer; }
+.check-label input { accent-color: var(--accent); width: 17px; height: 17px; }
 
 /* Note editor: more spacing between header and title input */
 #dlg-note .modal-inner input.title { margin-top: 0.5rem; padding-top: 0.4rem; }
