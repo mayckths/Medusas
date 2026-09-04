@@ -2884,16 +2884,15 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
   pointer-events: none;
 }
 .trip-card > * { position: relative; }
+/* Vidrio oscuro, igual que los chips de meta — el terracota se perdía
+   contra el naranja de la foto. */
 .trip-card .trip-countdown {
-  background: var(--accent); color: #fff;
+  background: rgba(24, 12, 16, 0.55); color: #f9f6f0;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   font-size: 0.8rem; font-weight: 600;
   padding: 0.3rem 0.75rem; border-radius: 999px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
 }
-.trip-card .trip-countdown.past {
-  background: rgba(24, 12, 16, 0.55); color: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-}
+.trip-card .trip-countdown.past { color: rgba(255, 255, 255, 0.8); }
 .trip-card-info { display: flex; flex-direction: column; gap: 0.4rem; width: 100%; }
 .trip-card h2 {
   margin: 0;
