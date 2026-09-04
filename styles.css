@@ -2846,33 +2846,72 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 }
 
 .trips-list { display: flex; flex-direction: column; gap: 0.8rem; max-width: 560px; }
+/* Card de viaje con foto de portada. El scrim inferior (ciruela oscuro)
+   garantiza contraste AA del texto blanco sobre la foto clara; el texto
+   ancla abajo, donde el scrim es más fuerte. */
 .trip-card {
   cursor: pointer;
-  display: flex; flex-direction: column; gap: 0.55rem;
+  position: relative;
+  display: flex; flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
   border-radius: 20px;
-  padding: 1.15rem 1.2rem 1.05rem;
+  padding: 1.05rem 1.15rem 1.05rem;
+  overflow: hidden;
+  background-size: cover;
+  background-position: center;
+  background-color: #2a161d;
+  color: #ffffff;
+  aspect-ratio: 16 / 10;
+  min-height: 200px;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 @media (hover: hover) {
   .trip-card:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(0, 0, 0, 0.28); }
 }
+.trip-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgba(38, 16, 24, 0.90) 0%,
+    rgba(38, 16, 24, 0.68) 38%,
+    rgba(38, 16, 24, 0.18) 68%,
+    rgba(38, 16, 24, 0.06) 100%
+  );
+  pointer-events: none;
+}
+.trip-card > * { position: relative; }
 .trip-card .trip-countdown {
-  align-self: flex-start;
   background: var(--accent); color: #fff;
   font-size: 0.8rem; font-weight: 600;
   padding: 0.3rem 0.75rem; border-radius: 999px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
 }
-.trip-card .trip-countdown.past { background: #e4dcce; color: rgba(28, 28, 38, 0.6); }
+.trip-card .trip-countdown.past {
+  background: rgba(24, 12, 16, 0.55); color: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.trip-card-info { display: flex; flex-direction: column; gap: 0.4rem; width: 100%; }
 .trip-card h2 {
   margin: 0;
   font-family: 'Playfair Display', Georgia, serif;
   font-size: 1.75rem;
   letter-spacing: -0.01em;
+  color: #ffffff;
+  text-shadow: 0 1px 14px rgba(20, 8, 12, 0.45);
 }
-.trip-card .trip-dates { font-size: 0.9rem; color: rgba(28, 28, 38, 0.75); font-weight: 500; }
-.trip-meta { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.trip-card .trip-dates {
+  font-size: 0.9rem; font-weight: 500;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 1px 8px rgba(20, 8, 12, 0.45);
+}
+.trip-meta { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.15rem; }
 .trip-meta span {
-  background: rgba(61, 87, 74, 0.14); color: #2d4739;
+  background: rgba(24, 12, 16, 0.55); color: #f9f6f0;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   font-size: 0.78rem; font-weight: 500;
   padding: 0.3rem 0.65rem; border-radius: 999px;
 }

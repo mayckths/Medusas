@@ -2078,9 +2078,14 @@ function renderViajes(root) {
   state.trips.forEach(trip => list.appendChild(renderTripCard(trip)));
 }
 
+// Portada por defecto de las cards de viaje (storage app-assets). Si el
+// viaje trae cover_path propio (columna futura), se usa ese.
+const TRIP_DEFAULT_COVER_PATH = 'trips/cover-la.jpg';
+
 function renderTripCard(trip) {
   const card = document.createElement('article');
-  card.className = 'trip-card cream-panel';
+  card.className = 'trip-card';
+  card.style.backgroundImage = `url("${publicAssetUrl(trip.cover_path || TRIP_DEFAULT_COVER_PATH)}")`;
   card.setAttribute('role', 'button');
   card.tabIndex = 0;
   const cd = tripCountdown(trip);
@@ -2088,16 +2093,16 @@ function renderTripCard(trip) {
     ? Math.round((new Date(trip.end_date) - new Date(trip.start_date)) / 86400000) + 1
     : null;
   const bookings = state.tripBookings.filter(b => b.trip_id === trip.id);
-  const usd = bookings.reduce((s, b) => s + (Number(b.cost_usd) || 0), 0);
   const year = trip.start_date ? ` ${new Date(trip.start_date + 'T00:00:00').getFullYear()}` : '';
   card.innerHTML = `
     ${cd ? `<span class="trip-countdown${cd.past ? ' past' : ''}">${escapeHtml(cd.label)}</span>` : ''}
-    <h2>${escapeHtml(trip.title)}</h2>
-    <div class="trip-dates">${fmtTripDate(trip.start_date)} – ${fmtTripDate(trip.end_date)}${year}${trip.people ? ` · ${escapeHtml(trip.people)}` : ''}</div>
-    <div class="trip-meta">
-      ${days ? `<span>${days} días</span>` : ''}
-      <span>${bookings.length} reserva${bookings.length === 1 ? '' : 's'}</span>
-      ${usd ? `<span>$${usd.toLocaleString('en-US')} USD</span>` : ''}
+    <div class="trip-card-info">
+      <h2>${escapeHtml(trip.title)}</h2>
+      <div class="trip-dates">${fmtTripDate(trip.start_date)} – ${fmtTripDate(trip.end_date)}${year}${trip.people ? ` · ${escapeHtml(trip.people)}` : ''}</div>
+      <div class="trip-meta">
+        ${days ? `<span>${days} días</span>` : ''}
+        <span>${bookings.length} reserva${bookings.length === 1 ? '' : 's'}</span>
+      </div>
     </div>`;
   const open = () => { location.hash = '#/viajes/' + trip.id; };
   card.addEventListener('click', open);
