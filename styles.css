@@ -2894,26 +2894,39 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 #trip-tab-body { display: flex; flex-direction: column; gap: 0.7rem; max-width: 640px; }
 .trip-cards { display: flex; flex-direction: column; gap: 0.7rem; }
 
-/* Itinerario */
-.day-card { display: flex; flex-direction: column; gap: 0.55rem; }
-.day-top { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-.day-num {
-  background: rgba(28, 28, 38, 0.08); border-radius: 999px;
-  padding: 0.12rem 0.6rem; font-weight: 600; font-size: 0.82rem;
+/* Itinerario — acordeón de días */
+.day-card { display: flex; flex-direction: column; gap: 0; padding: 0.35rem 0.6rem; }
+.day-head {
+  display: flex; align-items: center; gap: 0.65rem;
+  width: 100%;
+  background: transparent; border: 0;
+  padding: 0.5rem 0.4rem;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text);
+  text-align: left;
+}
+.day-icon {
+  width: 36px; height: 36px;
+  border-radius: 999px;
+  background: rgba(61, 87, 74, 0.13);
+  color: #2d4739;
+  display: grid; place-items: center;
   flex-shrink: 0;
 }
+.day-icon.hl { background: rgba(199, 109, 82, 0.16); color: var(--accent); }
+.day-icon .material-symbols-outlined { font-size: 19px; }
 .day-title { font-weight: 600; font-size: 0.95rem; flex: 1; min-width: 0; }
-.type-chip {
-  font-size: 0.6rem; font-weight: 700; letter-spacing: 0.05em;
-  color: #fff; background: #78716c;
-  padding: 0.22rem 0.5rem; border-radius: 999px;
+.day-chevron {
+  font-size: 20px; color: var(--text-dim);
+  transition: transform 0.18s ease;
   flex-shrink: 0;
 }
-.type-chip.libre { background: #3d574a; }
-.type-chip.trabajo { background: #a8683a; }
-.type-chip.clase { background: #4a6d8c; }
-.type-chip.transito { background: #78716c; }
-.type-chip.destacado { background: var(--accent); }
+.day-card.open .day-chevron { transform: rotate(180deg); }
+.day-body {
+  display: flex; flex-direction: column; gap: 0.55rem;
+  padding: 0.25rem 0.4rem 0.65rem;
+}
 .day-block { display: flex; gap: 0.6rem; }
 .db-time { color: var(--accent); font-weight: 600; font-size: 0.8rem; flex: 0 0 64px; padding-top: 1px; }
 .db-text { font-size: 0.88rem; color: rgba(28, 28, 38, 0.9); flex: 1; min-width: 0; }
@@ -2925,15 +2938,6 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
   line-height: 1.5;
 }
 .day-tickets { display: flex; gap: 0.4rem; flex-wrap: wrap; }
-.day-toggle {
-  align-self: flex-start;
-  background: transparent; border: 0;
-  color: var(--accent); font-weight: 600; font-size: 0.82rem;
-  cursor: pointer; padding: 0.15rem 0;
-  font-family: inherit;
-  position: relative;
-}
-.day-toggle::before { content: ""; position: absolute; inset: -8px; }
 
 /* Chips compartidos (tickets / confirmación) */
 .ticket-chip {
@@ -2958,13 +2962,6 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 .conf-chip:hover { background: rgba(28, 28, 38, 0.12); }
 
 /* Reservas / vuelos */
-.trip-total {
-  display: flex; align-items: center; gap: 0.6rem;
-  background: rgba(61, 87, 74, 0.88); color: #f9f6f0;
-  border-radius: 14px; padding: 0.75rem 1rem;
-  font-weight: 600; font-size: 0.9rem;
-}
-.trip-total .pp { margin-left: auto; opacity: 0.8; font-weight: 400; font-size: 0.85rem; flex-shrink: 0; }
 .trip-add-row {
   display: inline-flex; align-items: center; gap: 0.4rem;
   align-self: flex-start;

@@ -1991,9 +1991,34 @@ function fitCardChecklist(card, note) {
 // ============================================================
 // Page: Viajes
 // ============================================================
-const TRIP_TYPE_LABELS = { libre: 'LIBRE', trabajo: 'TRABAJO', clase: 'CLASE', transito: 'TRÁNSITO' };
 // Días expandidos del itinerario (persiste dentro de la sesión).
 const expandedTripDays = new Set();
+
+// Icono que describe el día, derivado del título (con fallback por tipo).
+// El orden importa: la primera regla que matchea gana.
+const TRIP_DAY_ICON_RULES = [
+  [/llegada|aterrizaje/, 'flight_land'],
+  [/salida|regreso|checkout|aeropuerto/, 'flight_takeoff'],
+  [/concierto|bowl|blades|show|festival/, 'music_note'],
+  [/observator|planetari|estrellas/, 'stars'],
+  [/six flags|magic mountain|universal|disney|parque de diversiones|atraccion/, 'attractions'],
+  [/cine|pel[ií]|academy|film/, 'movie'],
+  [/playa|costa|beach|malib[uú]|pier|mar\b/, 'beach_access'],
+  [/canyon|caminata|hike|sendero|monta[ñn]a|trail/, 'hiking'],
+  [/museo|getty|broad|lacma|dataland|arte|galer[ií]a/, 'museum'],
+  [/ciencia|science/, 'science'],
+  [/compras|shopping|grove|market|outlet/, 'shopping_bag'],
+  [/restaurante|cena|comida|brunch/, 'restaurant'],
+];
+const TRIP_TYPE_ICONS = { transito: 'luggage', trabajo: 'laptop_mac', clase: 'school', libre: 'sunny' };
+
+function tripDayIcon(day) {
+  const t = (day.title || '').toLowerCase();
+  for (const [re, icon] of TRIP_DAY_ICON_RULES) {
+    if (re.test(t)) return icon;
+  }
+  return TRIP_TYPE_ICONS[day.day_type] || 'sunny';
+}
 // Reserva a resaltar al saltar desde un chip del itinerario.
 let highlightBookingId = null;
 
@@ -2115,8 +2140,6 @@ function renderViajeDetail(root, id) {
 }
 
 // ---- Itinerario -----------------------------------------------------------
-const DAY_PREVIEW_BLOCKS = 4;
-
 function renderTripItinerary(root, trip) {
   const days = state.tripDays
     .filter(d => d.trip_id === trip.id)
@@ -2128,38 +2151,40 @@ function renderTripItinerary(root, trip) {
   days.forEach(day => root.appendChild(renderTripDayCard(trip, day)));
 }
 
+// Acordeón: colapsado solo muestra icono + "Sáb 26 sept — Getty y costa";
+// tocar la fila expande el día completo (bloques, notas y reservas ligadas).
 function renderTripDayCard(trip, day) {
   const card = document.createElement('article');
-  card.className = 'day-card cream-panel';
   const expanded = expandedTripDays.has(day.id);
+  card.className = 'day-card cream-panel' + (expanded ? ' open' : '');
   const blocks = Array.isArray(day.blocks) ? day.blocks : [];
-  const visible = expanded ? blocks : blocks.slice(0, DAY_PREVIEW_BLOCKS);
   const linked = state.tripBookings.filter(b => b.day_id === day.id);
-  const collapsible = blocks.length > DAY_PREVIEW_BLOCKS || day.note || blocks.some(b => b.note);
   card.innerHTML = `
-    <div class="day-top">
-      ${day.day_number ? `<span class="day-num">${day.day_number}</span>` : ''}
+    <button class="day-head" type="button" aria-expanded="${expanded}">
+      <span class="day-icon${day.highlight ? ' hl' : ''}"><span class="material-symbols-outlined">${tripDayIcon(day)}</span></span>
       <span class="day-title">${fmtTripDateLong(day.date)}${day.title ? ` — ${escapeHtml(day.title)}` : ''}</span>
-      ${day.highlight ? '<span class="type-chip destacado">DESTACADO</span>' : ''}
-      <span class="type-chip ${escapeHtml(day.day_type || 'libre')}">${TRIP_TYPE_LABELS[day.day_type] || 'LIBRE'}</span>
-    </div>
-    ${visible.map(b => `
-      <div class="day-block">
-        <span class="db-time">${escapeHtml(b.time || '')}</span>
-        <span class="db-text">${escapeHtml(b.text || '')}${expanded && b.note ? `<span class="db-note">${escapeHtml(b.note)}</span>` : ''}</span>
-      </div>`).join('')}
-    ${expanded && day.note ? `<div class="day-note">${escapeHtml(day.note)}</div>` : ''}
-    ${linked.length ? `<div class="day-tickets">${linked.map(b =>
-      `<button class="ticket-chip" type="button" data-booking="${b.id}"><span class="material-symbols-outlined">confirmation_number</span> ${escapeHtml(b.title)}</button>`).join('')}</div>` : ''}
-    ${collapsible ? `<button class="day-toggle" type="button">${expanded ? 'Ver menos ↑' : 'Ver día completo ›'}</button>` : ''}
+      <span class="material-symbols-outlined day-chevron">expand_more</span>
+    </button>
+    ${expanded ? `
+      <div class="day-body">
+        ${blocks.map(b => `
+          <div class="day-block">
+            <span class="db-time">${escapeHtml(b.time || '')}</span>
+            <span class="db-text">${escapeHtml(b.text || '')}${b.note ? `<span class="db-note">${escapeHtml(b.note)}</span>` : ''}</span>
+          </div>`).join('')}
+        ${day.note ? `<div class="day-note">${escapeHtml(day.note)}</div>` : ''}
+        ${linked.length ? `<div class="day-tickets">${linked.map(b =>
+          `<button class="ticket-chip" type="button" data-booking="${b.id}"><span class="material-symbols-outlined">confirmation_number</span> ${escapeHtml(b.title)}</button>`).join('')}</div>` : ''}
+      </div>
+    ` : ''}
   `;
-  const toggle = card.querySelector('.day-toggle');
-  if (toggle) toggle.addEventListener('click', () => {
+  card.querySelector('.day-head').addEventListener('click', () => {
     if (expanded) expandedTripDays.delete(day.id); else expandedTripDays.add(day.id);
     card.replaceWith(renderTripDayCard(trip, day));
   });
   // Un chip de reserva salta a la pestaña Reservas y resalta esa card.
-  card.querySelectorAll('.ticket-chip').forEach(ch => ch.addEventListener('click', () => {
+  card.querySelectorAll('.ticket-chip').forEach(ch => ch.addEventListener('click', (e) => {
+    e.stopPropagation();
     state.viajeTab = 'reservas';
     highlightBookingId = ch.dataset.booking;
     rerenderCurrentPage();
@@ -2170,14 +2195,7 @@ function renderTripDayCard(trip, day) {
 // ---- Reservas -------------------------------------------------------------
 function renderTripBookings(root, trip) {
   const bookings = state.tripBookings.filter(b => b.trip_id === trip.id);
-  const usd = bookings.reduce((s, b) => s + (Number(b.cost_usd) || 0), 0);
-  const cop = bookings.reduce((s, b) => s + (Number(b.cost_cop) || 0), 0);
   root.innerHTML = `
-    ${bookings.length ? `
-      <div class="trip-total">
-        <span>Total: $${usd.toLocaleString('en-US')} USD${cop ? ` · $${cop.toLocaleString('es-CO')} COP` : ''}</span>
-        <span class="pp">$${Math.round(usd / 2).toLocaleString('en-US')} pp</span>
-      </div>` : ''}
     <button class="trip-add-row" id="add-booking" type="button"><span class="material-symbols-outlined">add</span> Agregar reserva</button>
     <div class="trip-cards" id="bookings-list"></div>
   `;
