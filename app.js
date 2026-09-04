@@ -2152,8 +2152,8 @@ function renderTripItinerary(root, trip) {
     .filter(d => d.trip_id === trip.id)
     .sort((a, b) => (a.day_number || 0) - (b.day_number || 0));
   root.innerHTML = `
-    <button class="trip-add-row" id="add-day" type="button"><span class="material-symbols-outlined">add</span> Agregar día</button>
     <div class="trip-cards" id="days-list"></div>
+    <button class="btn primary trip-add-row" id="add-day" type="button"><span class="material-symbols-outlined">add</span> Agregar día</button>
   `;
   $('#add-day').addEventListener('click', () => openDayEditor(trip, null));
   const list = $('#days-list');
@@ -2324,8 +2324,8 @@ $('#day-delete').addEventListener('click', async () => {
 function renderTripBookings(root, trip) {
   const bookings = state.tripBookings.filter(b => b.trip_id === trip.id);
   root.innerHTML = `
-    <button class="trip-add-row" id="add-booking" type="button"><span class="material-symbols-outlined">add</span> Agregar reserva</button>
     <div class="trip-cards" id="bookings-list"></div>
+    <button class="btn primary trip-add-row" id="add-booking" type="button"><span class="material-symbols-outlined">add</span> Agregar reserva</button>
   `;
   $('#add-booking').addEventListener('click', () => openBookingEditor(trip, null));
   const list = $('#bookings-list');
@@ -2398,8 +2398,8 @@ function renderBookingCard(trip, b) {
 function renderTripFlights(root, trip) {
   const flights = state.tripFlights.filter(f => f.trip_id === trip.id);
   root.innerHTML = `
-    <button class="trip-add-row" id="add-flight" type="button"><span class="material-symbols-outlined">add</span> Agregar vuelo</button>
     <div class="trip-cards" id="flights-list"></div>
+    <button class="btn primary trip-add-row" id="add-flight" type="button"><span class="material-symbols-outlined">add</span> Agregar vuelo</button>
   `;
   $('#add-flight').addEventListener('click', () => openFlightEditor(trip, null));
   const list = $('#flights-list');
