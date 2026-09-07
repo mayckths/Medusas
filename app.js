@@ -2174,21 +2174,40 @@ function renderTripDayCard(trip, day) {
       <span class="material-symbols-outlined day-chevron">expand_more</span>
     </div>
     ${expanded ? `
-      <div class="day-body">
-        ${blocks.map(b => `
-          <div class="day-block">
-            <span class="db-time">${escapeHtml(b.time || '')}</span>
-            <span class="db-text">${escapeHtml(b.text || '')}${b.note ? `<span class="db-note">${escapeHtml(b.note)}</span>` : ''}</span>
-          </div>`).join('')}
-        ${day.note ? `<div class="day-note">${escapeHtml(day.note)}</div>` : ''}
-        ${linked.length ? `<div class="day-tickets">${linked.map(b =>
-          `<button class="ticket-chip" type="button" data-booking="${b.id}"><span class="material-symbols-outlined">confirmation_number</span> ${escapeHtml(b.title)}</button>`).join('')}</div>` : ''}
+      <div class="day-body-wrap">
+        <div class="day-body">
+          ${blocks.map(b => `
+            <div class="day-block">
+              <span class="db-time">${escapeHtml(b.time || '')}</span>
+              <span class="db-text">${escapeHtml(b.text || '')}${b.note ? `<span class="db-note">${escapeHtml(b.note)}</span>` : ''}</span>
+            </div>`).join('')}
+          ${day.note ? `<div class="day-note">${escapeHtml(day.note)}</div>` : ''}
+          ${linked.length ? `<div class="day-tickets">${linked.map(b =>
+            `<button class="ticket-chip" type="button" data-booking="${b.id}"><span class="material-symbols-outlined">confirmation_number</span> ${escapeHtml(b.title)}</button>`).join('')}</div>` : ''}
+        </div>
       </div>
     ` : ''}
   `;
   const head = card.querySelector('.day-head');
   const toggle = () => {
-    if (expanded) expandedTripDays.delete(day.id); else expandedTripDays.add(day.id);
+    if (expanded) {
+      expandedTripDays.delete(day.id);
+      // Colapso animado: baja el grid a 0fr y re-renderiza al terminar.
+      // La expansión la anima el CSS solo (@starting-style) al montar.
+      const wrap = card.querySelector('.day-body-wrap');
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (wrap && !reduceMotion) {
+        card.classList.remove('open'); // el chevron gira de vuelta ya
+        wrap.style.gridTemplateRows = '0fr';
+        wrap.querySelector('.day-body').style.opacity = '0';
+        const finish = () => { if (card.isConnected) card.replaceWith(renderTripDayCard(trip, day)); };
+        wrap.addEventListener('transitionend', finish, { once: true });
+        setTimeout(finish, 400); // respaldo por si transitionend no dispara
+        return;
+      }
+    } else {
+      expandedTripDays.add(day.id);
+    }
     card.replaceWith(renderTripDayCard(trip, day));
   };
   head.addEventListener('click', toggle);
