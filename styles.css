@@ -2967,7 +2967,9 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 .day-icon.hl { background: rgba(199, 109, 82, 0.16); color: var(--accent); }
 .day-icon .material-symbols-outlined { font-size: 19px; }
 .day-title { font-weight: 600; font-size: 0.95rem; flex: 1; min-width: 0; }
-/* Lápiz de editar día — aparece tenue dentro de la fila del acordeón. */
+/* Lápiz de editar día — solo visible con el día expandido, para que la
+   fila colapsada quede limpia (icono + título + chevron). */
+.day-card:not(.open) .day-edit { display: none; }
 .day-edit {
   background: transparent; border: 0;
   color: #bcb5b2; cursor: pointer;

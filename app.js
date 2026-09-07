@@ -1044,7 +1044,7 @@ function renderInicio(root) {
     media: `
       <section class="section-block" data-sec="media">
         <div class="section-head">
-          <h2>Música y podcasts recientes</h2>
+          <h2>Música reciente</h2>
           <a href="#/musica">Ver toda →</a>
         </div>
         <div class="grid-cards" id="dash-media-grid"></div>
@@ -1060,7 +1060,7 @@ function renderInicio(root) {
     movies: `
       <section class="section-block" data-sec="movies">
         <div class="section-head">
-          <h2>Pelis y Series recientes</h2>
+          <h2>Pelis y series por ver</h2>
           <a href="#/pelis">Ver todas →</a>
         </div>
         <div class="grid-cards" id="dash-movies-grid"></div>
@@ -1147,12 +1147,13 @@ function renderInicio(root) {
     else photosGrid.innerHTML = '<div class="empty">Aún no hay fotos.</div>';
   }
 
-  // Recent movies
+  // Pelis y series pendientes por ver (que a alguno le falte verla) —
+  // mismo criterio que el tab "Por ver" y que la stat de arriba.
   const moviesGrid = $('#dash-movies-grid');
   if (moviesGrid) {
-    const recentMovies = state.movies.slice(0, 3);
-    if (recentMovies.length) recentMovies.forEach(m => moviesGrid.appendChild(renderMovieCard(m)));
-    else moviesGrid.innerHTML = '<div class="empty">Aún no hay pelis.</div>';
+    const pendingList = pendingMovies().slice(0, 3);
+    if (pendingList.length) pendingList.forEach(m => moviesGrid.appendChild(renderMovieCard(m)));
+    else moviesGrid.innerHTML = '<div class="empty">Nada pendiente por ver 🎉</div>';
   }
 
   // Recent places (max 3)
@@ -1321,7 +1322,7 @@ function moviesWatchedTogether() {
 // que el tab "Por ver" en la página de Pelis (no las del watchlist 0/2
 // solamente sino TODAS donde algún usuario no la marcó). Si los dos
 // criterios divergen, la tira del dashboard miente respecto al tab.
-function moviesPending() {
+function pendingMovies() {
   const userNames = state._userAssets
     ? Object.keys(state._userAssets)
     : ['Jaime', 'Mayck'];
@@ -1329,18 +1330,9 @@ function moviesPending() {
     const wb = Array.isArray(m.watched_by) ? m.watched_by : [];
     if (userNames.length < 2) return wb.length === 0;
     return !userNames.every(u => wb.includes(u));
-  }).length;
+  });
 }
-
-function countCheckedItems() {
-  // Includes archived notes intentionally — the dashboard stat keeps
-  // climbing as the couple accumulates "metas checkeadas" over time,
-  // even after they tidy a completed list out of the active view.
-  return state.notes.reduce((sum, n) => {
-    if (!Array.isArray(n.checklist)) return sum;
-    return sum + n.checklist.filter(it => it && it.done).length;
-  }, 0);
-}
+function moviesPending() { return pendingMovies().length; }
 
 // Quick celebration when the user just completed the LAST unchecked
 // item of a multi-item checklist: a soft pulse on the checkbox + a
@@ -1372,22 +1364,26 @@ function celebrateChecklistCompletion(checkboxEl) {
   }, 700);
 }
 
-// Update the "Metas checkeadas" tile in the dashboard stats widget
-// without re-rendering the whole page. Called whenever a checklist
-// item is toggled (from a card preview or from inside the editor).
-function refreshChecklistStat() {
-  const cell = document.querySelector('.stats-widget .stat-cell[data-stat="checked-goals"] .stat-value');
-  if (cell) cell.textContent = String(countCheckedItems());
+// Días que faltan para el próximo viaje (el más cercano cuya fecha de
+// inicio no haya pasado). null si no hay viajes próximos.
+function nextTripStat() {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const upcoming = state.trips
+    .filter(t => t.start_date && new Date(t.start_date + 'T23:59:59') >= today)
+    .sort((a, b) => a.start_date.localeCompare(b.start_date))[0];
+  if (!upcoming) return null;
+  const days = Math.max(0, Math.ceil((new Date(upcoming.start_date + 'T00:00:00') - today) / 86400000));
+  return { key: 'next-trip', label: `Días para ${upcoming.title}`, value: days };
 }
 
 function renderRelationshipStats() {
   const featuredPhotos = state.photos.filter(p => p.featured).length;
-  const checkedGoals = countCheckedItems();
   const pending = moviesPending();
   const months = monthsSince(RELATIONSHIP_START);
+  const nextTrip = nextTripStat();
   const stats = [
     { key: 'featured-photos', label: 'Fotos destacadas', value: featuredPhotos },
-    { key: 'checked-goals', label: 'Metas checkeadas', value: checkedGoals },
+    ...(nextTrip ? [nextTrip] : []),
     { key: 'movies-pending', label: 'Pelis y series por ver', value: pending },
     { key: 'months', label: 'Meses juntos', value: months },
   ];
@@ -1872,8 +1868,6 @@ function renderNoteCard(note) {
         row.classList.toggle('is-done', nowDone);
         const span = checkBtn.querySelector('.material-symbols-outlined');
         if (span) span.textContent = nowDone ? 'check_box' : 'check_box_outline_blank';
-        // Keep the "Metas checkeadas" stat card in sync
-        refreshChecklistStat();
         // Celebrate when the user just finished the last unchecked box
         // of a multi-item list — single-item lists don't really feel
         // like "completing" anything.
@@ -2387,7 +2381,7 @@ function renderBookingCard(trip, b) {
     <div class="bk-chips">
       ${b.confirmation ? `<button class="conf-chip" type="button" title="Copiar confirmación"><span class="material-symbols-outlined">content_copy</span> ${escapeHtml(b.confirmation)}</button>` : ''}
       ${attachmentChips(b)}
-      <button class="bk-edit" type="button" aria-label="Editar reserva"><span class="material-symbols-outlined">more_horiz</span></button>
+      <button class="bk-edit" type="button" aria-label="Editar reserva"><span class="material-symbols-outlined">edit</span></button>
     </div>`;
   wireConfChip(card, b.confirmation);
   card.querySelector('.bk-edit').addEventListener('click', () => openBookingEditor(trip, b));
@@ -2427,7 +2421,7 @@ function renderFlightCard(trip, f) {
     <div class="bk-chips">
       ${f.confirmation ? `<button class="conf-chip" type="button" title="Copiar confirmación"><span class="material-symbols-outlined">content_copy</span> ${escapeHtml(f.confirmation)}</button>` : ''}
       ${attachmentChips(f)}
-      <button class="bk-edit" type="button" aria-label="Editar vuelo"><span class="material-symbols-outlined">more_horiz</span></button>
+      <button class="bk-edit" type="button" aria-label="Editar vuelo"><span class="material-symbols-outlined">edit</span></button>
     </div>`;
   wireConfChip(card, f.confirmation);
   card.querySelector('.bk-edit').addEventListener('click', () => openFlightEditor(trip, f));
@@ -2481,11 +2475,19 @@ function openTripEditor(trip = null) {
   $('#trip-end').value = trip?.end_date || '';
   $('#trip-people').value = trip?.people ?? 'Jaime & Mayck';
   $('#trip-base').value = trip?.base || '';
+  $('#trip-cover-input').value = '';
+  $('#trip-cover-name').textContent = trip?.cover_path ? '· portada actual' : '';
   $('#trip-delete').hidden = !trip;
   $('#trip-status').textContent = '';
   dlgTrip.showModal();
   $('#trip-title').focus();
 }
+
+$('#trip-cover-input').addEventListener('change', (e) => {
+  $('#trip-cover-name').textContent = e.target.files[0]
+    ? '· ' + e.target.files[0].name
+    : (tripCtx?.cover_path ? '· portada actual' : '');
+});
 
 $('#trip-save').addEventListener('click', async () => {
   const title = $('#trip-title').value.trim();
@@ -2499,6 +2501,22 @@ $('#trip-save').addEventListener('click', async () => {
     base: $('#trip-base').value.trim() || null,
   };
   try {
+    // Portada: se sube a app-assets y se guarda la ruta en cover_path.
+    const coverFile = $('#trip-cover-input').files[0];
+    if (coverFile) {
+      const ext = (coverFile.name.split('.').pop() || 'jpg').toLowerCase();
+      const path = `trips/${crypto.randomUUID()}-cover.${ext}`;
+      const { error: upErr } = await supabase.storage.from(APP_ASSETS_BUCKET).upload(path, coverFile, {
+        cacheControl: '31536000', upsert: false, contentType: coverFile.type || 'image/jpeg',
+      });
+      if (upErr) throw upErr;
+      payload.cover_path = path;
+      // Limpia la portada anterior (nunca la default compartida).
+      const old = tripCtx?.cover_path;
+      if (old && old !== TRIP_DEFAULT_COVER_PATH) {
+        try { await supabase.storage.from(APP_ASSETS_BUCKET).remove([old]); } catch {}
+      }
+    }
     if (tripCtx) {
       const { error } = await supabase.from('trips').update(payload).eq('id', tripCtx.id);
       if (error) throw error;
@@ -2513,7 +2531,22 @@ $('#trip-save').addEventListener('click', async () => {
       uiToast('Viaje creado ✓');
       location.hash = '#/viajes/' + data.id;
     }
-  } catch (e) { setStatus($('#trip-status'), `Error: ${e.message || e}`, true); }
+  } catch (e) {
+    // Si la columna cover_path aún no existe en Supabase, guardamos el
+    // resto y avisamos qué falta.
+    if (payload.cover_path && /cover_path/.test(e.message || '')) {
+      delete payload.cover_path;
+      try {
+        if (tripCtx) await supabase.from('trips').update(payload).eq('id', tripCtx.id);
+        else { payload.created_by = state.currentUser; await supabase.from('trips').insert(payload); }
+        dlgTrip.close();
+        uiToast('Guardado sin portada — corre el SQL de cover_path', { duration: 5000 });
+        await router();
+        return;
+      } catch (e2) { setStatus($('#trip-status'), `Error: ${e2.message || e2}`, true); return; }
+    }
+    setStatus($('#trip-status'), `Error: ${e.message || e}`, true);
+  }
 });
 
 $('#trip-delete').addEventListener('click', async () => {
@@ -2729,7 +2762,7 @@ function renderMusica(root) {
   root.innerHTML = `
     <div class="page-head">
       <div>
-        <h1>Música y podcasts</h1>
+        <h1>Música</h1>
         <div class="sub">Canciones, playlists y videos</div>
       </div>
       <div class="actions">
@@ -3659,9 +3692,9 @@ function renderPlaceCard(p) {
 // ============================================================
 const SECTION_LABELS = {
   notes: 'Notas recientes',
-  media: 'Música y podcasts recientes',
+  media: 'Música reciente',
   photos: 'Fotos recientes',
-  movies: 'Pelis y Series recientes',
+  movies: 'Pelis y series por ver',
   places: 'Lugares recientes',
 };
 
@@ -5946,7 +5979,7 @@ function renderPelis(root) {
   root.innerHTML = `
     <div class="page-head">
       <div>
-        <h1>Pelis y Series</h1>
+        <h1>Cine</h1>
         <div class="sub">Lo que queremos ver y lo que ya vimos</div>
       </div>
       <div class="actions">

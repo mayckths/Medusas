@@ -28,7 +28,7 @@
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
 
-    <link rel="stylesheet" href="./styles.css?v=20260716g" />
+    <link rel="stylesheet" href="./styles.css?v=20260716h" />
 
     <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>
@@ -113,11 +113,11 @@
             <span class="badge-unread" data-unread="fotos" hidden></span>
           </a>
           <a href="#/musica" data-route="#/musica">
-            <span class="material-symbols-outlined m-icon">music_note</span><span>Música y podcasts</span>
+            <span class="material-symbols-outlined m-icon">music_note</span><span>Música</span>
             <span class="badge-unread" data-unread="musica" hidden></span>
           </a>
           <a href="#/pelis" data-route="#/pelis">
-            <span class="material-symbols-outlined m-icon">movie</span><span>Pelis y Series</span>
+            <span class="material-symbols-outlined m-icon">movie</span><span>Cine</span>
             <span class="badge-unread" data-unread="pelis" hidden></span>
           </a>
           <a href="#/viajes" data-route="#/viajes">
@@ -139,10 +139,10 @@
           <span class="material-symbols-outlined m-icon">photo_library</span><span class="m-label">Fotos</span>
         </a>
         <a href="#/musica" data-route="#/musica" class="m-item">
-          <span class="material-symbols-outlined m-icon">music_note</span><span class="m-label">Música y podcasts</span>
+          <span class="material-symbols-outlined m-icon">music_note</span><span class="m-label">Música</span>
         </a>
         <a href="#/pelis" data-route="#/pelis" class="m-item">
-          <span class="material-symbols-outlined m-icon">movie</span><span class="m-label">Pelis y Series</span>
+          <span class="material-symbols-outlined m-icon">movie</span><span class="m-label">Cine</span>
         </a>
         <a href="#/viajes" data-route="#/viajes" class="m-item">
           <span class="material-symbols-outlined m-icon">flight_takeoff</span><span class="m-label">Viajes</span>
@@ -429,6 +429,13 @@
           <label for="trip-base">Base (hospedaje, opcional)</label>
           <input type="text" id="trip-base" placeholder="Dirección del Airbnb / hotel" maxlength="200" />
         </div>
+        <div class="field">
+          <label>Imagen de portada</label>
+          <div class="attach-row">
+            <label class="btn ghost attach-btn" for="trip-cover-input"><span class="material-symbols-outlined">image</span> Elegir imagen <span class="attach-name" id="trip-cover-name"></span></label>
+            <input type="file" id="trip-cover-input" accept="image/*" hidden />
+          </div>
+        </div>
         <div class="modal-actions">
           <div class="left"><span class="status" id="trip-status"></span></div>
           <button class="btn danger" id="trip-delete" hidden>Eliminar</button>
@@ -704,6 +711,6 @@
       <div class="notif-list" id="notif-list"></div>
     </div>
 
-    <script type="module" src="./app.js?v=20260716g"></script>
+    <script type="module" src="./app.js?v=20260716h"></script>
   </body>
 </html>
