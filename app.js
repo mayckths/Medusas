@@ -2201,8 +2201,13 @@ function renderTripDayCard(trip, day) {
         wrap.style.gridTemplateRows = '0fr';
         wrap.querySelector('.day-body').style.opacity = '0';
         const finish = () => { if (card.isConnected) card.replaceWith(renderTripDayCard(trip, day)); };
-        wrap.addEventListener('transitionend', finish, { once: true });
-        setTimeout(finish, 400); // respaldo por si transitionend no dispara
+        // Solo el fin de la transición de ALTURA del wrap — el fade del
+        // body también burbujea transitionend y remplazaría antes de
+        // tiempo (o, con el fallback largo, dejaba una pausa al final).
+        wrap.addEventListener('transitionend', (e) => {
+          if (e.target === wrap && e.propertyName === 'grid-template-rows') finish();
+        });
+        setTimeout(finish, 350); // respaldo apenas pasada la transición (300ms)
         return;
       }
     } else {

@@ -3006,8 +3006,13 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 }
 .day-body {
   display: flex; flex-direction: column; gap: 0.55rem;
-  padding: 0.25rem 0.4rem 0.65rem;
+  /* Sin padding vertical: bloquearía el colapso del track a 0 (deja un
+     sliver de ~14px congelado al final). El aire va en márgenes de los
+     hijos, que sí se comprimen con overflow hidden. */
+  padding: 0 0.4rem;
 }
+.day-body > :first-child { margin-top: 0.25rem; }
+.day-body > :last-child { margin-bottom: 0.65rem; }
 .day-block { display: flex; gap: 0.6rem; }
 .db-time { color: var(--accent); font-weight: 600; font-size: 0.8rem; flex: 0 0 64px; padding-top: 1px; }
 .db-text { font-size: 0.88rem; color: rgba(28, 28, 38, 0.9); flex: 1; min-width: 0; }
