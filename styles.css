@@ -87,9 +87,10 @@ html, body { margin: 0; padding: 0; background: #000000; color: var(--text); }
        darker than the URL bar. */
     z-index: 1;
   }
-  /* Stack content above both the gradient and the photo backdrop. */
+  /* Stack content above both the gradient and the photo backdrop.
+     (El padding de safe-area vive en la regla mobile de .app-shell más
+     abajo — aquí lo pisarían los overrides posteriores de padding.) */
   .app-shell {
-    padding-top: env(safe-area-inset-top, 0px);
     position: relative;
     z-index: 2;
   }
@@ -484,7 +485,12 @@ nav.menu .section-label {
 
 main.content { flex: 1; min-width: 0; padding: 1.5rem clamp(1rem, 4vw, 2rem) 4rem; }
 @media (max-width: 760px) {
-  .app-shell { padding: 0; }
+  /* En standalone (PWA) la barra de estado es translúcida y el contenido
+     pasa por debajo del Dynamic Island: este padding-top lo empuja a la
+     zona visible. En Safari normal env() resuelve a 0 y no cambia nada.
+     OJO: debe ir aquí (última regla de padding de .app-shell en mobile)
+     — más arriba lo pisaban los overrides de padding. */
+  .app-shell { padding: env(safe-area-inset-top, 0px) 0 0; }
   aside.sidebar { margin-right: 0; }
   main.content {
     padding-left: 16px;
@@ -2152,8 +2158,10 @@ body:has(dialog[open]) { overflow: hidden; }
 dialog.lightbox {
   position: fixed; inset: 0;
   padding: 0; background: transparent; border: 0;
-  width: 100vw; height: 100vh;
-  max-width: 100vw; max-height: 100vh;
+  /* dvh, no vh: 100vh incluye el chrome colapsado de Safari y la foto
+     centrada se salía del área visible. */
+  width: 100vw; height: 100dvh;
+  max-width: 100vw; max-height: 100dvh;
   margin: 0;
 }
 dialog.lightbox:not([open]) { display: none; }
