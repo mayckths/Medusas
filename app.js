@@ -29,9 +29,31 @@ const escapeHtml = (s) => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':
 // pipeline serves a much smaller, format-optimized payload. That keeps
 // the dashboard fast and only loads the heavy original when the user
 // actually opens a photo.
+// Supabase quitó las transformaciones de imagen del plan free: el
+// endpoint /render/image/ devuelve 403 FeatureNotEnabled y TODOS los
+// thumbnails quedaban rotos. Probamos una vez al arrancar; si no está
+// disponible, caemos a la URL pública original (pesa más, pero carga).
+// Si algún día se reactiva (plan Pro o cambio de política), el probe lo
+// detecta solo y los thumbnails vuelven sin tocar código.
+let imageTransformsAvailable = null; // null = aún no probado
+function probeImageTransforms(samplePath) {
+  if (imageTransformsAvailable !== null || !samplePath) return;
+  imageTransformsAvailable = false; // pesimista hasta que el probe pase
+  const probeUrl = supabase.storage.from(BUCKET)
+    .getPublicUrl(samplePath, { transform: { width: 32, height: 32, resize: 'contain' } }).data.publicUrl;
+  fetch(probeUrl, { method: 'HEAD' }).then(r => {
+    if (r.ok) {
+      imageTransformsAvailable = true;
+      rerenderCurrentPage(); // regenera los <img> con thumbnails livianos
+    }
+  }).catch(() => {});
+}
+
 function publicImageUrl(path, opts) {
   if (!path) return '';
-  if (!opts) return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+  if (!opts || !imageTransformsAvailable) {
+    return supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+  }
   // Supabase's imgproxy ignores aspect ratio when only `width` is given —
   // it scales width but keeps the original height (we caught it serving
   // 360x4032 files for 3000x4000 originals, aspect 0.09). Always bound
@@ -805,6 +827,8 @@ async function loadAll() {
   state.tripFlights = tripFlights || [];
   state.tripsReady = !tripsErr;
   updateSidebarBadges();
+  // ¿Siguen disponibles las transformaciones de imagen? (ver publicImageUrl)
+  probeImageTransforms(state.photos[0]?.storage_path);
   // Seed the ambient blurred backdrop from a featured photo (or any photo)
   // so it's already there even on non-dashboard routes
   const ambient = state.photos.find(p => p.featured) || state.photos[0];
