@@ -598,10 +598,45 @@ async function loadDefaultLoginBg() {
   } catch { return ''; }
 }
 
+// Modo 'secure': cada dispositivo abre una sesión anónima de Supabase y el
+// PIN la vincula a una persona (RPC link_device, verificado en el servidor
+// con límite de intentos). Las tablas solo responden a sesiones vinculadas.
+// Modo 'legacy': la base aún no tiene esa migración y se usa el login
+// anterior, así la app funciona antes y después de correr el SQL.
+let authMode = 'legacy';
+
+// Quién tiene la sesión. En modo seguro lo dice el servidor (whoami), no
+// localStorage: un nombre guardado sin sesión vinculada no abre nada.
+async function resolveSession() {
+  const { data, error } = await supabase.rpc('whoami');
+  if (error) {
+    // Base sin migrar (whoami no existe) o fallo de red: no se toca la
+    // sesión guardada — un error transitorio no debe cerrar la sesión.
+    authMode = 'legacy';
+    return localStorage.getItem(AUTH_KEY);
+  }
+  authMode = 'secure';
+  if (data) localStorage.setItem(AUTH_KEY, data);
+  else localStorage.removeItem(AUTH_KEY);
+  return data || null;
+}
+
 async function tryLogin(name, password) {
-  console.log('[auth] tryLogin', { name, passwordLength: password?.length });
+  if (authMode === 'secure') {
+    const { data: s } = await supabase.auth.getSession();
+    if (!s.session) {
+      const { error: anonErr } = await supabase.auth.signInAnonymously();
+      if (anonErr) {
+        throw new Error(/anonymous/i.test(anonErr.message || '')
+          ? 'Falta activar "Allow anonymous sign-ins" en Supabase'
+          : anonErr.message);
+      }
+    }
+    const { data, error } = await supabase.rpc('link_device', { p_name: name, p_password: password });
+    if (error) throw error;
+    return !!data;
+  }
   const { data, error } = await supabase.rpc('verify_password', { p_name: name, p_password: password });
-  console.log('[auth] tryLogin result', { data, error });
   if (error) throw error;
   return !!data;
 }
@@ -611,10 +646,31 @@ function loginAs(name) {
   localStorage.setItem(AUTH_KEY, name);
 }
 
-function logout() {
+async function logout() {
   state.currentUser = null;
   localStorage.removeItem(AUTH_KEY);
+  if (authMode === 'secure') {
+    try { await supabase.rpc('unlink_device'); } catch {}
+    try { await supabase.auth.signOut(); } catch {}
+  }
   showLogin();
+}
+
+// En modo seguro las RPC que reciben un nombre quedan cerradas; estas
+// variantes toman la persona de la sesión vinculada.
+async function changePin(oldPin, newPin) {
+  const { data, error } = authMode === 'secure'
+    ? await supabase.rpc('change_pin', { p_old_password: oldPin, p_new_password: newPin })
+    : await supabase.rpc('update_password', { p_name: state.currentUser, p_old_password: oldPin, p_new_password: newPin });
+  if (error) throw error;
+  return !!data;
+}
+
+async function setUserAssets(avatarPath, backgroundPath) {
+  const { error } = authMode === 'secure'
+    ? await supabase.rpc('set_my_assets', { p_avatar_path: avatarPath, p_background_path: backgroundPath })
+    : await supabase.rpc('set_user_assets', { p_name: state.currentUser, p_avatar_path: avatarPath, p_background_path: backgroundPath });
+  if (error) throw error;
 }
 
 function showLogin() {
@@ -3832,11 +3888,8 @@ function renderConfigCuenta(body) {
     if (newp.length < 4) { setStatus(statusEl, 'La nueva clave debe tener al menos 4 caracteres', true); return; }
     setStatus(statusEl, 'Cambiando…');
     try {
-      const { data, error } = await supabase.rpc('update_password', {
-        p_name: state.currentUser, p_old_password: oldp, p_new_password: newp,
-      });
-      if (error) throw error;
-      if (!data) { setStatus(statusEl, 'Clave actual incorrecta', true); return; }
+      const ok = await changePin(oldp, newp);
+      if (!ok) { setStatus(statusEl, 'Clave actual incorrecta', true); return; }
       // Success celebrated via toast; clear the inline error span.
       setStatus(statusEl, '');
       uiToast('Clave cambiada ✓');
@@ -3845,7 +3898,7 @@ function renderConfigCuenta(body) {
   });
   $('#cfg-logout').addEventListener('click', async () => {
     if (!(await uiConfirm('¿Cerrar sesión ahora?', { title: 'Cerrar sesión', confirmLabel: 'Cerrar sesión' }))) return;
-    logout();
+    await logout();
   });
 }
 
@@ -4157,14 +4210,12 @@ function setupAssetUploaders() {
   }
 
   $('#cfg-avatar-input').addEventListener('change', (e) => pickAndUpload(e.target, `avatars/${me}`, async (path) => {
-    const { error } = await supabase.rpc('set_user_assets', { p_name: me, p_avatar_path: path, p_background_path: null });
-    if (error) throw error;
+    await setUserAssets(path, null);
     state._userAssets[me].avatar = path;
   }));
 
   $('#cfg-bg-input').addEventListener('change', (e) => pickAndUpload(e.target, `backgrounds/${me}`, async (path) => {
-    const { error } = await supabase.rpc('set_user_assets', { p_name: me, p_avatar_path: null, p_background_path: path });
-    if (error) throw error;
+    await setUserAssets(null, path);
     state._userAssets[me].bg = path;
   }));
 
@@ -4180,8 +4231,7 @@ function setupAssetUploaders() {
     if (!(await uiConfirm('¿Quitar tu avatar?', { title: 'Quitar avatar', confirmLabel: 'Quitar', danger: true }))) return;
     uiToast('Quitando…');
     try {
-      const { error } = await supabase.rpc('set_user_assets', { p_name: me, p_avatar_path: '', p_background_path: null });
-      if (error) throw error;
+      await setUserAssets('', null);
       try { await supabase.storage.from(APP_ASSETS_BUCKET).remove([current]); } catch {}
       state._userAssets[me].avatar = null;
       uiToast('Quitado ✓');
@@ -4194,8 +4244,7 @@ function setupAssetUploaders() {
     if (!(await uiConfirm('¿Quitar tu imagen del login?', { title: 'Quitar imagen', confirmLabel: 'Quitar', danger: true }))) return;
     uiToast('Quitando…');
     try {
-      const { error } = await supabase.rpc('set_user_assets', { p_name: me, p_avatar_path: null, p_background_path: '' });
-      if (error) throw error;
+      await setUserAssets(null, '');
       try { await supabase.storage.from(APP_ASSETS_BUCKET).remove([current]); } catch {}
       state._userAssets[me].bg = null;
       uiToast('Quitada ✓');
@@ -7041,7 +7090,7 @@ async function onDoodlePointerUp(e) {
 // Boot
 // ============================================================
 async function boot() {
-  const saved = localStorage.getItem(AUTH_KEY);
+  const saved = await resolveSession();
   if (saved) {
     // Restore the session quickly — hide the (visible-by-default) login,
     // then set up everything else in parallel.
