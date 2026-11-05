@@ -2660,10 +2660,15 @@ $('#trip-save').addEventListener('click', async () => {
     title,
     start_date: start,
     end_date: end,
-    date_precision: tentative ? 'month' : 'day',
     people: $('#trip-people').value.trim() || null,
     base: $('#trip-base').value.trim() || null,
   };
+  // date_precision solo se envía si hace falta: las fechas exactas ya son
+  // el default de la columna, y así crear o editar viajes con fecha
+  // exacta funciona aunque la columna aún no exista en la base.
+  if (tentative || (tripCtx && 'date_precision' in tripCtx)) {
+    payload.date_precision = tentative ? 'month' : 'day';
+  }
   try {
     // Portada: se sube a app-assets y se guarda la ruta en cover_path.
     const coverFile = $('#trip-cover-input').files[0];
