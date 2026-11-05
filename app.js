@@ -515,7 +515,6 @@ async function markAllUnreadEverywhere() {
     markAllSeen('notes', sharedNotes),
     markAllSeen('media', state.media),
     markAllSeen('photos', state.photos),
-    markAllSeen('movies', state.movies),
   ]);
   // Belt-and-braces refresh in case any of the inner calls didn't
   // get to update the badge (e.g. an early return when its table had
@@ -532,7 +531,6 @@ function markSectionVisited(hash) {
   }
   if (hash === '#/musica') return markAllSeen('media', state.media);
   if (hash === '#/fotos' || hash.startsWith('#/fotos/album/')) return markAllSeen('photos', state.photos);
-  if (hash === '#/pelis') return markAllSeen('movies', state.movies);
 }
 
 // ============================================================
@@ -545,7 +543,6 @@ const state = {
   media: [],
   photos: [],
   places: [],
-  movies: [],
   chats: [],
   postits: [],
   trips: [],
@@ -561,11 +558,7 @@ const state = {
     photo_widget: { mode: 'featured', interval_ms: 6000 },
   },
   view: { notas: 'cards', musica: 'cards' },
-  filterTag: { notas: null, lugares: null, fotos: null, pelis: null },
-  /* Pelis page top-level tab: 'watchlist' (alguien aún no la vio) or
-     'together' (ambos la vieron). Persists across navigations within
-     the session; resets on reload. */
-  peliView: 'watchlist',
+  filterTag: { notas: null, lugares: null, fotos: null },
   /* Notas page top-level tab: false (activas) or true (archivadas).
      Archived notes hide from the default view + dashboard but their
      checklist items still count toward the "Metas checkeadas" stat. */
@@ -850,7 +843,6 @@ async function loadAll() {
     { data: media },
     { data: photos },
     { data: places },
-    { data: movies },
     { data: chats },
     { data: postits },
     { data: trips, error: tripsErr },
@@ -862,7 +854,6 @@ async function loadAll() {
     supabase.from('media').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('photos').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('places').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
-    supabase.from('movies').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('chats').select('*').order('created_at', { ascending: true }).limit(200),
     supabase.from('postits').select('*').order('z_index', { ascending: true }).order('created_at', { ascending: true }),
     supabase.from('trips').select('*').order('start_date', { ascending: true }),
@@ -874,7 +865,6 @@ async function loadAll() {
   state.media = media || [];
   state.photos = photos || [];
   state.places = places || [];
-  state.movies = movies || [];
   state.chats = chats || [];
   state.postits = postits || [];
   state.trips = trips || [];
@@ -962,9 +952,8 @@ function updateSidebarBadges() {
     'notas': notifNotes,
     'musica': state.media.filter(isUnread).length,
     'fotos': state.photos.filter(isUnread).length,
-    'pelis': state.movies.filter(isUnread).length,
   };
-  counts.home = counts.notas + counts.musica + counts.fotos + counts.pelis;
+  counts.home = counts.notas + counts.musica + counts.fotos;
   $$('[data-unread]').forEach(el => {
     const c = counts[el.dataset.unread] || 0;
     el.hidden = c === 0;
@@ -1036,7 +1025,6 @@ async function router() {
     case hash === '#/musica': renderMusica(content); break;
     case hash === '#/fotos': renderFotos(content); break;
     case hash.startsWith('#/fotos/album/'): renderAlbumDetail(content, hash.slice('#/fotos/album/'.length)); break;
-    case hash === '#/pelis': renderPelis(content); break;
     case hash === '#/viajes': renderViajes(content); break;
     case hash.startsWith('#/viajes/'): renderViajeDetail(content, hash.slice('#/viajes/'.length)); break;
     case hash === '#/configuracion': renderConfig(content); break;
@@ -1072,7 +1060,6 @@ function rerenderCurrentPage() {
     case hash === '#/musica': renderMusica(content); break;
     case hash === '#/fotos': renderFotos(content); break;
     case hash.startsWith('#/fotos/album/'): renderAlbumDetail(content, hash.slice('#/fotos/album/'.length)); break;
-    case hash === '#/pelis': renderPelis(content); break;
     case hash === '#/viajes': renderViajes(content); break;
     case hash.startsWith('#/viajes/'): renderViajeDetail(content, hash.slice('#/viajes/'.length)); break;
     case hash === '#/configuracion': renderConfig(content); break;
@@ -1307,7 +1294,7 @@ if (!window._medusasColResizeWired) {
 
 // ============================================================
 // Relationship stats widget — 4 little cards above the dashboard
-// columns that show photos, notes, months together and shared movies.
+// columns that show photos, the next trip and months together.
 // ============================================================
 const RELATIONSHIP_START = new Date(2026, 3, 25); // April 25, 2026
 
@@ -1383,36 +1370,6 @@ function getDashboardGreeting(userName) {
   return         { headline: `Buenas noches, ${safe}`,     sub };
 }
 
-function moviesWatchedTogether() {
-  // The user names live in state._userAssets after login (set in
-  // refreshUserAssetsLocal). Fall back to the two known users if the
-  // map isn't populated yet for some reason.
-  const all = state._userAssets
-    ? Object.keys(state._userAssets)
-    : ['Jaime', 'Mayck'];
-  if (all.length < 2) return 0;
-  return state.movies.filter(m => {
-    const wb = Array.isArray(m.watched_by) ? m.watched_by : [];
-    return all.every(u => wb.includes(u));
-  }).length;
-}
-
-// Pelis + series donde a alguien le falta verla todavía — mismo criterio
-// que el tab "Por ver" en la página de Pelis (no las del watchlist 0/2
-// solamente sino TODAS donde algún usuario no la marcó). Si los dos
-// criterios divergen, la tira del dashboard miente respecto al tab.
-function pendingMovies() {
-  const userNames = state._userAssets
-    ? Object.keys(state._userAssets)
-    : ['Jaime', 'Mayck'];
-  return state.movies.filter(m => {
-    const wb = Array.isArray(m.watched_by) ? m.watched_by : [];
-    if (userNames.length < 2) return wb.length === 0;
-    return !userNames.every(u => wb.includes(u));
-  });
-}
-function moviesPending() { return pendingMovies().length; }
-
 // Quick celebration when the user just completed the LAST unchecked
 // item of a multi-item checklist: a soft pulse on the checkbox + a
 // burst of 8 cream/accent dots radiating outward. Skips for single-
@@ -1461,13 +1418,11 @@ function nextTripStat() {
 
 function renderRelationshipStats() {
   const featuredPhotos = state.photos.filter(p => p.featured).length;
-  const pending = moviesPending();
   const months = monthsSince(RELATIONSHIP_START);
   const nextTrip = nextTripStat();
   const stats = [
     { key: 'featured-photos', label: 'Fotos destacadas', value: featuredPhotos },
     ...(nextTrip ? [nextTrip] : []),
-    { key: 'movies-pending', label: 'Pelis y series por ver', value: pending },
     { key: 'months', label: 'Meses juntos', value: months },
   ];
   return `
@@ -1486,8 +1441,7 @@ function totalUnreadCount() {
   // Private notes never count as notifications
   return state.notes.filter(n => n.visibility !== 'private' && isUnread(n)).length
     + state.media.filter(isUnread).length
-    + state.photos.filter(isUnread).length
-    + state.movies.filter(isUnread).length;
+    + state.photos.filter(isUnread).length;
 }
 
 // ============================================================
@@ -6069,8 +6023,6 @@ function renderNotifList() {
         _group: g,
       };
     }),
-    ...state.movies.map(m => tagItem(m, 'movie', mi('movie'), '#/pelis',
-      `${who(m.created_by)} agregó ${named(m.title, 'una peli')}`)),
   ];
 
   const unread = all.filter(it => isUnread(it));
@@ -6104,513 +6056,6 @@ function renderNotifList() {
     list.appendChild(a);
   }
 }
-
-// ============================================================
-// Page: Pelis (movies)
-// ============================================================
-function renderPelis(root) {
-  const filterTag = state.filterTag.pelis;
-  // A filter chip can be either a tag ("serie", "peli", "documental"…),
-  // a platform (prefixed "p:Netflix"), or a watched-by chip (prefixed
-  // "w:Mayck" / "w:Jaime" / "w:both"). The prefix is the namespace.
-  const isPlatformFilter = filterTag && filterTag.startsWith('p:');
-  const isWatchedFilter = filterTag && filterTag.startsWith('w:');
-  const activePlatform = isPlatformFilter ? filterTag.slice(2) : null;
-  const activeWatched = isWatchedFilter ? filterTag.slice(2) : null;
-  const activeTag = (!isPlatformFilter && !isWatchedFilter) ? filterTag : null;
-
-  // The two users (used for the watched filter chips)
-  const userNames = state._userAssets ? Object.keys(state._userAssets) : ['Jaime', 'Mayck'];
-
-  // Top-level tab filter: Watchlist (someone hasn't watched) vs
-  // Watched Together (everyone watched). Tag/platform/watched-by
-  // chips below filter within whichever tab is active.
-  const peliView = state.peliView || 'watchlist';
-  const matchesView = (m) => {
-    const wb = Array.isArray(m.watched_by) ? m.watched_by : [];
-    const everyone = userNames.length >= 2 && userNames.every(u => wb.includes(u));
-    return peliView === 'together' ? everyone : !everyone;
-  };
-
-  const items = state.movies.filter(m => {
-    if (!matchesView(m)) return false;
-    if (!filterTag) return true;
-    if (activePlatform) return (m.platform || '').trim() === activePlatform;
-    if (activeWatched) {
-      const wb = Array.isArray(m.watched_by) ? m.watched_by : [];
-      if (activeWatched === 'both') return userNames.every(u => wb.includes(u));
-      return wb.includes(activeWatched);
-    }
-    return Array.isArray(m.tags) && m.tags.includes(activeTag);
-  });
-
-  // Counts for the tabs themselves so the UI shows how many sit in each.
-  const tabCounts = state.movies.reduce((acc, m) => {
-    const wb = Array.isArray(m.watched_by) ? m.watched_by : [];
-    const everyone = userNames.length >= 2 && userNames.every(u => wb.includes(u));
-    if (everyone) acc.together += 1; else acc.watchlist += 1;
-    return acc;
-  }, { watchlist: 0, together: 0 });
-
-  // Chips count only movies that live in the active tab — showing chips
-  // with 0 results in this tab (e.g. "Vistas por ambos" while on "Por
-  // ver") leads to dead-ends where clicking the chip shows an empty
-  // grid. Watched-by chips also vary per tab:
-  //   * Por ver: per-user chips only (movies someone watched but the
-  //     other didn't); "ambos" by definition can't sit here.
-  //   * Vistas juntos: hide watched-by chips altogether — the tab IS
-  //     the everyone-watched filter, so per-user chips would all
-  //     duplicate the tab's count.
-  const tabMovies = state.movies.filter(matchesView);
-  const tagCounts = new Map();
-  tabMovies.forEach(m => (m.tags || []).forEach(t => tagCounts.set(t, (tagCounts.get(t) || 0) + 1)));
-  const sortedTags = Array.from(tagCounts.entries()).sort((a, b) => b[1] - a[1]);
-  const platformCounts = new Map();
-  tabMovies.forEach(m => {
-    const pl = (m.platform || '').trim();
-    if (pl) platformCounts.set(pl, (platformCounts.get(pl) || 0) + 1);
-  });
-  const sortedPlatforms = Array.from(platformCounts.entries()).sort((a, b) => b[1] - a[1]);
-  const watchedCounts = {};
-  if (peliView === 'watchlist') {
-    tabMovies.forEach(m => {
-      const wb = Array.isArray(m.watched_by) ? m.watched_by : [];
-      userNames.forEach(u => { if (wb.includes(u)) watchedCounts[u] = (watchedCounts[u] || 0) + 1; });
-    });
-  }
-
-  root.innerHTML = `
-    <div class="page-head">
-      <div>
-        <h1>Cine</h1>
-        <div class="sub">Lo que queremos ver y lo que ya vimos</div>
-      </div>
-      <div class="actions">
-        <button class="add-btn" id="new-movie-btn" type="button" title="Nueva peli" aria-label="Nueva peli"><span class="material-symbols-outlined">add</span></button>
-      </div>
-    </div>
-    <div class="seg-tabs" id="pelis-tabs">
-      <button class="seg-tab ${peliView === 'watchlist' ? 'active' : ''}" data-view="watchlist">
-        Por ver <span class="count">${tabCounts.watchlist}</span>
-      </button>
-      <button class="seg-tab ${peliView === 'together' ? 'active' : ''}" data-view="together">
-        Vistas juntos <span class="count">${tabCounts.together}</span>
-      </button>
-    </div>
-    ${(sortedTags.length || sortedPlatforms.length || Object.keys(watchedCounts).length) ? `
-      <div class="tag-filter-row" id="pelis-tag-filter">
-        <button class="tag-chip tag-chip-all ${!filterTag ? 'active' : ''}" data-tag="">Todas</button>
-        ${userNames.map(u => watchedCounts[u] ? `
-          <button class="tag-chip ${activeWatched === u ? 'active' : ''}" data-tag="w:${escapeHtml(u)}" style="--tag-color: #4caf50;">
-            <span class="material-symbols-outlined" style="font-size:14px;vertical-align:-3px;">visibility</span> Vistas por ${escapeHtml(u)} <span class="count">${watchedCounts[u]}</span>
-          </button>
-        ` : '').join('')}
-        ${watchedCounts.both ? `
-          <button class="tag-chip ${activeWatched === 'both' ? 'active' : ''}" data-tag="w:both" style="--tag-color: #2e7d32;">
-            <span class="material-symbols-outlined" style="font-size:14px;vertical-align:-3px;">groups</span> Vistas por ambos <span class="count">${watchedCounts.both}</span>
-          </button>
-        ` : ''}
-        ${sortedTags.map(([tag, count]) => `
-          <button class="tag-chip ${activeTag === tag ? 'active' : ''}" data-tag="${escapeHtml(tag)}" style="--tag-color: ${tagColor(tag)};">
-            #${escapeHtml(tag)} <span class="count">${count}</span>
-          </button>
-        `).join('')}
-        ${sortedPlatforms.map(([pl, count]) => `
-          <button class="tag-chip ${activePlatform === pl ? 'active' : ''}" data-tag="p:${escapeHtml(pl)}" style="--tag-color: ${tagColor(pl)};">
-            ${escapeHtml(pl)} <span class="count">${count}</span>
-          </button>
-        `).join('')}
-      </div>
-    ` : ''}
-    <div class="grid-cards" id="movies-grid"></div>
-  `;
-  $('#new-movie-btn').addEventListener('click', () => openMovieEditor(null));
-  const tabsRow = $('#pelis-tabs');
-  if (tabsRow) {
-    tabsRow.addEventListener('click', (e) => {
-      const b = e.target.closest('button[data-view]');
-      if (!b) return;
-      const next = b.dataset.view;
-      if (next === state.peliView) return;
-      state.peliView = next;
-      // Switching tabs invalidates the active tag/watched-by chip filter
-      // since the counts inside the tab are different.
-      state.filterTag.pelis = null;
-      renderPelis(root);
-    });
-  }
-  const tagRow = $('#pelis-tag-filter');
-  if (tagRow) {
-    tagRow.addEventListener('click', (e) => {
-      const b = e.target.closest('button[data-tag]');
-      if (!b) return;
-      state.filterTag.pelis = b.dataset.tag || null;
-      renderPelis(root);
-    });
-  }
-  const grid = $('#movies-grid');
-  if (!items.length) {
-    let label;
-    if (activeWatched === 'both') label = 'pelis vistas por ambos';
-    else if (activeWatched) label = `pelis vistas por ${activeWatched}`;
-    else if (activePlatform) label = activePlatform;
-    else if (activeTag) label = `#${activeTag}`;
-    else label = '';
-    grid.innerHTML = filterTag
-      ? `<div class="empty">Nada para ${escapeHtml(label)}.</div>`
-      : '<div class="empty">Aún no hay pelis. Añade la primera con el botón.</div>';
-    return;
-  }
-  items.forEach(m => grid.appendChild(renderMovieCard(m)));
-}
-
-function renderMovieCard(m) {
-  const card = document.createElement('article');
-  card.className = 'card clickable movie-card';
-  card.style.viewTransitionName = `movie-${cssSafeId(m.id)}`;
-  if (m.pinned) card.classList.add('pinned');
-  card.setAttribute('role', 'button');
-  card.setAttribute('tabindex', '0');
-
-  if (isUnread(m)) {
-    const dot = document.createElement('span');
-    dot.className = 'unread-dot';
-    card.appendChild(dot);
-  }
-
-  const actions = document.createElement('div');
-  actions.className = 'card-actions';
-  actions.innerHTML = `<button title="${m.pinned ? 'Desanclar' : 'Anclar'}" class="${m.pinned ? 'is-on' : ''}" data-action="pin"><span class="material-symbols-outlined">keep</span></button>`;
-  actions.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    if (!e.target.closest('button[data-action="pin"]')) return;
-    const next = !m.pinned;
-    await togglePinWithTransition(async () => {
-      m.pinned = next;
-      await supabase.from('movies').update({ pinned: next }).eq('id', m.id);
-      await router();
-    });
-  });
-  card.appendChild(actions);
-
-  const poster = document.createElement('div');
-  poster.className = 'poster-wrap';
-  if (m.image_path) {
-    const img = document.createElement('img');
-    // Posters render at ~220-280px wide (aspect 2:3). 500px transform
-    // covers retina screens without hauling the original.
-    img.src = publicImageUrl(m.image_path, { width: thumbWidth(280) });
-    img.alt = m.title; img.loading = 'lazy';
-    poster.appendChild(img);
-  } else {
-    const np = document.createElement('div');
-    np.className = 'no-poster';
-    np.innerHTML = '<span class="material-symbols-outlined" style="font-size:3rem;">movie</span>';
-    poster.appendChild(np);
-  }
-  if (m.platform) {
-    const chip = document.createElement('div');
-    chip.className = 'platform-chip';
-    chip.textContent = m.platform;
-    poster.appendChild(chip);
-  }
-  // Watched badge
-  const watched = Array.isArray(m.watched_by) ? m.watched_by : [];
-  if (watched.length) {
-    const wb = document.createElement('div');
-    wb.className = 'watch-badge';
-    const check = '<span class="material-symbols-outlined seen" style="font-size:14px;">check</span>';
-    wb.innerHTML = watched.length === 2
-      ? `${check} los dos`
-      : `${check} ${escapeHtml(watched[0])}`;
-    poster.appendChild(wb);
-  }
-  card.appendChild(poster);
-
-  const body = document.createElement('div');
-  body.className = 'body';
-
-  // Tags above the title so the kind (peli/serie/etc.) is the first thing seen
-  if (Array.isArray(m.tags) && m.tags.length) {
-    const tr = document.createElement('div');
-    tr.className = 'tag-row';
-    m.tags.forEach(t => {
-      const tEl = document.createElement('span');
-      tEl.className = 'tag';
-      tEl.style.setProperty('--tag-color', tagColor(t));
-      tEl.textContent = '#' + t;
-      tr.appendChild(tEl);
-    });
-    body.appendChild(tr);
-  }
-
-  const h = document.createElement('h3');
-  h.textContent = m.title;
-  body.appendChild(h);
-
-  if (m.score) {
-    const row = document.createElement('div');
-    row.className = 'stars-row';
-    const full = Math.floor(m.score);
-    let html = '';
-    for (let i = 0; i < 5; i++) {
-      html += i < full ? '★' : '<span class="empty-star">★</span>';
-    }
-    row.innerHTML = html;
-    body.appendChild(row);
-  }
-
-  const meta = document.createElement('div');
-  meta.className = 'meta';
-  meta.innerHTML = `<span>${escapeHtml(m.created_by || '?')} · ${fmtDate(m.created_at)}</span>`;
-  body.appendChild(meta);
-
-  card.appendChild(body);
-  card.addEventListener('click', () => openMovieEditor(m));
-  card.addEventListener('keydown', e => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openMovieEditor(m); }
-  });
-  return card;
-}
-
-// ---------- Movie editor ----------
-const dlgMovie = $('#dlg-movie');
-const movieDraft = { id: null, score: null, watched_by: [], pinned: false, image_path: null, tags: [] };
-
-function setMovieStars(score) {
-  movieDraft.score = score;
-  $$('#movie-stars button[data-v]').forEach(b => {
-    const v = Number(b.dataset.v);
-    b.classList.toggle('on', v <= (score || 0));
-  });
-}
-
-function setMoviePin(p) {
-  movieDraft.pinned = p;
-  const b = $('#movie-pin-toggle');
-  b.classList.toggle('is-pinned', p);
-  b.innerHTML = `<span class="material-symbols-outlined">keep</span> ${p ? 'Anclada' : 'Anclar'}`;
-}
-
-const MOVIE_TAG_SUGGESTIONS = ['peli', 'serie', 'documental', 'favorita', 'pendiente'];
-function renderMovieTags() {
-  const root = $('#movie-tags');
-  if (!root) return;
-  root.innerHTML = '';
-  movieDraft.tags.forEach((t, i) => {
-    const chip = document.createElement('span');
-    chip.className = 'tag-chip-selected';
-    chip.style.setProperty('--tag-color', tagColor(t));
-    chip.innerHTML = `#${escapeHtml(t)} <button type="button" aria-label="Quitar">×</button>`;
-    chip.querySelector('button').addEventListener('click', () => { movieDraft.tags.splice(i, 1); renderMovieTags(); });
-    root.appendChild(chip);
-  });
-}
-function renderMovieTagSuggestions(query) {
-  const root = $('#movie-tag-suggestions');
-  if (!root) return;
-  root.innerHTML = '';
-  const existing = new Set(MOVIE_TAG_SUGGESTIONS);
-  state.movies.forEach(m => (m.tags || []).forEach(t => existing.add(t)));
-  let all = Array.from(existing).filter(t => !movieDraft.tags.includes(t));
-  if (query) {
-    const q = query.toLowerCase();
-    all = all.filter(t => t.toLowerCase().includes(q));
-  }
-  all.slice(0, 10).forEach(t => {
-    const el = document.createElement('button');
-    el.type = 'button';
-    el.className = 'tag-sugg';
-    el.textContent = '#' + t;
-    el.addEventListener('click', () => addMovieTag(t));
-    root.appendChild(el);
-  });
-}
-function addMovieTag(raw) {
-  const t = raw.replace(/^#/, '').trim();
-  if (!t) return;
-  if (movieDraft.tags.some(x => x.toLowerCase() === t.toLowerCase())) return;
-  movieDraft.tags.push(t);
-  renderMovieTags();
-  renderMovieTagSuggestions($('#movie-tag-input').value);
-}
-
-function renderMovieImage() {
-  const el = $('#movie-image-preview');
-  el.innerHTML = '';
-  if (movieDraft.image_path) {
-    const img = document.createElement('img');
-    img.src = publicImageUrl(movieDraft.image_path, { width: thumbWidth(220) });
-    el.appendChild(img);
-  } else {
-    el.innerHTML = '<span class="material-symbols-outlined" style="font-size:2.2rem;opacity:0.5;">movie</span>';
-  }
-}
-
-function renderWatchedCheckboxes(usersNames) {
-  const wrap = $('#movie-watched');
-  // Keep label, remove existing checkboxes
-  wrap.innerHTML = '<div class="watched-label">¿Quién la vio?</div>';
-  for (const name of usersNames) {
-    const lbl = document.createElement('label');
-    lbl.className = 'watched-check';
-    const checked = movieDraft.watched_by.includes(name);
-    if (checked) lbl.classList.add('checked');
-    lbl.innerHTML = `<input type="checkbox" ${checked ? 'checked' : ''} /> ${escapeHtml(name)}`;
-    const cb = lbl.querySelector('input');
-    cb.addEventListener('change', () => {
-      if (cb.checked) {
-        if (!movieDraft.watched_by.includes(name)) movieDraft.watched_by.push(name);
-        lbl.classList.add('checked');
-      } else {
-        movieDraft.watched_by = movieDraft.watched_by.filter(x => x !== name);
-        lbl.classList.remove('checked');
-      }
-    });
-    wrap.appendChild(lbl);
-  }
-}
-
-async function openMovieEditor(m) {
-  movieDraft.id = m?.id || null;
-  movieDraft.score = m?.score ? Number(m.score) : null;
-  movieDraft.watched_by = Array.isArray(m?.watched_by) ? [...m.watched_by] : [];
-  movieDraft.pinned = !!m?.pinned;
-  movieDraft.image_path = m?.image_path || null;
-  movieDraft.tags = Array.isArray(m?.tags) ? [...m.tags] : [];
-
-  $('#movie-title-input').value = m?.title || '';
-  $('#movie-platform').value = m?.platform || '';
-  $('#movie-notes').value = m?.notes || '';
-  $('#movie-tag-input').value = '';
-  renderMovieTags();
-  renderMovieTagSuggestions('');
-  setMovieStars(movieDraft.score);
-  setMoviePin(movieDraft.pinned);
-  renderMovieImage();
-  // Fetch user names dynamically
-  const userNames = Object.keys(state._userAssets || {});
-  if (userNames.length === 0) userNames.push('Jaime', 'Mayck');
-  renderWatchedCheckboxes(userNames);
-
-  $('#movie-status').textContent = '';
-  $('#dlg-movie-title').textContent = m ? 'Editar peli' : 'Nueva peli';
-  $('#movie-save').textContent = m ? 'Actualizar' : 'Guardar';
-  $('#movie-delete').hidden = !m;
-
-  dlgMovie.showModal();
-  setTimeout(() => $('#movie-title-input').focus(), 0);
-  if (m && isUnread(m)) markSeen('movies', m);
-}
-
-$('#movie-stars').addEventListener('click', (e) => {
-  const b = e.target.closest('button[data-v]');
-  if (!b) return;
-  const v = Number(b.dataset.v);
-  // Clicking the same star clears (toggle)
-  if (movieDraft.score === v) setMovieStars(null);
-  else setMovieStars(v);
-});
-$('#movie-stars-clear').addEventListener('click', () => setMovieStars(null));
-
-$('#movie-pin-toggle').addEventListener('click', () => setMoviePin(!movieDraft.pinned));
-
-// Movie tag input wiring (mirrors the note tag input)
-$('#movie-tag-input').addEventListener('input', (e) => renderMovieTagSuggestions(e.target.value));
-$('#movie-tag-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' || e.key === ',') {
-    e.preventDefault();
-    addMovieTag(e.target.value);
-    e.target.value = '';
-    renderMovieTagSuggestions('');
-  } else if (e.key === 'Backspace' && !e.target.value && movieDraft.tags.length) {
-    movieDraft.tags.pop();
-    renderMovieTags();
-    renderMovieTagSuggestions('');
-  }
-});
-
-$('#movie-image-pick').addEventListener('click', () => $('#movie-image-input').click());
-
-$('#movie-image-input').addEventListener('change', async (e) => {
-  if (!e.target.files?.length) return;
-  const file = e.target.files[0];
-  e.target.value = '';
-  setStatus($('#movie-status'), 'Subiendo imagen…');
-  try {
-    const ext = (file.name.split('.').pop() || 'png').toLowerCase();
-    const path = `movies/${crypto.randomUUID()}.${ext}`;
-    const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
-      cacheControl: '3600', upsert: false, contentType: file.type,
-    });
-    if (error) throw error;
-    movieDraft.image_path = path;
-    renderMovieImage();
-    setStatus($('#movie-status'), 'Imagen subida');
-  } catch (err) {
-    setStatus($('#movie-status'), `Error: ${err.message || err}`, true);
-  }
-});
-
-$('#movie-image-clear').addEventListener('click', () => {
-  if (movieDraft.image_path) {
-    supabase.storage.from(BUCKET).remove([movieDraft.image_path]).catch(() => {});
-  }
-  movieDraft.image_path = null;
-  renderMovieImage();
-});
-
-$('#movie-save').addEventListener('click', async () => {
-  const title = $('#movie-title-input').value.trim();
-  if (!title) { setStatus($('#movie-status'), 'El título es obligatorio', true); $('#movie-title-input').focus(); return; }
-  // Auto-pickup any tag the user typed but didn't press Enter on
-  const pendingTag = $('#movie-tag-input').value.trim();
-  if (pendingTag) {
-    addMovieTag(pendingTag);
-    $('#movie-tag-input').value = '';
-  }
-  const payload = {
-    title,
-    score: movieDraft.score || null,
-    platform: $('#movie-platform').value.trim(),
-    notes: $('#movie-notes').value,
-    image_path: movieDraft.image_path,
-    watched_by: movieDraft.watched_by,
-    pinned: movieDraft.pinned,
-    tags: movieDraft.tags,
-  };
-  setStatus($('#movie-status'), 'Guardando…');
-  try {
-    if (movieDraft.id) {
-      const { error } = await supabase.from('movies').update(payload).eq('id', movieDraft.id);
-      if (error) throw error;
-    } else {
-      payload.created_by = state.currentUser;
-      payload.seen_by = [state.currentUser];
-      const { error } = await supabase.from('movies').insert(payload);
-      if (error) throw error;
-    }
-    dlgMovie.close();
-    await router();
-  } catch (e) { setStatus($('#movie-status'), `Error al guardar: ${e.message || e}`, true); }
-});
-
-$('#movie-delete').addEventListener('click', async () => {
-  if (!movieDraft.id) return;
-  const m = state.movies.find(x => x.id === movieDraft.id);
-  if (!m) return;
-  if (!(await uiConfirm(`¿Eliminar "${m.title}"? No se puede deshacer.`, { title: 'Eliminar peli', confirmLabel: 'Eliminar', danger: true }))) return;
-  setStatus($('#movie-status'), 'Eliminando…');
-  try {
-    if (m.image_path) {
-      try { await supabase.storage.from(BUCKET).remove([m.image_path]); } catch {}
-    }
-    const { error } = await supabase.from('movies').delete().eq('id', m.id);
-    if (error) throw error;
-    dlgMovie.close();
-    await router();
-  } catch (e) { setStatus($('#movie-status'), `Error al eliminar: ${e.message || e}`, true); }
-});
 
 // ============================================================
 // Post-it board (dashboard)

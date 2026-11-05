@@ -28,7 +28,7 @@
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
 
-    <link rel="stylesheet" href="./styles.css?v=20261105b" />
+    <link rel="stylesheet" href="./styles.css?v=20261105d" />
 
     <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>
@@ -116,10 +116,6 @@
             <span class="material-symbols-outlined m-icon">music_note</span><span>Música</span>
             <span class="badge-unread" data-unread="musica" hidden></span>
           </a>
-          <a href="#/pelis" data-route="#/pelis">
-            <span class="material-symbols-outlined m-icon">movie</span><span>Cine</span>
-            <span class="badge-unread" data-unread="pelis" hidden></span>
-          </a>
           <a href="#/viajes" data-route="#/viajes">
             <span class="material-symbols-outlined m-icon">flight_takeoff</span><span>Viajes</span>
           </a>
@@ -140,9 +136,6 @@
         </a>
         <a href="#/musica" data-route="#/musica" class="m-item">
           <span class="material-symbols-outlined m-icon">music_note</span><span class="m-label">Música</span>
-        </a>
-        <a href="#/pelis" data-route="#/pelis" class="m-item">
-          <span class="material-symbols-outlined m-icon">movie</span><span class="m-label">Cine</span>
         </a>
         <a href="#/viajes" data-route="#/viajes" class="m-item">
           <span class="material-symbols-outlined m-icon">flight_takeoff</span><span class="m-label">Viajes</span>
@@ -626,85 +619,6 @@
       </div>
     </dialog>
 
-    <!-- ==================== Movie editor ==================== -->
-    <dialog class="modal" id="dlg-movie">
-      <div class="modal-inner">
-        <div class="modal-head">
-          <h2 id="dlg-movie-title">Nueva peli</h2>
-          <button class="close-x" data-close><span class="material-symbols-outlined">close</span></button>
-        </div>
-
-        <input type="text" class="title" id="movie-title-input" placeholder="Título de la peli…" maxlength="200" />
-
-        <div class="movie-image-wrap">
-          <div class="movie-image-preview" id="movie-image-preview"></div>
-          <div class="movie-image-actions">
-            <button class="btn primary" type="button" id="movie-image-pick">Subir imagen</button>
-            <input type="file" accept="image/*" id="movie-image-input" hidden />
-            <button class="btn ghost" id="movie-image-clear" type="button">Quitar</button>
-          </div>
-        </div>
-
-        <div class="field two">
-          <div>
-            <label>Puntaje</label>
-            <div class="stars" id="movie-stars">
-              <button data-v="1" type="button">★</button>
-              <button data-v="2" type="button">★</button>
-              <button data-v="3" type="button">★</button>
-              <button data-v="4" type="button">★</button>
-              <button data-v="5" type="button">★</button>
-              <button class="clear-stars" id="movie-stars-clear" type="button">Limpiar</button>
-            </div>
-          </div>
-          <div>
-            <label for="movie-platform">Plataforma (opcional)</label>
-            <input type="text" id="movie-platform" placeholder="Netflix, HBO, Mubi…" list="movie-platform-list" maxlength="100" />
-            <datalist id="movie-platform-list">
-              <option value="Netflix"><option value="HBO Max"><option value="Disney+"><option value="Prime Video"><option value="Apple TV+"><option value="Mubi"><option value="Xuper"><option value="En cartelera"></option>
-            </datalist>
-          </div>
-        </div>
-
-        <div class="field">
-          <label>Etiquetas</label>
-          <div class="tag-section">
-            <div class="tags-selected" id="movie-tags"></div>
-            <input type="text" id="movie-tag-input" placeholder="Añadir etiqueta… (Enter)" list="movie-tag-list" maxlength="40" />
-            <datalist id="movie-tag-list">
-              <option value="peli"><option value="serie"><option value="documental"><option value="favorita"><option value="pendiente">
-            </datalist>
-            <div class="tag-suggestions" id="movie-tag-suggestions"></div>
-          </div>
-        </div>
-
-        <div class="field">
-          <label for="movie-notes">Notas (opcional)</label>
-          <textarea id="movie-notes" placeholder="Por qué quieres verla, alguien la recomendó, etc."></textarea>
-        </div>
-
-        <div class="watched-row" id="movie-watched">
-          <div class="watched-label">¿Quién la vio?</div>
-          <!-- checkboxes injected -->
-        </div>
-
-        <div class="modal-toolbar">
-          <button class="btn pin-toggle" id="movie-pin-toggle" type="button"><span class="material-symbols-outlined">keep</span> Anclar</button>
-        </div>
-
-        <div class="modal-actions">
-          <div class="left">
-            <span class="status" id="movie-status"></span>
-          </div>
-          <button class="btn danger" id="movie-delete" hidden>Eliminar</button>
-          <div class="right">
-            <button class="btn ghost" data-close>Cancelar</button>
-            <button class="btn primary" id="movie-save">Guardar</button>
-          </div>
-        </div>
-      </div>
-    </dialog>
-
     <!-- ==================== Notifications popover ==================== -->
     <div class="notif-popover" id="notif-popover" hidden>
       <div class="notif-head">
@@ -714,6 +628,6 @@
       <div class="notif-list" id="notif-list"></div>
     </div>
 
-    <script type="module" src="./app.js?v=20261105b"></script>
+    <script type="module" src="./app.js?v=20261105d"></script>
   </body>
 </html>

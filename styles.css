@@ -536,7 +536,6 @@ nav.menu a .m-icon { font-size: 20px; width: 22px; text-align: center; }
 .move-btns button .material-symbols-outlined { font-size: 16px; }
 .drag-handle .material-symbols-outlined { font-size: 18px; }
 .media-card .meta .material-symbols-outlined { font-size: 13px; }
-.movie-card .watch-badge .material-symbols-outlined { font-size: 13px; }
 .btn .material-symbols-outlined { font-size: 18px; }
 .asset-empty .material-symbols-outlined { font-size: 22px; }
 
@@ -924,14 +923,17 @@ button.btn.pin-toggle.is-pinned {
     flex-wrap: wrap;
     padding: 0.2rem 0;
   }
-  .stats-widget .stat-cell {
-    flex: 1 1 50%;
-    padding: 0.55rem 0.85rem;
-  }
-  .stats-widget .stat-cell:nth-child(2n) { border-right: none; }
-  .stats-widget .stat-cell:nth-child(-n+2) {
+  /* Hasta 3 datos: una sola fila, la etiqueta puede ir en dos líneas
+     ("Días para Cartagena" no cabe en un tercio de pantalla). */
+  .stats-widget .stat-cell { padding: 0.55rem 0.75rem; }
+  .stats-widget .stat-label { white-space: normal; }
+  /* 4 datos: cuadrícula 2×2. */
+  .stats-widget:has(> .stat-cell:nth-child(4)) .stat-cell { flex: 1 1 50%; padding: 0.55rem 0.85rem; }
+  .stats-widget:has(> .stat-cell:nth-child(4)) .stat-cell:nth-child(2n) { border-right: none; }
+  .stats-widget:has(> .stat-cell:nth-child(4)) .stat-cell:nth-child(-n+2) {
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }
+  .stats-widget:has(> .stat-cell:nth-child(4)) .stat-label { white-space: nowrap; }
   .stats-widget .stat-value { font-size: 1.5rem; }
   .stats-widget .stat-label { font-size: 0.72rem; }
 }
@@ -2690,79 +2692,6 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 }
 .doodle-board .db-author.show { opacity: 1; }
 
-/* ======== Movie card / stars ======== */
-.movie-card { padding: 0; overflow: hidden; }
-.movie-card .poster-wrap {
-  position: relative; aspect-ratio: 2 / 3;
-  background: linear-gradient(135deg, #3a1d4a, #1e3a5f);
-  overflow: hidden;
-}
-.movie-card .poster-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.movie-card .poster-wrap .no-poster {
-  position: absolute; inset: 0; display: grid; place-items: center;
-  color: rgba(255,255,255,0.5); font-size: 2.5rem;
-}
-.movie-card .poster-wrap .platform-chip {
-  position: absolute; top: 8px; left: 8px;
-  background: rgba(0,0,0,0.65); color: white; border-radius: 999px;
-  font-size: 0.7rem; padding: 0.15rem 0.55rem;
-}
-.movie-card .poster-wrap .watch-badge {
-  position: absolute; bottom: 8px; right: 8px;
-  background: rgba(0,0,0,0.65); color: white; border-radius: 999px;
-  font-size: 0.7rem; padding: 0.15rem 0.55rem; display: flex; gap: 0.2rem;
-}
-.movie-card .poster-wrap .watch-badge .seen { color: #22c55e; }
-.movie-card .body { padding: 0.6rem 0.75rem 0.75rem; display: flex; flex-direction: column; gap: 0.3rem; }
-.movie-card .stars-row { color: #f9b233; font-size: 0.85rem; letter-spacing: 0.05em; }
-.movie-card .stars-row .empty-star { color: var(--border); }
-
-.stars {
-  display: inline-flex; gap: 0.1rem; align-items: center;
-}
-.stars button {
-  background: transparent; border: 0; cursor: pointer;
-  color: var(--border); font-size: 1.5rem; padding: 0 0.15rem; line-height: 1;
-}
-.stars button.on { color: #f9b233; }
-.stars .clear-stars {
-  background: transparent; border: 0; cursor: pointer;
-  color: var(--text-dim); font-size: 0.75rem; margin-left: 0.5rem;
-}
-.stars .clear-stars:hover { color: var(--text); }
-
-.movie-image-wrap {
-  display: flex; gap: 0.7rem; align-items: center; margin: 0.5rem 0;
-}
-.movie-image-preview {
-  width: 80px; height: 120px; border-radius: 8px; overflow: hidden;
-  border: 1px solid var(--border); background: var(--surface-alt);
-  display: grid; place-items: center; color: var(--text-dim); font-size: 1.5rem;
-  flex-shrink: 0;
-}
-.movie-image-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.movie-image-actions { display: flex; flex-direction: column; gap: 0.35rem; align-items: flex-start; }
-.movie-image-actions .btn { min-width: 120px; justify-content: center; }
-
-.watched-row {
-  display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;
-  padding: 0.5rem 0; border-top: 1px solid var(--border); margin-top: 0.4rem;
-}
-.watched-row .watched-label { font-size: 0.82rem; color: var(--text-dim); }
-.watched-row label.watched-check {
-  display: inline-flex; align-items: center; gap: 0.3rem;
-  padding: 0.3rem 0.7rem; border-radius: 999px;
-  background: var(--surface-alt); border: 1px solid var(--border);
-  cursor: pointer; font-size: 0.82rem;
-}
-.watched-row label.watched-check input { margin: 0; }
-.watched-row label.watched-check.checked {
-  background: var(--accent);
-  color: var(--on-accent);
-  border-color: transparent;
-  font-weight: 600;
-}
-
 /* ======== Notes layout fixes ======== */
 /* No overflow:hidden on the card itself — the .body clips its own
    content (bounded flex + overflow hidden), and the corner ellipsis
@@ -3800,7 +3729,7 @@ dialog.lightbox .lb-tag-chip button {
   position: absolute;
   inset: -7px;
 }
-/* Card action buttons (media/movie feature-pin) — flex row w/ 3px gaps */
+/* Card action buttons (media feature-pin) — flex row w/ 3px gaps */
 .card .card-actions button::before {
   content: "";
   position: absolute;
