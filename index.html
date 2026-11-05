@@ -28,7 +28,7 @@
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
 
-    <link rel="stylesheet" href="./styles.css?v=20261104a" />
+    <link rel="stylesheet" href="./styles.css?v=20261105b" />
 
     <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>
@@ -411,13 +411,16 @@
           <label for="trip-title">Destino</label>
           <input type="text" id="trip-title" placeholder="Ej: Los Ángeles" maxlength="120" />
         </div>
+        <div class="field">
+          <label class="check-label"><input type="checkbox" id="trip-tentative" /> Fechas tentativas (solo meses)</label>
+        </div>
         <div class="field-row">
           <div class="field">
-            <label for="trip-start">Inicio</label>
+            <label for="trip-start" id="trip-start-label">Inicio</label>
             <input type="date" id="trip-start" />
           </div>
           <div class="field">
-            <label for="trip-end">Fin</label>
+            <label for="trip-end" id="trip-end-label">Fin</label>
             <input type="date" id="trip-end" />
           </div>
         </div>
@@ -711,6 +714,6 @@
       <div class="notif-list" id="notif-list"></div>
     </div>
 
-    <script type="module" src="./app.js?v=20261104a"></script>
+    <script type="module" src="./app.js?v=20261105b"></script>
   </body>
 </html>

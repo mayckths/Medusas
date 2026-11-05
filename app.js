@@ -1082,7 +1082,7 @@ function rerenderCurrentPage() {
 // ============================================================
 // Page: Inicio (dashboard)
 // ============================================================
-const DEFAULT_DASHBOARD_ORDER = ['notes', 'media', 'photos', 'movies'];
+const DEFAULT_DASHBOARD_ORDER = ['notes', 'media', 'photos', 'trips'];
 
 function getDashboardOrder() {
   const raw = state.settings.dashboard_order;
@@ -1137,13 +1137,13 @@ function renderInicio(root) {
         </div>
         <div class="dash-photos-strip" id="dash-photos-grid"></div>
       </section>`,
-    movies: `
-      <section class="section-block" data-sec="movies">
+    trips: `
+      <section class="section-block" data-sec="trips">
         <div class="section-head">
-          <h2>Pelis y series por ver</h2>
-          <a href="#/pelis">Ver todas →</a>
+          <h2>Viajes</h2>
+          <a href="#/viajes">Ver todos →</a>
         </div>
-        <div class="grid-cards" id="dash-movies-grid"></div>
+        <div class="dash-trips-strip" id="dash-trips-strip"></div>
       </section>`,
     places: `
       <section class="section-block" data-sec="places">
@@ -1227,13 +1227,12 @@ function renderInicio(root) {
     else photosGrid.innerHTML = '<div class="empty">Aún no hay fotos.</div>';
   }
 
-  // Pelis y series pendientes por ver (que a alguno le falte verla) —
-  // mismo criterio que el tab "Por ver" y que la stat de arriba.
-  const moviesGrid = $('#dash-movies-grid');
-  if (moviesGrid) {
-    const pendingList = pendingMovies().slice(0, 3);
-    if (pendingList.length) pendingList.forEach(m => moviesGrid.appendChild(renderMovieCard(m)));
-    else moviesGrid.innerHTML = '<div class="empty">Nada pendiente por ver 🎉</div>';
+  // Viajes: los próximos primero, luego en los que ya estuvimos.
+  const tripsStrip = $('#dash-trips-strip');
+  if (tripsStrip) {
+    const trips = sortTripsForDisplay(state.trips);
+    if (trips.length) trips.forEach(t => tripsStrip.appendChild(renderTripCard(t)));
+    else tripsStrip.innerHTML = '<div class="empty">Aún no hay viajes.</div>';
   }
 
   // Recent places (max 3)
@@ -1251,7 +1250,7 @@ function renderInicio(root) {
   requestAnimationFrame(() => {
     fitColRightToViewport();
     // Hide overflowing cards so dashboard sections always show one row
-    ['#dash-notes-grid', '#dash-media-grid', '#dash-movies-grid', '#dash-places-grid']
+    ['#dash-notes-grid', '#dash-media-grid', '#dash-places-grid']
       .forEach(sel => clampGridToOneRow(document.querySelector(sel)));
   });
 }
@@ -1452,6 +1451,10 @@ function nextTripStat() {
     .filter(t => t.start_date && new Date(t.start_date + 'T23:59:59') >= today)
     .sort((a, b) => a.start_date.localeCompare(b.start_date))[0];
   if (!upcoming) return null;
+  // Con fechas tentativas no hay día exacto: se cuentan meses.
+  if (isTentativeTrip(upcoming)) {
+    return { key: 'next-trip', label: `Meses para ${upcoming.title}`, value: Math.max(0, monthsUntil(upcoming.start_date)) };
+  }
   const days = Math.max(0, Math.ceil((new Date(upcoming.start_date + 'T00:00:00') - today) / 86400000));
   return { key: 'next-trip', label: `Días para ${upcoming.title}`, value: days };
 }
@@ -2096,15 +2099,77 @@ function tripDayIcon(day) {
 // Reserva a resaltar al saltar desde un chip del itinerario.
 let highlightBookingId = null;
 
+// Viajes con fechas tentativas guardan solo meses: date_precision 'month',
+// start_date = día 1 del mes inicial, end_date = último día del mes final.
+function isTentativeTrip(trip) {
+  return trip.date_precision === 'month';
+}
+
+function monthsUntil(iso) {
+  const now = new Date();
+  const d = new Date(iso + 'T00:00:00');
+  return (d.getFullYear() - now.getFullYear()) * 12 + (d.getMonth() - now.getMonth());
+}
+
 function tripCountdown(trip) {
   if (!trip.start_date) return null;
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const start = new Date(trip.start_date + 'T00:00:00');
   const end = trip.end_date ? new Date(trip.end_date + 'T23:59:59') : start;
   if (today > end) return { label: 'Viaje pasado', past: true };
+  if (isTentativeTrip(trip)) {
+    const m = monthsUntil(trip.start_date);
+    return { label: m <= 0 ? 'Este mes ✈️' : `En ~${m} mes${m === 1 ? '' : 'es'} ✈️` };
+  }
   if (today >= start) return { label: '¡En viaje! ✈️', now: true };
   const days = Math.ceil((start - today) / 86400000);
   return { label: `Falta${days === 1 ? '' : 'n'} ${days} día${days === 1 ? '' : 's'} ✈️` };
+}
+
+// Rango de fechas del viaje. Exactas: "25 sept – 3 oct 2026" (o con día
+// de la semana en `long`). Tentativas: "may – jun 2027".
+function fmtTripRange(trip, { long = false } = {}) {
+  if (!trip.start_date) return '';
+  const end = trip.end_date || trip.start_date;
+  if (isTentativeTrip(trip)) {
+    const s = new Date(trip.start_date + 'T00:00:00');
+    const e = new Date(end + 'T00:00:00');
+    const month = long ? 'long' : 'short';
+    const sameMonth = s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth();
+    const sameYear = s.getFullYear() === e.getFullYear();
+    let out;
+    if (sameMonth) out = s.toLocaleDateString('es', { month, year: 'numeric' });
+    else if (sameYear) out = `${s.toLocaleDateString('es', { month })} – ${e.toLocaleDateString('es', { month, year: 'numeric' })}`;
+    else out = `${s.toLocaleDateString('es', { month, year: 'numeric' })} – ${e.toLocaleDateString('es', { month, year: 'numeric' })}`;
+    out = out.charAt(0).toUpperCase() + out.slice(1);
+    return long ? `${out} (fechas tentativas)` : out;
+  }
+  if (long) return `${fmtTripDateLong(trip.start_date)} – ${fmtTripDateLong(end)}`;
+  const year = new Date(end + 'T00:00:00').getFullYear();
+  if (trip.start_date.slice(0, 7) === end.slice(0, 7)) {
+    // Mismo mes: "10 – 15 dic 2026"
+    return `${Number(trip.start_date.slice(8, 10))} – ${fmtTripDate(end)} ${year}`;
+  }
+  return `${fmtTripDate(trip.start_date)} – ${fmtTripDate(end)} ${year}`;
+}
+
+// Próximos primero (el más cercano arriba), luego los pasados (el más
+// reciente arriba).
+function sortTripsForDisplay(trips) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const isPast = t => t.end_date && new Date(t.end_date + 'T23:59:59') < today;
+  const upcoming = trips.filter(t => !isPast(t)).sort((a, b) => (a.start_date || '9999').localeCompare(b.start_date || '9999'));
+  const past = trips.filter(isPast).sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''));
+  return [...upcoming, ...past];
+}
+
+// cover_path puede ser una ruta del storage (app-assets), una URL completa
+// o un archivo del propio sitio ('./img/...').
+function tripCoverUrl(trip) {
+  const p = trip.cover_path;
+  if (!p) return null;
+  if (/^https?:\/\//.test(p) || p.startsWith('./')) return p;
+  return publicAssetUrl(p);
 }
 
 // '2026-09-25' → '25 sep'
@@ -2149,33 +2214,37 @@ function renderViajes(root) {
     list.innerHTML = '<div class="empty">Aún no hay viajes. Crea el primero con el botón +.</div>';
     return;
   }
-  state.trips.forEach(trip => list.appendChild(renderTripCard(trip)));
+  sortTripsForDisplay(state.trips).forEach(trip => list.appendChild(renderTripCard(trip)));
 }
 
-// Portada por defecto de las cards de viaje (storage app-assets). Si el
-// viaje trae cover_path propio (columna futura), se usa ese.
+// Portada original de Los Ángeles: el editor nunca la borra del storage
+// al reemplazar portadas.
 const TRIP_DEFAULT_COVER_PATH = 'trips/cover-la.jpg';
 
 function renderTripCard(trip) {
   const card = document.createElement('article');
   card.className = 'trip-card';
-  card.style.backgroundImage = `url("${publicAssetUrl(trip.cover_path || TRIP_DEFAULT_COVER_PATH)}")`;
+  const cover = tripCoverUrl(trip);
+  // Sin portada: degradé de la paleta (antes caía en la foto de LA).
+  if (cover) card.style.backgroundImage = `url("${cover}")`;
+  else card.classList.add('no-cover');
   card.setAttribute('role', 'button');
   card.tabIndex = 0;
   const cd = tripCountdown(trip);
-  const days = trip.start_date && trip.end_date
+  const days = trip.start_date && trip.end_date && !isTentativeTrip(trip)
     ? Math.round((new Date(trip.end_date) - new Date(trip.start_date)) / 86400000) + 1
     : null;
   const bookings = state.tripBookings.filter(b => b.trip_id === trip.id);
-  const year = trip.start_date ? ` ${new Date(trip.start_date + 'T00:00:00').getFullYear()}` : '';
+  const dates = fmtTripRange(trip);
   card.innerHTML = `
     ${cd ? `<span class="trip-countdown${cd.past ? ' past' : ''}">${escapeHtml(cd.label)}</span>` : ''}
     <div class="trip-card-info">
       <h2>${escapeHtml(trip.title)}</h2>
-      <div class="trip-dates">${fmtTripDate(trip.start_date)} – ${fmtTripDate(trip.end_date)}${year}${trip.people ? ` · ${escapeHtml(trip.people)}` : ''}</div>
+      <div class="trip-dates">${escapeHtml(dates)}${trip.people ? ` · ${escapeHtml(trip.people)}` : ''}</div>
       <div class="trip-meta">
         ${days ? `<span>${days} días</span>` : ''}
-        <span>${bookings.length} reserva${bookings.length === 1 ? '' : 's'}</span>
+        ${isTentativeTrip(trip) ? '<span>Fechas tentativas</span>' : ''}
+        ${bookings.length ? `<span>${bookings.length} reserva${bookings.length === 1 ? '' : 's'}</span>` : ''}
       </div>
     </div>`;
   const open = () => { location.hash = '#/viajes/' + trip.id; };
@@ -2190,7 +2259,7 @@ function renderViajeDetail(root, id) {
   const cd = tripCountdown(trip);
   const tab = state.viajeTab;
   const subParts = [];
-  if (trip.start_date) subParts.push(`${fmtTripDateLong(trip.start_date)} – ${fmtTripDateLong(trip.end_date)}`);
+  if (trip.start_date) subParts.push(escapeHtml(fmtTripRange(trip, { long: true })));
   if (trip.base) subParts.push(`Base: ${escapeHtml(trip.base)}`);
   if (cd) subParts.push(escapeHtml(cd.label));
   root.innerHTML = `
@@ -2571,12 +2640,37 @@ function tripAttachmentName(item, person) {
 const dlgTrip = $('#dlg-trip');
 let tripCtx = null; // viaje en edición (null = nuevo)
 
+// Fechas tentativas: los inputs pasan a type=month ('2027-05') y se
+// convierte el valor que hubiera para no perderlo al cambiar de modo.
+function setTripTentative(on) {
+  $('#trip-tentative').checked = on;
+  $('#trip-start-label').textContent = on ? 'Mes de inicio' : 'Inicio';
+  $('#trip-end-label').textContent = on ? 'Mes de fin' : 'Fin';
+  for (const id of ['#trip-start', '#trip-end']) {
+    const input = $(id);
+    const v = input.value;
+    input.type = on ? 'month' : 'date';
+    input.value = !v ? '' : (on ? v.slice(0, 7) : (v.length === 7 ? `${v}-01` : v));
+  }
+}
+
+// '2027-06' → '2027-06-30'
+function lastDayOfMonth(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  return `${ym}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+}
+
+$('#trip-tentative').addEventListener('change', (e) => setTripTentative(e.target.checked));
+
 function openTripEditor(trip = null) {
   tripCtx = trip;
   $('#dlg-trip-title').textContent = trip ? 'Editar viaje' : 'Nuevo viaje';
   $('#trip-title').value = trip?.title || '';
-  $('#trip-start').value = trip?.start_date || '';
-  $('#trip-end').value = trip?.end_date || '';
+  $('#trip-start').value = '';
+  $('#trip-end').value = '';
+  setTripTentative(!!trip && isTentativeTrip(trip));
+  $('#trip-start').value = isTentativeTrip(trip || {}) ? (trip.start_date || '').slice(0, 7) : (trip?.start_date || '');
+  $('#trip-end').value = isTentativeTrip(trip || {}) ? (trip.end_date || '').slice(0, 7) : (trip?.end_date || '');
   $('#trip-people').value = trip?.people ?? 'Jaime & Mayck';
   $('#trip-base').value = trip?.base || '';
   $('#trip-cover-input').value = '';
@@ -2596,11 +2690,23 @@ $('#trip-cover-input').addEventListener('change', (e) => {
 $('#trip-save').addEventListener('click', async () => {
   const title = $('#trip-title').value.trim();
   if (!title) { setStatus($('#trip-status'), 'El destino es obligatorio', true); $('#trip-title').focus(); return; }
+  const tentative = $('#trip-tentative').checked;
+  let start = $('#trip-start').value || null;
+  let end = $('#trip-end').value || null;
+  if (tentative) {
+    // Solo meses: inicio = día 1, fin = último día del mes final
+    // (si no hay mes final, el viaje cabe en el mes de inicio).
+    if (!start) { setStatus($('#trip-status'), 'Elige al menos el mes de inicio', true); return; }
+    end = lastDayOfMonth(end || start);
+    start = `${start}-01`;
+  }
+  if (start && end && end < start) { setStatus($('#trip-status'), 'El fin no puede ser antes del inicio', true); return; }
   setStatus($('#trip-status'), 'Guardando…');
   const payload = {
     title,
-    start_date: $('#trip-start').value || null,
-    end_date: $('#trip-end').value || null,
+    start_date: start,
+    end_date: end,
+    date_precision: tentative ? 'month' : 'day',
     people: $('#trip-people').value.trim() || null,
     base: $('#trip-base').value.trim() || null,
   };
@@ -3798,7 +3904,7 @@ const SECTION_LABELS = {
   notes: 'Notas recientes',
   media: 'Música reciente',
   photos: 'Fotos recientes',
-  movies: 'Pelis y series por ver',
+  trips: 'Viajes',
   places: 'Lugares recientes',
 };
 

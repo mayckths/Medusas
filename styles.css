@@ -2882,16 +2882,53 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
   content: "";
   position: absolute;
   inset: 0;
+  /* Más denso en la mitad inferior: portadas con edificios blancos
+     (Cartagena) necesitan más scrim que el cielo de LA para AA. */
   background: linear-gradient(
     to top,
-    rgba(38, 16, 24, 0.90) 0%,
-    rgba(38, 16, 24, 0.68) 38%,
-    rgba(38, 16, 24, 0.18) 68%,
+    rgba(38, 16, 24, 0.92) 0%,
+    rgba(38, 16, 24, 0.86) 30%,
+    rgba(38, 16, 24, 0.70) 55%,
+    rgba(38, 16, 24, 0.22) 80%,
     rgba(38, 16, 24, 0.06) 100%
   );
   pointer-events: none;
 }
 .trip-card > * { position: relative; }
+/* Viaje sin portada: degradé de la paleta (terracota → ciruela). */
+.trip-card.no-cover {
+  background-image: linear-gradient(135deg, #c76d52 0%, #8a4a52 55%, #3a1d29 100%);
+}
+
+/* Dashboard: viajes en tira horizontal con swipe, cards más compactas. */
+.dash-trips-strip {
+  display: flex; flex-wrap: nowrap;
+  gap: 0.6rem;
+  overflow-x: auto;
+  padding-top: 4px;
+  padding-bottom: 20px; /* aire para la sombra del hover */
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.dash-trips-strip::-webkit-scrollbar { display: none; }
+.dash-trips-strip .trip-card {
+  flex: 0 0 auto;
+  width: 280px;
+  aspect-ratio: 4 / 3;
+  min-height: 0;
+  gap: 0.75rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 18px;
+  scroll-snap-align: start;
+}
+.dash-trips-strip .trip-card h2 { font-size: 1.4rem; }
+.dash-trips-strip .trip-card .trip-dates { font-size: 0.82rem; }
+@media (max-width: 760px) {
+  /* Full-bleed como las filas de chips: el swipe llega al borde. */
+  .dash-trips-strip { margin-left: -16px; margin-right: -16px; padding-left: 16px; padding-right: 16px; scroll-padding-left: 16px; }
+  .dash-trips-strip .trip-card { width: 78%; max-width: 300px; }
+}
 /* Vidrio oscuro, igual que los chips de meta — el terracota se perdía
    contra el naranja de la foto. */
 .trip-card .trip-countdown {
