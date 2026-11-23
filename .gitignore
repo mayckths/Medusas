@@ -13,3 +13,6 @@ Thumbs.db
 
 # Dependencies (in case we add tooling later)
 node_modules/
+
+# Archivos privados (SQL, función con llaves)
+.private/

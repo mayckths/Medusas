@@ -639,7 +639,101 @@ function loginAs(name) {
   localStorage.setItem(AUTH_KEY, name);
 }
 
+// ============================================================
+// Notificaciones push (Web Push)
+// Cada dispositivo se suscribe desde Configuración → Cuenta; la Edge
+// Function "notify" le avisa a la otra persona cuando se crea algo.
+// En iPhone solo funciona con la app agregada a la pantalla de inicio.
+// ============================================================
+const VAPID_PUBLIC_KEY = 'BFs0JOyzbZuLCjxB-_3dIgPqtSlG0iOo37Cqn6CjkwDU7IDEPkJHOgrBEOtO6QFhHxicnRT9QrfRoIq87Ky79d8';
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches
+  || window.navigator.standalone === true;
+const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+
+let swRegistration = null;
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return null;
+  try {
+    swRegistration = await navigator.serviceWorker.register('./sw.js');
+    // Toque en una notificación con la app ya abierta → ir a la sección.
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'medusas-navigate' && e.data.hash) location.hash = e.data.hash;
+    });
+  } catch (e) { console.warn('service worker no registrado', e); }
+  return swRegistration;
+}
+
+function vapidKeyBytes() {
+  const b64 = (VAPID_PUBLIC_KEY + '==='.slice((VAPID_PUBLIC_KEY.length + 3) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+  return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+}
+
+async function currentPushSubscription() {
+  if (!pushSupported()) return null;
+  const reg = swRegistration || await navigator.serviceWorker.getRegistration();
+  return reg ? reg.pushManager.getSubscription() : null;
+}
+
+async function savePushSubscription(sub) {
+  const j = sub.toJSON();
+  const { error } = await supabase.from('push_subscriptions').upsert({
+    endpoint: j.endpoint,
+    name: state.currentUser,
+    p256dh: j.keys.p256dh,
+    auth: j.keys.auth,
+  }, { onConflict: 'endpoint' });
+  if (error) throw error;
+}
+
+// Debe llamarse desde un toque del usuario (iOS lo exige para el permiso).
+async function enablePush() {
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') throw new Error('No diste permiso para las notificaciones');
+  const reg = swRegistration || await registerServiceWorker();
+  if (!reg) throw new Error('No se pudo preparar la app para notificaciones');
+  await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKeyBytes() });
+  await savePushSubscription(sub);
+}
+
+async function disablePush() {
+  const sub = await currentPushSubscription();
+  if (!sub) return;
+  try { await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint); } catch {}
+  try { await sub.unsubscribe(); } catch {}
+}
+
+// Al abrir la app: si este dispositivo ya está suscrito, se refresca su
+// fila (por si cambió de persona o el sistema renovó la suscripción).
+async function syncPushSubscription() {
+  try {
+    if (!state.currentUser || !pushSupported() || Notification.permission !== 'granted') return;
+    const sub = await currentPushSubscription();
+    if (sub) await savePushSubscription(sub);
+  } catch (e) { console.warn('push sync', e); }
+}
+
+// Avisa a la otra persona. Nunca bloquea ni rompe el guardado: si la
+// función no existe o falla, solo queda un aviso en consola.
+function notifyPartner({ title, body = '', hash = '#/inicio' }) {
+  supabase.functions.invoke('notify', { body: { title, body, hash } })
+    .then(({ error }) => { if (error) console.warn('notify', error.message || error); })
+    .catch((e) => console.warn('notify', e));
+}
+
+async function sendTestPush() {
+  const { data, error } = await supabase.functions.invoke('notify', {
+    body: { title: 'Medusas 🪼', body: 'Las notificaciones funcionan en este dispositivo.', hash: '#/inicio', test: true },
+  });
+  if (error) throw error;
+  return data;
+}
+
 async function logout() {
+  // Antes de soltar la sesión: este dispositivo deja de recibir avisos.
+  try { await disablePush(); } catch {}
   state.currentUser = null;
   localStorage.removeItem(AUTH_KEY);
   if (authMode === 'secure') {
@@ -3941,6 +4035,10 @@ function renderConfigCuenta(body) {
         <span class="status" id="cfg-pw-status"></span>
       </div>
     </div>
+    <div class="settings-card" id="cfg-push-card">
+      <h3>Notificaciones</h3>
+      <div id="cfg-push-body"></div>
+    </div>
     <div class="settings-card">
       <h3>Cerrar sesión</h3>
       <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Tendrás que volver a meter la clave la próxima vez.</div>
@@ -3965,9 +4063,63 @@ function renderConfigCuenta(body) {
       $('#cfg-old-pw').value = ''; $('#cfg-new-pw').value = '';
     } catch (e) { uiToast(`Error: ${e.message || e}`, { error: true }); }
   });
+  renderPushSettings();
   $('#cfg-logout').addEventListener('click', async () => {
     if (!(await uiConfirm('¿Cerrar sesión ahora?', { title: 'Cerrar sesión', confirmLabel: 'Cerrar sesión' }))) return;
     await logout();
+  });
+}
+
+async function renderPushSettings() {
+  const box = $('#cfg-push-body');
+  if (!box) return;
+  const hint = (t) => `<div class="sub" style="color:var(--text-dim);font-size:.82rem;">${t}</div>`;
+  if (!pushSupported()) {
+    box.innerHTML = hint(isIOS && !isStandalone()
+      ? 'En iPhone las notificaciones solo funcionan con la app instalada: en Safari toca <strong>Compartir</strong> → <strong>Agregar a inicio</strong>, ábrela desde el ícono y vuelve aquí.'
+      : 'Este navegador no permite notificaciones.');
+    return;
+  }
+  if (Notification.permission === 'denied') {
+    box.innerHTML = hint('Están bloqueadas para Medusas en los ajustes del sistema. Actívalas ahí y vuelve a abrir la app.');
+    return;
+  }
+  const sub = Notification.permission === 'granted' ? await currentPushSubscription() : null;
+  if (!$('#cfg-push-body')) return; // la pestaña cambió mientras se consultaba
+  if (!sub) {
+    box.innerHTML = `
+      ${hint('Recibe un aviso cuando tu pareja agregue una nota, fotos o música.')}
+      <div class="row" style="margin-top:.7rem;">
+        <button class="btn primary" id="cfg-push-on"><span class="material-symbols-outlined">notifications_active</span> Activar notificaciones</button>
+      </div>`;
+    $('#cfg-push-on').addEventListener('click', async (e) => {
+      e.currentTarget.disabled = true;
+      try { await enablePush(); uiToast('Notificaciones activadas ✓'); }
+      catch (err) { uiToast(`No se pudieron activar: ${err.message || err}`, { error: true, duration: 5000 }); }
+      renderPushSettings();
+    });
+    return;
+  }
+  box.innerHTML = `
+    ${hint('Activadas en este dispositivo.')}
+    <div class="row" style="margin-top:.7rem;gap:.5rem;flex-wrap:wrap;">
+      <button class="btn primary" id="cfg-push-test"><span class="material-symbols-outlined">send</span> Enviar prueba</button>
+      <button class="btn" id="cfg-push-off">Desactivar</button>
+    </div>`;
+  $('#cfg-push-test').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      const r = await sendTestPush();
+      if (r && r.sent > 0) uiToast('Prueba enviada — debería llegar en unos segundos');
+      else uiToast(`No se pudo entregar: ${r?.failures?.[0]?.detail || r?.error || 'sin dispositivos suscritos'}`, { error: true, duration: 6000 });
+    } catch (err) { uiToast(`Error al enviar la prueba: ${err.message || err}`, { error: true, duration: 6000 }); }
+    btn.disabled = false;
+  });
+  $('#cfg-push-off').addEventListener('click', async () => {
+    await disablePush();
+    uiToast('Notificaciones desactivadas');
+    renderPushSettings();
   });
 }
 
@@ -4883,6 +5035,10 @@ $('#note-save').addEventListener('click', async () => {
       payload.seen_by = [state.currentUser];
       const { error } = await supabase.from('notes').insert(payload);
       if (error) throw error;
+      // Las notas privadas no avisan a nadie.
+      if (payload.visibility !== 'private') {
+        notifyPartner({ title: `${state.currentUser} escribió una nota`, body: payload.title || '', hash: '#/notas' });
+      }
     }
     hideNoteEditorPage();
     uiToast(isUpdate ? 'Nota actualizada ✓' : 'Nota guardada ✓');
@@ -5051,6 +5207,7 @@ $('#media-save').addEventListener('click', async () => {
       payload.seen_by = [state.currentUser];
       const { error } = await supabase.from('media').insert(payload);
       if (error) throw error;
+      notifyPartner({ title: `${state.currentUser} agregó música`, body: payload.title || '', hash: '#/musica' });
     }
     dlgMedia.close();
     await router();
@@ -5329,6 +5486,15 @@ async function startConfirmedUpload() {
   // modal and jump to the album so the user sees the new photos. If any
   // row errored, keep the modal open so they can see what failed.
   const anyError = uploadList.querySelector('.upload-row.error');
+  // Un solo aviso por tanda, contando solo las que sí subieron.
+  const uploadedOk = uploadList.querySelectorAll('.upload-row.done').length;
+  if (uploadedOk > 0) {
+    notifyPartner({
+      title: `${state.currentUser} subió ${uploadedOk === 1 ? 'una foto' : `${uploadedOk} fotos`}`,
+      body: album ? `Álbum: ${album}` : '',
+      hash: '#/fotos',
+    });
+  }
   if (!anyError && uploadDone > 0) {
     afterUploadAlbumSlug = albumSlugFor(album);
     uiToast(`${uploadDone} foto${uploadDone === 1 ? '' : 's'} subida${uploadDone === 1 ? '' : 's'} ✓`);
@@ -6667,6 +6833,7 @@ async function boot() {
     await loadSettings();
     if (!location.hash) location.hash = '#/inicio';
     await router();
+    registerServiceWorker().then(syncPushSubscription);
   } else {
     // Logged out: the auth overlay is already visible in HTML; just wire it up.
     showLogin();
