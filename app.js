@@ -3490,11 +3490,15 @@ async function deletePhotosBatch(photos) {
   const ids = new Set(photos.map(p => p.id));
   const paths = photos.map(p => p.storage_path).filter(Boolean);
   try {
+    // Filas primero: si la base las rechaza no se borran los archivos
+    // (si no, quedaban fotos rotas). Con RLS un borrado sin permiso no da
+    // error, solo borra 0 filas — por eso se pide el resultado.
+    const { data: deleted, error } = await supabase.from('photos').delete().in('id', Array.from(ids)).select('id');
+    if (error) throw error;
+    if (!deleted?.length) throw new Error('sin permiso — vuelve a iniciar sesión');
     if (paths.length) {
       try { await supabase.storage.from(BUCKET).remove(paths); } catch (e) { console.warn('storage cleanup failed', e); }
     }
-    const { error } = await supabase.from('photos').delete().in('id', Array.from(ids));
-    if (error) throw error;
     // Update local state and re-render synchronously (no extra fetch)
     state.photos = state.photos.filter(p => !ids.has(p.id));
     // If we're inside an album detail page that's now empty, bounce to /fotos
@@ -5515,8 +5519,15 @@ $('#lb-delete').addEventListener('click', async (e) => {
   const p = lightboxState.list[lightboxState.index];
   if (!p) return;
   if (!(await uiConfirm('¿Eliminar esta foto? No se puede deshacer.', { title: 'Eliminar foto', confirmLabel: 'Eliminar', danger: true }))) return;
+  // Primero la fila: si la base la rechaza, la foto se queda (antes se
+  // escondía de la pantalla aunque fallara y volvía al recargar).
+  const { data: deleted, error } = await supabase.from('photos').delete().eq('id', p.id).select('id');
+  if (error || !deleted?.length) {
+    // uiAlert y no uiToast: el visor es un <dialog> modal y taparía el toast.
+    uiAlert(`No se pudo eliminar la foto${error ? `: ${error.message}` : ' (sin permiso — vuelve a iniciar sesión)'}`, { title: 'Error' });
+    return;
+  }
   try { await supabase.storage.from(BUCKET).remove([p.storage_path]); } catch {}
-  await supabase.from('photos').delete().eq('id', p.id);
   // Remove from state caches
   state.photos = state.photos.filter(x => x.id !== p.id);
   lightboxState.list.splice(lightboxState.index, 1);

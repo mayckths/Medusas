@@ -1573,7 +1573,8 @@ dialog.modal::backdrop { background: rgba(0,0,0,0.45); }
        inputs and below the last field reads the same on mobile.
        Extra padding-bottom (1.5rem instead of 1rem) keeps the action
        buttons off the very edge when the user scrolls to the end. */
-    padding: 1rem 1.1rem 1.5rem;
+    padding: calc(1rem + env(safe-area-inset-top, 0px)) 1.1rem
+             calc(1.5rem + env(safe-area-inset-bottom, 0px));
     -webkit-overflow-scrolling: touch;
   }
   /* Subtle fade-in instead of slide-up; full-screen sliding from
@@ -2228,7 +2229,7 @@ dialog.lightbox img.loading { opacity: 0; }
 }
 dialog.lightbox .lightbox-cap {
   position: absolute; left: 0; right: 0; bottom: 0;
-  padding: 1rem 1.5rem 1.2rem;
+  padding: 1rem 1.5rem calc(1.2rem + env(safe-area-inset-bottom, 0px));
   background: linear-gradient(to top, rgba(0,0,0,0.75), transparent);
   color: white; text-align: center; font-size: 0.9rem;
 }
@@ -2284,7 +2285,7 @@ dialog.lightbox .lb-tag-add:hover {
 }
 dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 @media (max-width: 760px) {
-  dialog.lightbox .lb-tags { bottom: 5rem; }
+  dialog.lightbox .lb-tags { bottom: calc(5rem + env(safe-area-inset-bottom, 0px)); }
 }
 
 .lb-nav, .lb-close, .lb-pin, .lb-feature, .lb-move, .lb-delete {
@@ -2314,19 +2315,22 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 .lb-nav:active { transform: translateY(-50%) scale(0.96); }
 .lb-nav.prev { left: 0.6rem; }
 .lb-nav.next { right: 0.6rem; }
-.lb-close { top: 0.6rem; right: 0.6rem; width: 38px; height: 38px; font-size: 1rem; }
-.lb-pin { top: 0.6rem; right: 4rem; width: 38px; height: 38px; font-size: 0.95rem; }
+.lb-close { top: calc(0.6rem + env(safe-area-inset-top, 0px)); right: 0.6rem; width: 38px; height: 38px; font-size: 1rem; }
+.lb-pin { top: calc(0.6rem + env(safe-area-inset-top, 0px)); right: 4rem; width: 38px; height: 38px; font-size: 0.95rem; }
 .lb-pin.is-on { background: var(--accent); color: var(--on-accent); border-color: transparent; }
 .lb-pin.is-on:hover { background: var(--accent-hover); border-color: transparent; }
-.lb-feature { top: 0.6rem; right: 7.4rem; width: 38px; height: 38px; font-size: 0.95rem; }
+.lb-feature { top: calc(0.6rem + env(safe-area-inset-top, 0px)); right: 7.4rem; width: 38px; height: 38px; font-size: 0.95rem; }
 .lb-feature.is-on { background: var(--warn); border-color: transparent; }
 .lb-feature.is-on:hover { background: #ffc857; border-color: transparent; }
-.lb-move { top: 0.6rem; right: 10.8rem; width: 38px; height: 38px; font-size: 0.95rem; }
-.lb-delete { top: 0.6rem; left: 0.6rem; width: 38px; height: 38px; font-size: 0.95rem; }
+.lb-move { top: calc(0.6rem + env(safe-area-inset-top, 0px)); right: 10.8rem; width: 38px; height: 38px; font-size: 0.95rem; }
+.lb-delete { top: calc(0.6rem + env(safe-area-inset-top, 0px)); left: 0.6rem; width: 38px; height: 38px; font-size: 0.95rem; }
 .lb-delete:hover { background: var(--danger); border-color: transparent; }
 
 @media (max-width: 760px) {
-  .lb-stage { inset: 4rem 0.6rem 5rem 0.6rem; }
+  .lb-stage {
+    inset: calc(4rem + env(safe-area-inset-top, 0px)) 0.6rem
+           calc(5rem + env(safe-area-inset-bottom, 0px)) 0.6rem;
+  }
   .lb-nav { width: 40px; height: 40px; }
   .lb-pin, .lb-feature, .lb-move, .lb-close, .lb-delete { width: 34px; height: 34px; }
   .lb-pin { right: 3.4rem; }
