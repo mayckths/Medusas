@@ -123,6 +123,11 @@ async function shrinkImageForUpload(file, maxPx = UPLOAD_MAX_PX) {
   }
 }
 
+// Marca en el nombre del archivo de una foto del álbum: ya pasó por la
+// reducción (o no se puede reducir). La herramienta "Optimizar fotos" se
+// salta esas sin tener que descargarlas.
+const PHOTO_OPT_MARK = '_2k';
+
 function canvasHasAlpha(ctx, w, h) {
   try {
     const data = ctx.getImageData(0, 0, w, h).data;
@@ -3984,6 +3989,10 @@ function renderConfigCuenta(body) {
       <h3>Notificaciones</h3>
       <div id="cfg-push-body"></div>
     </div>
+    <div class="settings-card" id="cfg-photo-opt-card">
+      <h3>Optimizar fotos</h3>
+      <div id="cfg-photo-opt-body"></div>
+    </div>
     <div class="settings-card">
       <h3>Cerrar sesión</h3>
       <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Tendrás que volver a meter la clave la próxima vez.</div>
@@ -4009,6 +4018,7 @@ function renderConfigCuenta(body) {
     } catch (e) { uiToast(`Error: ${e.message || e}`, { error: true }); }
   });
   renderPushSettings();
+  renderPhotoOptimizer();
   $('#cfg-logout').addEventListener('click', async () => {
     if (!(await uiConfirm('¿Cerrar sesión ahora?', { title: 'Cerrar sesión', confirmLabel: 'Cerrar sesión' }))) return;
     await logout();
@@ -5212,7 +5222,7 @@ async function uploadOne(item) {
   try {
     const file = await shrinkImageForUpload(item.file);
     const ext = (file.name.split('.').pop() || 'png').toLowerCase();
-    const path = `${crypto.randomUUID()}.${ext}`;
+    const path = `${crypto.randomUUID()}${PHOTO_OPT_MARK}.${ext}`;
     bar.style.width = '40%';
     const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, file, {
       cacheControl: '3600', upsert: false, contentType: file.type,
@@ -7071,6 +7081,142 @@ function renderChatBody(opts = {}) {
   body.scrollTop = (opts.stick || atBottom) ? body.scrollHeight : prevTop;
   chatStick = !!(opts.stick || atBottom);
   paintChatVoice();
+}
+
+// ============================================================
+// Optimizar fotos ya subidas (Configuración → Cuenta)
+// Las fotos subidas antes de que existiera la reducción siguen con su
+// tamaño original. Esta herramienta las descarga una por una, las reduce
+// con shrinkImageForUpload y reemplaza el archivo.
+//
+// Orden pensado para no perder nunca una foto:
+//   1. sube la versión reducida con un nombre NUEVO
+//   2. apunta la fila de la foto al archivo nuevo (y confirma que se guardó)
+//   3. solo entonces borra el original
+// Si se corta a mitad, lo peor que queda es un archivo de sobra.
+// ============================================================
+const PHOTO_OPT_SEEN_KEY = 'medusas:photo-opt-checked';
+const photoOpt = { running: false, stop: false, finished: false, total: 0, done: 0, changed: 0, kept: 0, failed: 0, saved: 0, orphans: 0, lastError: '' };
+
+const photoIsOptimized = (path) => new RegExp(`${PHOTO_OPT_MARK}\\.[a-z0-9]+$`, 'i').test(path || '');
+const fmtBytes = (n) => n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`;
+
+// Fotos revisadas en este dispositivo que no necesitaban cambio.
+function photoOptChecked() {
+  try { return new Set(JSON.parse(localStorage.getItem(PHOTO_OPT_SEEN_KEY) || '[]').map(String)); } catch { return new Set(); }
+}
+function photoOptRemember(id) {
+  try { const set = photoOptChecked(); set.add(String(id)); localStorage.setItem(PHOTO_OPT_SEEN_KEY, JSON.stringify([...set])); } catch {}
+}
+function photoOptPending() {
+  const checked = photoOptChecked();
+  return state.photos.filter(p => p.storage_path && !photoIsOptimized(p.storage_path) && !checked.has(String(p.id)));
+}
+
+function renderPhotoOptimizer() {
+  const box = $('#cfg-photo-opt-body');
+  if (!box) return;
+  const o = photoOpt;
+  const dim = 'color:var(--text-dim);font-size:.82rem;';
+  if (o.running) {
+    const pct = o.total ? Math.round((o.done / o.total) * 100) : 0;
+    box.innerHTML = `
+      <div style="${dim}">Reduciendo las fotos. Puedes seguir usando la app, pero no la cierres.</div>
+      <div class="opt-progress" role="progressbar" aria-valuemin="0" aria-valuemax="${o.total}" aria-valuenow="${o.done}"><div style="width:${pct}%"></div></div>
+      <div class="row" style="margin-top:.5rem;">
+        <span id="cfg-photo-opt-count"><b>${o.done} / ${o.total}</b>${o.saved > 0 ? ` · ${fmtBytes(o.saved)} menos` : ''}</span>
+        <button class="btn" id="cfg-photo-opt-stop" ${o.stop ? 'disabled' : ''}>${o.stop ? 'Deteniendo…' : 'Detener'}</button>
+      </div>`;
+    const stop = $('#cfg-photo-opt-stop');
+    if (stop) stop.addEventListener('click', () => { photoOpt.stop = true; renderPhotoOptimizer(); });
+    return;
+  }
+  const pending = photoOptPending().length;
+  let summary = '';
+  if (o.finished) {
+    const parts = [];
+    if (o.changed) parts.push(`${o.changed} reducida${o.changed === 1 ? '' : 's'} (${fmtBytes(o.saved)} menos)`);
+    if (o.kept) parts.push(`${o.kept} ya estaba${o.kept === 1 ? '' : 'n'} bien`);
+    if (o.failed) parts.push(`${o.failed} no se ${o.failed === 1 ? 'pudo' : 'pudieron'} procesar`);
+    summary = `<div id="cfg-photo-opt-summary" style="margin-bottom:.5rem;"><b>${o.stop ? 'Detenido' : 'Listo'}:</b> ${escapeHtml(parts.join(', ') || 'nada que hacer')}.</div>`
+      + (o.failed && o.lastError ? `<div style="color:var(--danger);font-size:.82rem;margin-bottom:.5rem;">Último error: ${escapeHtml(o.lastError)}</div>` : '')
+      + (o.orphans ? `<div style="color:var(--danger);font-size:.82rem;margin-bottom:.5rem;">${o.orphans} original${o.orphans === 1 ? '' : 'es'} no se ${o.orphans === 1 ? 'pudo' : 'pudieron'} borrar del almacenamiento: la foto ya usa la versión reducida, pero ese espacio no se liberó.</div>` : '');
+  }
+  box.innerHTML = summary + (pending
+    ? `<div style="${dim}">${pending} foto${pending === 1 ? '' : 's'} del álbum ${pending === 1 ? 'sigue con su' : 'siguen con su'} tamaño original. Se reducen a ${UPLOAD_MAX_PX} px como máximo; el original se reemplaza y no se puede recuperar.</div>
+       <div class="row" style="margin-top:.7rem;"><button class="btn primary" id="cfg-photo-opt-run"><span class="material-symbols-outlined">compress</span> Optimizar ${pending} foto${pending === 1 ? '' : 's'}</button></div>`
+    : `<div style="${dim}"><span class="material-symbols-outlined" style="font-size:16px;vertical-align:-3px;">check_circle</span> Todas las fotos del álbum ya están optimizadas. Las nuevas se reducen solas al subirlas.</div>`);
+  const run = $('#cfg-photo-opt-run');
+  if (run) run.addEventListener('click', runPhotoOptimizer);
+}
+
+async function optimizeOnePhoto(p) {
+  const oldPath = p.storage_path;
+  const res = await fetch(publicImageUrl(oldPath));
+  if (!res.ok) throw new Error(`no se pudo descargar (${res.status})`);
+  const blob = await res.blob();
+  const name = oldPath.split('/').pop();
+  const ext0 = (name.split('.').pop() || '').toLowerCase();
+  const type = /^image\//.test(blob.type) ? blob.type : ({ jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' })[ext0] || blob.type;
+  const original = new File([blob], name, { type });
+  const small = await shrinkImageForUpload(original);
+  if (small === original) return { changed: false };
+
+  const ext = (small.name.split('.').pop() || 'jpg').toLowerCase();
+  const newPath = `${crypto.randomUUID()}${PHOTO_OPT_MARK}.${ext}`;
+  const { error: upErr } = await supabase.storage.from(BUCKET).upload(newPath, small, {
+    cacheControl: '3600', upsert: false, contentType: small.type,
+  });
+  if (upErr) throw upErr;
+  // .select() confirma que la fila cambió de verdad antes de tocar el original.
+  const { data, error } = await supabase.from('photos').update({ storage_path: newPath }).eq('id', p.id).select('id');
+  if (error || !data || !data.length) {
+    try { await supabase.storage.from(BUCKET).remove([newPath]); } catch {}
+    throw error || new Error('la base no actualizó la foto');
+  }
+  p.storage_path = newPath;
+  const live = state.photos.find(x => String(x.id) === String(p.id));
+  if (live && live !== p) live.storage_path = newPath; // el estado pudo recargarse a mitad
+  let orphan = false;
+  try {
+    const { data: removed, error: rmErr } = await supabase.storage.from(BUCKET).remove([oldPath]);
+    if (rmErr || !removed || !removed.length) orphan = true;
+  } catch { orphan = true; }
+  return { changed: true, saved: original.size - small.size, orphan };
+}
+
+async function runPhotoOptimizer() {
+  if (photoOpt.running) return;
+  const pending = photoOptPending();
+  if (!pending.length) return;
+  const n = pending.length;
+  const ok = await uiConfirm(
+    `Se van a reducir ${n} foto${n === 1 ? '' : 's'} a ${UPLOAD_MAX_PX} px como máximo. Cada original se reemplaza por la versión reducida y no se puede recuperar.\n\nHay que descargar cada foto para procesarla: mejor con Wi-Fi y sin cerrar la app.`,
+    { title: 'Optimizar fotos', confirmLabel: 'Optimizar', danger: true });
+  if (!ok) return;
+  Object.assign(photoOpt, { running: true, stop: false, finished: false, total: n, done: 0, changed: 0, kept: 0, failed: 0, saved: 0, orphans: 0, lastError: '' });
+  renderPhotoOptimizer();
+  for (const p of pending) {
+    if (photoOpt.stop) break;
+    try {
+      const r = await optimizeOnePhoto(p);
+      if (r.changed) { photoOpt.changed++; photoOpt.saved += Math.max(0, r.saved); if (r.orphan) photoOpt.orphans++; }
+      else { photoOpt.kept++; photoOptRemember(p.id); }
+    } catch (e) {
+      photoOpt.failed++;
+      photoOpt.lastError = String((e && e.message) || e);
+      console.warn('optimizar foto', p.id, e);
+    }
+    photoOpt.done++;
+    renderPhotoOptimizer();
+  }
+  photoOpt.running = false;
+  photoOpt.finished = true;
+  renderPhotoOptimizer();
+  // El fondo ambiental usa la ruta de una foto: que apunte al archivo nuevo.
+  const ambient = state.photos.find(x => x.featured) || state.photos[0];
+  if (ambient) setBgPhoto(ambient.storage_path);
+  uiToast(photoOpt.failed ? `Optimización terminada con ${photoOpt.failed} fallo${photoOpt.failed === 1 ? '' : 's'}` : 'Fotos optimizadas ✓', { error: !!photoOpt.failed });
 }
 
 // ============================================================
