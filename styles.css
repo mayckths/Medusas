@@ -190,7 +190,7 @@ body {
 .inicio-fresh .page-head                            { animation-delay: 0.00s; }
 .inicio-fresh .stats-widget                         { animation-delay: 0.22s; }
 .inicio-fresh .col-right .photo-widget              { animation-delay: 0.46s; }
-.inicio-fresh .col-right .postit-board-wrap         { animation-delay: 0.78s; }
+.inicio-fresh .col-right .chat-widget               { animation-delay: 0.78s; }
 .inicio-fresh .col-left .section-block:nth-child(1) { animation-delay: 0.56s; }
 .inicio-fresh .col-left .section-block:nth-child(2) { animation-delay: 0.80s; }
 .inicio-fresh .col-left .section-block:nth-child(3) { animation-delay: 1.04s; }
@@ -531,8 +531,6 @@ nav.menu a .m-icon { font-size: 20px; width: 22px; text-align: center; }
 .lb-delete .material-symbols-outlined { font-size: 20px; }
 .media-card .play-overlay .play .material-symbols-outlined { font-size: 26px; }
 .config-tabs button .material-symbols-outlined { font-size: 18px; }
-.bubble-actions .material-symbols-outlined { font-size: 16px; }
-.chat-filter .material-symbols-outlined { font-size: 14px; }
 .move-btns button .material-symbols-outlined { font-size: 16px; }
 .drag-handle .material-symbols-outlined { font-size: 18px; }
 .media-card .meta .material-symbols-outlined { font-size: 13px; }
@@ -996,114 +994,6 @@ button.btn.pin-toggle.is-pinned {
   .dashboard-cols .col-right { order: 0; }
   .dashboard-cols .col-left { order: 1; }
 }
-
-/* ======== Post-it board ======== */
-/* The board renders to a fixed design canvas (520×360) so post-its keep
-   their relative positions, then we scale the whole thing down to fit
-   whatever container width it lives in. JS (setupPostitBoardScale) sets
-   --pb-scale based on the wrapper's actual width via ResizeObserver. */
-.postit-board-wrap {
-  width: 100%;
-  position: relative;
-  overflow: hidden;
-  /* Wrapper height matches the rendered (scaled) board height. */
-  height: calc(360px * var(--pb-scale, 1));
-}
-/* "+ Nuevo post-it" pill — uses .btn base styles. Positioned at the
-   wrap's top-right so it lives OUTSIDE the scaled board and renders
-   at full size, matching the rest of the glass pill buttons. */
-.postit-board-wrap > .pb-new.btn {
-  position: absolute;
-  top: 4px; right: 6px;
-  z-index: 3;
-}
-.postit-board-wrap > .postit-board {
-  position: relative;
-  width: 520px;
-  height: 360px;
-  transform-origin: top left;
-  /* Uniform scale preserves postit proportions. */
-  transform: scale(var(--pb-scale, 1));
-  /* Center the scaled board horizontally inside the wrapper. The calc
-     pushes the unscaled box left by half the empty space (parent width
-     minus rendered width). */
-  margin-left: calc(50% - (520px * var(--pb-scale, 1)) / 2);
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  overflow: visible;
-}
-.postit-board .pb-empty {
-  position: absolute; inset: 0; display: grid; place-items: center;
-  color: rgba(255, 255, 255, 0.75); font-size: 0.88rem;
-}
-
-.postit {
-  position: absolute;
-  width: 130px; height: 130px;
-  padding: 10px 12px 12px;
-  box-sizing: border-box;
-  border-radius: 3px;
-  cursor: grab;
-  box-shadow: 4px 8px 14px rgba(0,0,0,0.35);
-  display: flex; flex-direction: column; gap: 2px;
-  user-select: none;
-  transition: transform 0.05s ease, box-shadow 0.15s ease;
-}
-.postit:active { cursor: grabbing; box-shadow: 6px 12px 20px rgba(0,0,0,0.45); }
-.postit.dragging { z-index: 100; }
-.postit .pi-author {
-  font-family: 'Inter', sans-serif;
-  font-size: 9px; font-weight: 500;
-  color: rgba(0,0,0,0.55);
-  letter-spacing: 0.02em;
-}
-.postit .pi-body {
-  flex: 1;
-  font-family: 'Caveat', cursive;
-  font-size: 20px; line-height: 1.1;
-  color: rgba(0,0,0,0.85);
-  outline: none;
-  resize: none;
-  border: 0; background: transparent;
-  padding: 0; margin: 0;
-  overflow: hidden;
-  word-wrap: break-word;
-}
-.postit .pi-body::placeholder { color: rgba(0,0,0,0.35); }
-.postit .pi-tools {
-  position: absolute; top: -10px; right: -10px;
-  display: none;
-  gap: 4px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 3px;
-  box-shadow: var(--shadow);
-}
-.postit:hover .pi-tools, .postit.tools-open .pi-tools { display: flex; }
-.postit .pi-tools button {
-  background: transparent; border: 0; cursor: pointer;
-  width: 20px; height: 20px; border-radius: 999px;
-  display: grid; place-items: center;
-  color: var(--text-dim);
-}
-.postit .pi-tools button:hover { color: var(--text); background: var(--surface-alt); }
-.postit .pi-tools .pi-swatch {
-  width: 16px; height: 16px; border-radius: 999px;
-  border: 1.5px solid white;
-  box-shadow: 0 0 0 1px rgba(0,0,0,0.2);
-}
-.postit .pi-tools .pi-swatch.cyan { background: #6fd9d2; }
-.postit .pi-tools .pi-swatch.yellow { background: #ffd94a; }
-.postit .pi-tools .pi-swatch.green { background: #a8d95e; }
-.postit .pi-tools .pi-swatch.pink { background: #ff8db5; }
-
-.postit.cyan { background: #6fd9d2; }
-.postit.yellow { background: #ffd94a; }
-.postit.green { background: #a8d95e; }
-.postit.pink { background: #ff8db5; }
 
 .photo-widget {
   position: relative; min-height: 280px;
@@ -2453,27 +2343,11 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 .notif-popover .notif-item .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--accent); flex-shrink: 0; margin-top: 0.4rem; }
 .notif-popover .empty { padding: 1.5rem; }
 
-/* ======== Instantáneos chat widget ======== */
-.chat-widget {
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
-  box-shadow: var(--shadow); height: 360px; max-height: 360px;
-  display: flex; flex-direction: column; overflow: hidden;
-}
-/* Right-column variant: fills the visible viewport (sticky parent) */
-.chat-widget.chat-widget-tall { height: auto; max-height: none; flex: 1; min-height: 0; }
+/* ======== Right column: photo widget + chat ======== */
 .col-right { min-height: 0; }
 .col-right .photo-widget {
-  /* Fixed-ish ambient height — shared with the Garabatos board below so
-     the two cards feel like a matched pair. */
   flex: 0 0 auto;
   height: clamp(220px, 38vh, 340px);
-}
-@media (max-width: 760px) {
-  .col-right .photo-widget {
-    /* Roughly half the desktop size — leaves more room for the post-its
-       and the rest of the dashboard on a short mobile screen. */
-    height: clamp(140px, 22vh, 200px);
-  }
 }
 .col-right .doodle-board {
   /* Same height as the photo widget for visual symmetry. */
@@ -2481,52 +2355,82 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
   height: clamp(220px, 38vh, 340px);
   min-height: 0;
 }
-.col-right .chat-widget-tall { flex: 1 1 auto; min-height: 180px; }
-
+@media (min-width: 981px) {
+  /* Side by side with the rest of Inicio: a slightly shorter photo so
+     the chat (input included) fits under it without scrolling. */
+  .col-right .photo-widget { height: clamp(200px, 30vh, 300px); }
+}
 @media (max-width: 760px) {
-  .chat-widget { height: 320px; max-height: 320px; }
-  .chat-widget.chat-widget-tall { height: 360px; max-height: 360px; min-height: 0; }
   .photo-widget { min-height: 240px; }
+  .col-right .photo-widget {
+    /* Roughly half the desktop size — leaves more room for the chat
+       and the rest of the dashboard on a short mobile screen. */
+    height: clamp(140px, 22vh, 200px);
+  }
+}
+
+/* ======== Chat (dashboard) ======== */
+.chat-widget {
+  /* Cream "notebook" palette — same token re-scope as the sidebar,
+     dialog.modal and .settings-card, so everything inside reads these
+     variables and picks up the light theme. */
+  --surface: #f9f6f0;
+  --surface-alt: #efeae0;
+  --surface-2: #e4dcce;
+  --text: #4a4542;
+  --text-dim: rgba(74, 69, 66, 0.8);
+  --border: rgba(74, 69, 66, 0.14);
+  --border-strong: rgba(74, 69, 66, 0.22);
+  color-scheme: light;
+  color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  height: 340px;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+@media (min-width: 981px) {
+  /* --chat-h comes from fitColRightToViewport(): what is left of the
+     viewport under the photo widget. */
+  .col-right .chat-widget { height: var(--chat-h, 320px); }
 }
 .chat-widget .chat-head {
-  padding: 0.6rem 0.9rem 0.5rem;
+  padding: 0.7rem 1rem 0.6rem;
   border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; gap: 0.5rem;
-  font-size: 0.9rem; font-weight: 600;
+  display: flex; align-items: center; gap: 0.6rem;
   flex-shrink: 0;
 }
-.chat-widget .chat-head .dot {
-  width: 7px; height: 7px; border-radius: 999px; background: #22c55e;
-  flex-shrink: 0;
+.chat-widget .chat-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.05rem; font-weight: 600;
 }
-.chat-widget .chat-head .chat-filter {
-  margin-left: auto;
-  display: inline-flex; gap: 2px;
-  background: var(--surface-alt); border: 1px solid var(--border); border-radius: 999px; padding: 2px;
-  font-weight: 400;
+.chat-widget .chat-notify {
+  margin-left: auto; min-width: 0;
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  font-size: 0.72rem; font-weight: 500; color: var(--text-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.chat-widget .chat-head .chat-filter button {
-  background: transparent; border: 0; padding: 0.2rem 0.6rem; border-radius: 999px;
-  font-size: 0.72rem; color: var(--text-dim); cursor: pointer;
-}
-.chat-widget .chat-head .chat-filter button.active {
-  background: var(--surface); color: var(--text); box-shadow: var(--shadow);
-}
+.chat-widget .chat-notify .material-symbols-outlined { font-size: 15px; flex: none; }
+.chat-widget .chat-notify.is-off { color: var(--danger); }
 .chat-widget .chat-body {
   flex: 1 1 0; min-height: 0;
-  overflow-y: auto; padding: 0.6rem 0.7rem;
-  display: flex; flex-direction: column; gap: 0.4rem;
-  scroll-behavior: smooth;
+  overflow-y: auto; overscroll-behavior: contain;
+  padding: 0.7rem 0.8rem;
+  display: flex; flex-direction: column; gap: 0.45rem;
 }
 .chat-widget .chat-empty {
-  margin: auto; color: var(--text-dim); font-size: 0.85rem; text-align: center;
+  margin: auto; color: var(--text-dim); font-size: 0.85rem; text-align: center; line-height: 1.5;
+}
+.chat-day {
+  align-self: center; margin: 0.25rem 0;
+  font-size: 0.68rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--text-dim);
 }
 .chat-bubble {
-  max-width: 78%; padding: 0.45rem 0.7rem; border-radius: 14px;
-  font-size: 0.88rem; line-height: 1.4;
-  word-wrap: break-word; overflow-wrap: break-word;
-  position: relative;
+  max-width: 82%; padding: 0.45rem 0.7rem 0.4rem; border-radius: 16px;
+  font-size: 0.9rem; line-height: 1.4;
+  word-wrap: break-word; overflow-wrap: anywhere;
 }
+.chat-bubble.follow { margin-top: -0.25rem; }
 .chat-bubble.mine {
   align-self: flex-end;
   background: var(--accent); color: var(--on-accent);
@@ -2534,45 +2438,39 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 }
 .chat-bubble.theirs {
   align-self: flex-start;
-  background: var(--surface-alt); color: var(--text);
+  background: var(--surface-2); color: var(--text);
   border-bottom-left-radius: 4px;
 }
+.chat-bubble.pending { opacity: 0.7; }
+.chat-bubble .bubble-text { white-space: pre-wrap; }
 .chat-bubble .bubble-meta {
-  font-size: 0.66rem; opacity: 0.7; margin-top: 0.2rem;
-  display: flex; align-items: center; gap: 0.35rem;
+  display: inline-flex; align-items: center; gap: 0.15rem;
+  float: right; margin: 0.4rem 0 0 0.6rem;
+  font-size: 0.64rem; opacity: 0.75; white-space: nowrap;
 }
-.chat-bubble.mine .bubble-meta { justify-content: flex-end; }
-.chat-bubble .bubble-actions {
-  display: flex; gap: 0.25rem;
-}
-.chat-bubble .bubble-actions button {
-  background: transparent; border: 0; cursor: pointer; padding: 0;
-  font-size: 0.8rem; opacity: 0.6;
-  color: inherit; line-height: 1;
-}
-.chat-bubble .bubble-actions button:hover { opacity: 1; }
-.chat-bubble.featured {
-  box-shadow: 0 0 0 2px #f9b233;
-}
+.chat-bubble .read-mark { font-size: 13px; }
 .chat-bubble a { color: inherit; text-decoration: underline; }
-.chat-bubble.mine a { color: white; }
-.chat-bubble.theirs a { color: var(--accent-2); }
-.chat-bubble .read-mark { font-size: 0.7rem; }
 .chat-widget .chat-input {
-  display: flex; gap: 0.4rem; padding: 0.5rem; border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 0.45rem;
+  padding: 0.55rem 0.6rem; border-top: 1px solid var(--border);
   flex-shrink: 0; /* never let the input get squeezed out of view */
 }
 .chat-widget .chat-input input {
-  flex: 1; border: 1px solid var(--border); background: var(--surface-alt); color: var(--text);
-  padding: 0.55rem 0.75rem; border-radius: 999px; font-size: 0.88rem; outline: none;
+  flex: 1; min-width: 0;
+  border: 1px solid var(--border-strong); background: #fff; color: var(--text);
+  padding: 0.6rem 0.9rem; border-radius: 999px; font-size: 0.9rem; font-family: inherit; outline: none;
 }
-.chat-widget .chat-input input:focus { border-color: var(--accent); background: var(--surface); }
+.chat-widget .chat-input input::placeholder { color: rgba(74, 69, 66, 0.6); }
+.chat-widget .chat-input input:focus { border-color: var(--accent); }
 .chat-widget .chat-input button {
+  flex: none; width: 38px; height: 38px; padding: 0;
+  display: grid; place-items: center;
   background: var(--accent); color: var(--on-accent); border: 0; border-radius: 999px;
-  padding: 0 0.95rem; cursor: pointer; font-size: 0.85rem; font-weight: 700;
+  cursor: pointer;
 }
+.chat-widget .chat-input button .material-symbols-outlined { font-size: 20px; }
 .chat-widget .chat-input button:hover { background: var(--accent-hover); }
-.chat-widget .chat-input button:disabled { opacity: 0.4; cursor: not-allowed; }
+.chat-widget .chat-input button:disabled { opacity: 0.5; cursor: default; }
 
 /* ======== Garabatos (collaborative drawing board) ======== */
 .doodle-board {
@@ -3685,6 +3583,7 @@ a.btn.icon-pill .material-symbols-outlined { font-size: 20px; }
   .album-picker input,
   .places-search-row input,
   dialog.ui-dialog .ui-prompt-input,
+  .chat-widget .chat-input input,
   .modal-inner input.title,
   .note-editor-body input.title,
   .field input[type=date],

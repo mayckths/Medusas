@@ -434,7 +434,6 @@ const state = {
   photos: [],
   places: [],
   chats: [],
-  postits: [],
   trips: [],
   tripDays: [],
   tripBookings: [],
@@ -550,6 +549,9 @@ async function registerServiceWorker() {
     // Toque en una notificación con la app ya abierta → ir a la sección.
     navigator.serviceWorker.addEventListener('message', (e) => {
       if (e.data && e.data.type === 'medusas-navigate' && e.data.hash) location.hash = e.data.hash;
+      // Llegó un push con la app abierta: si el chat está en pantalla,
+      // se refresca ya en vez de esperar al siguiente sondeo.
+      if (e.data && e.data.type === 'medusas-push') reloadChats();
     });
   } catch (e) { console.warn('service worker no registrado', e); }
   return swRegistration;
@@ -828,7 +830,6 @@ async function loadAll() {
     { data: places },
     { data: chats },
     { data: triquiGames },
-    { data: postits },
     { data: trips, error: tripsErr },
     { data: tripDays },
     { data: tripBookings },
@@ -837,9 +838,10 @@ async function loadAll() {
     supabase.from('notes').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('photos').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('places').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
-    supabase.from('chats').select('*').order('created_at', { ascending: true }).limit(200),
+    // Los más recientes primero (y se invierten al guardar): con orden
+    // ascendente + limit llegarían los mensajes MÁS VIEJOS del historial.
+    supabase.from('chats').select('*').order('created_at', { ascending: false }).limit(CHAT_PAGE),
     supabase.from('triqui_games').select('*').order('created_at', { ascending: false }).limit(200),
-    supabase.from('postits').select('*').order('z_index', { ascending: true }).order('created_at', { ascending: true }),
     supabase.from('trips').select('*').order('start_date', { ascending: true }),
     supabase.from('trip_days').select('*').order('day_number', { ascending: true }),
     supabase.from('trip_bookings').select('*').order('datetime', { ascending: true }),
@@ -848,10 +850,9 @@ async function loadAll() {
   state.notes = notes || [];
   state.photos = photos || [];
   state.places = places || [];
-  state.chats = chats || [];
+  state.chats = (chats || []).reverse();
   // null = la tabla aún no existe (falta correr el SQL del juego).
   state.triquiGames = triquiGames || null;
-  state.postits = postits || [];
   state.trips = trips || [];
   state.tripDays = tripDays || [];
   state.tripBookings = tripBookings || [];
@@ -1077,8 +1078,8 @@ function renderInicio(root) {
 
   const totalUnread = totalUnreadCount();
 
-  // The left column shows the post-it board + section blocks in the configured order.
-  // The right column is the photo widget + Instantáneos chat.
+  // The left column shows the section blocks in the configured order.
+  // The right column is the photo widget + the chat.
   const greeting = getDashboardGreeting(state.currentUser);
   root.innerHTML = `
     <div class="page-head">
@@ -1109,13 +1110,16 @@ function renderInicio(root) {
         <div class="photo-widget" id="photo-widget">
           <div class="pw-empty">Aún no hay fotos para mostrar aquí.</div>
         </div>
-        <div class="postit-board-wrap">
-          <div class="postit-board" id="postit-board">
-            <div class="pb-empty" id="pb-empty" hidden>Toca <strong>+ Nuevo post-it</strong> para empezar el tablero.</div>
+        <div class="chat-widget" id="chat-widget">
+          <div class="chat-head">
+            <span class="chat-title">Chat</span>
+            <span class="chat-notify" id="chat-notify"></span>
           </div>
-          <!-- Sits outside the scaled board so it renders at the same size
-               as the rest of the glass pill buttons (Ver todas, etc.). -->
-          <button class="btn pb-new" id="pb-new" type="button">+ Nuevo post-it</button>
+          <div class="chat-body" id="chat-body" role="log" aria-live="polite" aria-label="Mensajes"></div>
+          <form class="chat-input" id="chat-form" autocomplete="off">
+            <input type="text" id="chat-input-field" maxlength="1000" enterkeyhint="send" aria-label="Mensaje" />
+            <button type="submit" id="chat-send" aria-label="Enviar" title="Enviar"><span class="material-symbols-outlined">arrow_upward</span></button>
+          </form>
         </div>
       </div>
     </div>
@@ -1155,7 +1159,7 @@ function renderInicio(root) {
     else placesGrid.innerHTML = '<div class="empty">Aún no hay lugares.</div>';
   }
 
-  setupPostitBoard();
+  setupChatWidget();
   setupPhotoWidget();
   setupNotifBell();
   // Defer to next paint so layout is committed before we measure.
@@ -1202,13 +1206,25 @@ function clampGridToOneRow(gridEl) {
 // sticky positioning keeps the column at top:16 which leaves some
 // unused space at the bottom — acceptable tradeoff for always-fits.
 function fitColRightToViewport() {
-  // Both right-column cards have fixed heights now, so we no longer need
-  // to compute a viewport-fitting size. Clear any previously-set inline
-  // height in case the user is loading a session that wrote them.
   const col = document.querySelector('.col-right');
   if (!col) return;
   col.style.height = '';
   col.style.maxHeight = '';
+  // The chat takes whatever is left under the photo widget so its input
+  // is visible without scrolling (desktop only — the CSS ignores
+  // --chat-h once the columns stack). Measured from the non-sticky grid
+  // so the result is the same at any scroll position.
+  const chat = document.getElementById('chat-widget');
+  const cols = document.querySelector('.dashboard-cols');
+  const photo = document.getElementById('photo-widget');
+  if (!chat || !cols || !photo) return;
+  const top = cols.getBoundingClientRect().top + window.scrollY + photo.offsetHeight + 16;
+  const h = Math.max(260, Math.min(460, window.innerHeight - top - 20));
+  const body = document.getElementById('chat-body');
+  const atBottom = body && body.scrollHeight - body.scrollTop - body.clientHeight < 40;
+  chat.style.setProperty('--chat-h', `${Math.round(h)}px`);
+  // Resizing must not hide the latest message behind the input.
+  if (atBottom) body.scrollTop = body.scrollHeight;
 }
 if (!window._medusasColResizeWired) {
   window._medusasColResizeWired = true;
@@ -5631,107 +5647,136 @@ $$('dialog.modal').forEach(dlg => {
 });
 
 // ============================================================
-// Instantáneos chat widget (dashboard)
+// Chat (dashboard) — ocupa el lugar del tablero de post-its.
+// Cada mensaje enviado le avisa a la otra persona con un push.
 // ============================================================
+const CHAT_PAGE = 200;      // últimos N mensajes que se cargan
+const CHAT_POLL_MS = 6000;  // sondeo mientras el chat está en pantalla
 let chatPollTimer = null;
-let chatFilter = 'all'; // 'all' | 'featured'
+let chatSending = false;
+// 'ok' | 'none' (la otra persona no tiene avisos activos) | 'error'
+let chatNotifyState = 'ok';
+
+const chatOnScreen = () => !!document.getElementById('chat-widget') && !document.hidden;
 
 function setupChatWidget() {
   const root = $('#chat-widget');
   if (!root) return;
   if (chatPollTimer) { clearInterval(chatPollTimer); chatPollTimer = null; }
 
-  // Inject filter buttons into the head (after the dot + title)
-  const head = $('.chat-head', root);
-  if (head && !$('.chat-filter', head)) {
-    const filter = document.createElement('div');
-    filter.className = 'chat-filter';
-    filter.innerHTML = `
-      <button data-f="all" class="${chatFilter === 'all' ? 'active' : ''}">Todos</button>
-      <button data-f="featured" class="${chatFilter === 'featured' ? 'active' : ''}"><span class="material-symbols-outlined">star</span></button>
-    `;
-    head.appendChild(filter);
-    filter.addEventListener('click', (e) => {
-      const b = e.target.closest('button[data-f]');
-      if (!b) return;
-      chatFilter = b.dataset.f;
-      $$('button', filter).forEach(x => x.classList.toggle('active', x.dataset.f === chatFilter));
-      renderChatBody();
-    });
-  }
-
-  renderChatBody();
+  $('#chat-input-field').placeholder = `Mensaje para ${triquiPlayers().partner}…`;
+  renderChatNotifyHint();
+  renderChatBody({ stick: true });
   markIncomingChatsRead();
 
-  // Single delegated listener for star / delete buttons inside bubbles
-  $('#chat-body').addEventListener('click', onChatBodyClick);
+  $('#chat-form').addEventListener('submit', (e) => { e.preventDefault(); sendChatMessage(); });
+  // El botón no debe robarle el foco al campo: en el teléfono eso cierra
+  // el teclado después de cada mensaje.
+  $('#chat-send').addEventListener('mousedown', (e) => e.preventDefault());
 
-  const send = async () => {
-    const input = $('#chat-input-field');
-    const body = input.value.trim();
-    if (!body) return;
-    const btn = $('#chat-send');
-    btn.disabled = true;
-    try {
-      const { error } = await supabase.from('chats').insert({
-        author: state.currentUser, body, read_by: [state.currentUser],
-      });
-      if (error) throw error;
-      input.value = '';
-      await reloadChats();
-      // Auto-prune: keep only the latest 5 non-featured messages
-      await pruneOldChats();
-    } catch (e) {
-      console.error(e);
-    } finally {
-      btn.disabled = false;
-      input.focus();
-    }
-  };
-  $('#chat-send').addEventListener('click', send);
-  $('#chat-input-field').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); send(); }
-  });
+  chatPollTimer = setInterval(() => {
+    if (!document.getElementById('chat-widget')) { clearInterval(chatPollTimer); chatPollTimer = null; return; }
+    if (!document.hidden) reloadChats();
+  }, CHAT_POLL_MS);
+}
+// Al volver a la pestaña / abrir la app desde la notificación.
+document.addEventListener('visibilitychange', () => { if (chatOnScreen()) reloadChats(); });
 
-  chatPollTimer = setInterval(async () => {
-    await reloadChats();
-    markIncomingChatsRead();
-  }, 8000);
+function renderChatNotifyHint() {
+  const el = $('#chat-notify');
+  if (!el) return;
+  const partner = escapeHtml(triquiPlayers().partner);
+  const [icon, text] = chatNotifyState === 'none'
+    ? ['notifications_off', `${partner} no tiene avisos activos`]
+    : chatNotifyState === 'error'
+      ? ['notifications_off', `No se pudo avisar a ${partner}`]
+      : ['notifications_active', `${partner} recibe un aviso`];
+  el.innerHTML = `<span class="material-symbols-outlined">${icon}</span> ${text}`;
+  el.classList.toggle('is-off', chatNotifyState !== 'ok');
+}
+
+async function sendChatMessage() {
+  const input = $('#chat-input-field');
+  const btn = $('#chat-send');
+  const body = (input.value || '').trim();
+  if (!body || chatSending) return;
+  chatSending = true;
+  btn.disabled = true;
+  const me = state.currentUser;
+  // La burbuja aparece de una; si el guardado falla se quita y el texto
+  // vuelve al campo.
+  const temp = { id: `tmp-${Date.now()}`, author: me, body, created_at: new Date().toISOString(), read_by: [me], _pending: true };
+  state.chats.push(temp);
+  input.value = '';
+  renderChatBody({ stick: true });
+  try {
+    const { data, error } = await supabase.from('chats')
+      .insert({ author: me, body, read_by: [me] }).select().single();
+    if (error) throw error;
+    const i = state.chats.indexOf(temp);
+    const saved = data || { ...temp, _pending: false };
+    if (i !== -1) state.chats[i] = saved; else state.chats.push(saved);
+    renderChatBody({ stick: true });
+    notifyChatMessage(me, body);
+  } catch (e) {
+    console.error('chat send', e);
+    state.chats = state.chats.filter(m => m !== temp);
+    renderChatBody({ stick: true });
+    if ($('#chat-input-field') === input && !input.value) input.value = body;
+    uiToast(`No se pudo enviar el mensaje: ${e.message || e}`, { error: true, duration: 5000 });
+  } finally {
+    chatSending = false;
+    btn.disabled = false;
+  }
+}
+
+// Push a la otra persona. No bloquea el envío; el resultado solo ajusta
+// la leyenda del encabezado para no prometer un aviso que no salió.
+function notifyChatMessage(author, body) {
+  const preview = body.length > 140 ? `${body.slice(0, 139)}…` : body;
+  supabase.functions.invoke('notify', { body: { title: author, body: preview, hash: '#/inicio' } })
+    .then(({ data, error }) => {
+      if (error) { console.warn('notify', error.message || error); chatNotifyState = 'error'; }
+      else chatNotifyState = (data && data.sent === 0) ? 'none' : 'ok';
+      renderChatNotifyHint();
+    })
+    .catch((e) => { console.warn('notify', e); chatNotifyState = 'error'; renderChatNotifyHint(); });
 }
 
 async function reloadChats() {
+  if (chatSending || !chatOnScreen()) return;
   try {
-    const { data } = await supabase.from('chats').select('*').order('created_at', { ascending: true }).limit(200);
-    state.chats = data || [];
+    const { data, error } = await supabase.from('chats').select('*')
+      .order('created_at', { ascending: false }).limit(CHAT_PAGE);
+    if (error) { console.warn('chat reload', error.message || error); return; }
+    // Un envío pudo empezar mientras esperábamos: su burbuja provisional
+    // manda, este resultado ya está viejo.
+    if (!data || chatSending) return;
+    const next = data.reverse();
+    const sig = (list) => list.map(m => `${m.id}:${(m.read_by || []).length}`).join('|');
+    // Sin cambios → no se toca el DOM (conserva scroll y selección).
+    if (sig(next) === sig(state.chats)) return;
+    state.chats = next;
     renderChatBody();
-  } catch {}
+    markIncomingChatsRead();
+  } catch (e) { console.warn('chat reload', e); }
 }
 
-async function pruneOldChats() {
-  // Keep only the latest 5 non-featured messages — older non-featured are deleted
-  const nonFeatured = state.chats
-    .filter(m => !m.featured)
-    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-  if (nonFeatured.length <= 5) return;
-  const toDelete = nonFeatured.slice(0, nonFeatured.length - 5);
-  try {
-    const ids = toDelete.map(m => m.id);
-    await supabase.from('chats').delete().in('id', ids);
-    state.chats = state.chats.filter(m => !ids.includes(m.id));
-    renderChatBody();
-  } catch (e) { console.warn('prune failed', e); }
-}
-
+// Marca como leídos los mensajes de la otra persona, solo si el chat
+// está realmente a la vista.
 async function markIncomingChatsRead() {
-  // Mark any message from the OTHER user as read (only those not authored by me)
+  if (!chatOnScreen()) return;
   const me = state.currentUser;
-  const toMark = state.chats.filter(m => m.author !== me && !(m.read_by || []).includes(me));
+  const toMark = state.chats.filter(m => m.author !== me && !m._pending && !(m.read_by || []).includes(me));
   if (!toMark.length) return;
-  for (const m of toMark) {
+  await Promise.all(toMark.map(async (m) => {
     const next = [...(m.read_by || []), me];
-    m.read_by = next;
-    try { await supabase.from('chats').update({ read_by: next }).eq('id', m.id); } catch {}
-  }
+    try {
+      const { error } = await supabase.from('chats').update({ read_by: next }).eq('id', m.id);
+      if (error) console.warn('chat read', error.message || error);
+      else m.read_by = next;
+    } catch (e) { console.warn('chat read', e); }
+  }));
 }
 
 // Detect URLs and convert to <a>
@@ -5742,62 +5787,59 @@ function linkify(text) {
   });
 }
 
-function renderChatBody() {
+function chatDayLabel(iso) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const day = new Date(iso); day.setHours(0, 0, 0, 0);
+  const diff = Math.round((today - day) / 86400000);
+  if (diff === 0) return 'Hoy';
+  if (diff === 1) return 'Ayer';
+  return day.toLocaleDateString('es', {
+    weekday: 'long', day: 'numeric', month: 'short',
+    year: day.getFullYear() === today.getFullYear() ? undefined : 'numeric',
+  });
+}
+
+// `stick: true` baja al último mensaje pase lo que pase (al abrir y al
+// enviar). Sin él, solo baja si ya estabas abajo: un mensaje nuevo no te
+// arranca de lo que estabas leyendo más arriba.
+function renderChatBody(opts = {}) {
   const body = $('#chat-body');
   if (!body) return;
-  let msgs = state.chats;
-  if (chatFilter === 'featured') msgs = msgs.filter(m => m.featured);
-
+  const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
+  const prevTop = body.scrollTop;
+  const msgs = state.chats;
   if (!msgs.length) {
-    body.innerHTML = `<div class="chat-empty">${chatFilter === 'featured' ? 'No hay mensajes destacados todavía.' : 'No hay mensajitos todavía.<br/>Escribe el primero ✨'}</div>`;
+    body.innerHTML = '<div class="chat-empty">Todavía no hay mensajes.<br/>Escribe el primero.</div>';
     return;
   }
   body.innerHTML = '';
-
+  const me = state.currentUser;
+  let lastDay = '';
+  let lastAuthor = '';
   for (const m of msgs) {
+    const day = chatDayLabel(m.created_at);
+    if (day !== lastDay) {
+      const sep = document.createElement('div');
+      sep.className = 'chat-day';
+      sep.textContent = day;
+      body.appendChild(sep);
+      lastDay = day;
+      lastAuthor = '';
+    }
+    const mine = m.author === me;
+    const read = mine && Array.isArray(m.read_by) && m.read_by.some(u => u !== me);
+    const time = new Date(m.created_at).toLocaleTimeString('es', { hour: 'numeric', minute: '2-digit' });
+    const [mark, markTitle] = m._pending ? ['schedule', 'Enviando…'] : read ? ['done_all', 'Leído'] : ['check', 'Enviado'];
     const div = document.createElement('div');
-    div.className = `chat-bubble ${m.author === state.currentUser ? 'mine' : 'theirs'}${m.featured ? ' featured' : ''}`;
-    const bodyText = `<div class="bubble-text">${linkify(m.body)}</div>`;
-
-    // Read mark: only show on MY messages that the other user has read
-    const otherUserRead = m.author === state.currentUser
-      && Array.isArray(m.read_by)
-      && m.read_by.some(u => u !== state.currentUser);
-
-    // Actions: star toggle (destacar protege del auto-borrado)
-    const starName = m.featured ? 'star' : 'star_border';
-    const actions = `
-      <div class="bubble-actions">
-        <button class="chat-star" data-id="${m.id}" title="${m.featured ? 'Quitar destacado' : 'Destacar — se queda guardado'}"><span class="material-symbols-outlined">${starName}</span></button>
-      </div>
-    `;
-
-    div.innerHTML = `
-      ${bodyText}
-      <div class="bubble-meta">
-        ${actions}
-        <span>${escapeHtml(m.author)} · ${fmtDate(m.created_at)}</span>
-        ${otherUserRead ? '<span class="read-mark" title="Leído"><span class="material-symbols-outlined" style="font-size:14px;">done_all</span></span>' : ''}
-      </div>
-    `;
+    div.className = `chat-bubble ${mine ? 'mine' : 'theirs'}${m.author === lastAuthor ? ' follow' : ''}${m._pending ? ' pending' : ''}`;
+    div.innerHTML = `<span class="bubble-text">${linkify(m.body)}</span>`
+      + `<span class="bubble-meta">${time}`
+      + (mine ? `<span class="material-symbols-outlined read-mark${read ? ' is-read' : ''}" title="${markTitle}" aria-label="${markTitle}">${mark}</span>` : '')
+      + '</span>';
     body.appendChild(div);
+    lastAuthor = m.author;
   }
-
-  // Scroll to bottom
-  requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
-}
-
-async function onChatBodyClick(e) {
-  const star = e.target.closest('button.chat-star');
-  if (star) {
-    const id = star.dataset.id;
-    const m = state.chats.find(x => x.id === id);
-    if (!m) return;
-    const next = !m.featured;
-    m.featured = next;
-    await supabase.from('chats').update({ featured: next }).eq('id', id);
-    renderChatBody();
-  }
+  body.scrollTop = (opts.stick || atBottom) ? body.scrollHeight : prevTop;
 }
 
 // ============================================================
@@ -5942,298 +5984,6 @@ function renderNotifList() {
     a.addEventListener('click', () => { $('#notif-popover').hidden = true; });
     list.appendChild(a);
   }
-}
-
-// ============================================================
-// Post-it board (dashboard)
-// ============================================================
-const POSTIT_COLORS = ['cyan', 'yellow', 'green', 'pink'];
-const POSTIT_W = 130;
-const POSTIT_H = 130;
-let postitDragState = null;
-let postitTopZ = 10;
-const POSTIT_DESIGN_W = 520;
-// Observer that keeps --pb-scale in sync with the wrapper's actual width
-// so the postit board fits any container — col-right on desktop, full
-// viewport on mobile.
-let postitScaleObserver = null;
-function setupPostitBoardScale() {
-  const wrap = document.querySelector('.postit-board-wrap');
-  if (!wrap) return;
-  const apply = () => {
-    const w = wrap.clientWidth || wrap.offsetWidth || 0;
-    if (!w) return;
-    // Uniform scale — postits keep their natural square proportions.
-    // The board fills the wrapper's full width on every breakpoint;
-    // height grows proportionally (taller on phones, but no awkward
-    // gutters on either side).
-    const scale = Math.min(1, w / POSTIT_DESIGN_W);
-    wrap.style.setProperty('--pb-scale', String(scale));
-  };
-  apply();
-  if (postitScaleObserver) { try { postitScaleObserver.disconnect(); } catch {} postitScaleObserver = null; }
-  if (typeof ResizeObserver !== 'undefined') {
-    postitScaleObserver = new ResizeObserver(apply);
-    postitScaleObserver.observe(wrap);
-  }
-  // Re-apply on viewport breakpoint changes (mobile ↔ desktop)
-  if (!window._pbBreakpointWired) {
-    window._pbBreakpointWired = true;
-    window.addEventListener('resize', apply);
-  }
-}
-// Bring this post-it to the top of the stacking order. We bump a local
-// counter, set inline z-index, and persist the new z_index to Supabase
-// so it survives refreshes (for both users).
-function bringPostitToFront(el, id) {
-  postitTopZ += 1;
-  const z = postitTopZ;
-  el.style.zIndex = String(z);
-  // Reflect locally so the next renderPostits() preserves it
-  const p = state.postits.find(x => x.id === id);
-  if (p) p.z_index = z;
-  if (id != null) {
-    // Fire-and-forget — drag/create UX shouldn't wait on the round trip.
-    supabase.from('postits').update({ z_index: z }).eq('id', id).then(() => {}, () => {});
-  }
-}
-
-function setupPostitBoard() {
-  const board = $('#postit-board');
-  if (!board) return;
-  // Seed the local counter from the highest persisted z_index so subsequent
-  // bring-to-front calls always end up on top.
-  postitTopZ = Math.max(
-    postitTopZ,
-    ...state.postits.map(p => Number(p.z_index) || 0)
-  );
-  // Scale the board to fit its container (col-right is narrower than the
-  // design width; mobile is narrower still). Re-runs on resize.
-  setupPostitBoardScale();
-  // Render initial post-its
-  renderPostits();
-
-  // Add post-it button
-  $('#pb-new').addEventListener('click', async () => {
-    // Use offsetWidth/Height to read the LAYOUT size (unscaled), since
-    // on mobile the board is rendered with a CSS transform: scale(...).
-    const w = board.offsetWidth;
-    const h = board.offsetHeight;
-    // Pick a random color and a position roughly in the visible area
-    const color = POSTIT_COLORS[Math.floor(Math.random() * POSTIT_COLORS.length)];
-    const x = Math.max(20, Math.floor(Math.random() * (w - POSTIT_W - 40)) + 20);
-    const y = Math.max(20, Math.floor(Math.random() * (h - POSTIT_H - 40)) + 20);
-    const rotation = (Math.random() - 0.5) * 8; // -4° to +4°
-    try {
-      const { data, error } = await supabase.from('postits').insert({
-        author: state.currentUser, body: '', color, x, y, rotation,
-      }).select().single();
-      if (error) throw error;
-      state.postits.unshift(data);
-      renderPostits();
-      // Bring the newly-created postit to the front so it sits above the rest
-      const newPostit = board.querySelector(`.postit[data-id="${data.id}"]`);
-      if (newPostit) bringPostitToFront(newPostit, data.id);
-      // Focus the new one for immediate typing
-      const newEl = board.querySelector(`[data-id="${data.id}"] .pi-body`);
-      if (newEl) newEl.focus();
-    } catch (e) {
-      console.error('postit create', e);
-      uiAlert('No se pudo crear el post-it: ' + (e.message || e), { title: 'Error' });
-    }
-  });
-
-  // Light polling so the other person's post-its show up
-  if (window._postitPoll) clearInterval(window._postitPoll);
-  window._postitPoll = setInterval(async () => {
-    try {
-      const { data } = await supabase.from('postits').select('*').order('z_index', { ascending: true }).order('created_at', { ascending: true });
-      if (data) {
-        // Only re-render if list changed
-        if (data.length !== state.postits.length ||
-            data.some(p => !state.postits.find(x => x.id === p.id && x.body === p.body && x.color === p.color && x.x === p.x && x.y === p.y))) {
-          // Don't disrupt a postit being edited
-          if (!document.activeElement || !document.activeElement.closest('.postit')) {
-            state.postits = data;
-            renderPostits();
-          }
-        }
-      }
-    } catch {}
-  }, 8000);
-}
-
-function renderPostits() {
-  const board = $('#postit-board');
-  if (!board) return;
-  const empty = $('#pb-empty');
-  // Wipe existing post-its (keep the + button and empty hint)
-  board.querySelectorAll('.postit').forEach(el => el.remove());
-  if (empty) empty.hidden = state.postits.length > 0;
-
-  for (const p of state.postits) {
-    board.appendChild(renderPostitEl(p));
-  }
-}
-
-function renderPostitEl(p) {
-  const el = document.createElement('div');
-  el.className = `postit ${p.color}`;
-  el.dataset.id = p.id;
-  el.style.left = `${p.x}px`;
-  el.style.top = `${p.y}px`;
-  el.style.transform = `rotate(${p.rotation || 0}deg)`;
-  // Stacking order comes from the DB so it survives refreshes
-  if (p.z_index != null) el.style.zIndex = String(p.z_index);
-
-  el.innerHTML = `
-    <div class="pi-author">${escapeHtml(p.author || '?')}</div>
-    <textarea class="pi-body" placeholder="Escribe algo…" maxlength="200">${escapeHtml(p.body || '')}</textarea>
-    <div class="pi-tools">
-      ${POSTIT_COLORS.map(c => `<button class="pi-color" data-color="${c}" title="Cambiar a ${c}"><span class="pi-swatch ${c}"></span></button>`).join('')}
-      <button class="pi-del" title="Borrar"><span class="material-symbols-outlined" style="font-size:14px;">delete</span></button>
-    </div>
-  `;
-
-  // Drag — desktop: grab the edge (not the textarea/tools) to drag.
-  el.addEventListener('mousedown', (e) => {
-    if (e.target.closest('.pi-body, .pi-tools')) return;
-    startDrag(el, p, e);
-  });
-
-  // Touch (mobile): drag from ANYWHERE on the postit. A short tap that
-  // doesn't move past the threshold focuses the textarea + shows the
-  // tools. This avoids the user having to target the tiny top edge.
-  let touchAnchor = null;
-  let touchDragStarted = false;
-  const DRAG_THRESHOLD = 8; // px
-
-  el.addEventListener('touchstart', (e) => {
-    // Let tool buttons handle their own taps
-    if (e.target.closest('.pi-tools button')) return;
-    const t = e.touches[0];
-    touchAnchor = { x: t.clientX, y: t.clientY, target: e.target };
-    touchDragStarted = false;
-  }, { passive: true });
-
-  el.addEventListener('touchmove', (e) => {
-    if (!touchAnchor) return;
-    const t = e.touches[0];
-    if (!touchDragStarted) {
-      const dx = t.clientX - touchAnchor.x;
-      const dy = t.clientY - touchAnchor.y;
-      if (Math.hypot(dx, dy) > DRAG_THRESHOLD) {
-        touchDragStarted = true;
-        // Don't pop the keyboard mid-drag
-        try { el.querySelector('.pi-body')?.blur(); } catch {}
-        // Hand off to the regular drag flow, starting from the original
-        // touch point so the postit doesn't jump.
-        startDrag(el, p, { clientX: touchAnchor.x, clientY: touchAnchor.y });
-        e.preventDefault();
-      }
-    } else {
-      // While dragging keep the page from scrolling under us
-      e.preventDefault();
-    }
-  }, { passive: false });
-
-  el.addEventListener('touchend', () => {
-    if (!touchAnchor) return;
-    const wasTap = !touchDragStarted;
-    touchAnchor = null;
-    touchDragStarted = false;
-    if (wasTap) {
-      // Show the tools row briefly so colors + delete are reachable
-      // without a hover (mobile has no hover).
-      el.classList.add('tools-open');
-      clearTimeout(el._toolsTimer);
-      el._toolsTimer = setTimeout(() => el.classList.remove('tools-open'), 3000);
-      // Focus the textarea so the keyboard pops for editing
-      try { el.querySelector('.pi-body')?.focus(); } catch {}
-    }
-  });
-
-  // Body edit — debounced save
-  const body = el.querySelector('.pi-body');
-  let bodyTimer = null;
-  body.addEventListener('input', (e) => {
-    p.body = e.target.value;
-    clearTimeout(bodyTimer);
-    bodyTimer = setTimeout(async () => {
-      try { await supabase.from('postits').update({ body: p.body }).eq('id', p.id); } catch {}
-    }, 600);
-  });
-
-  // Color change
-  el.querySelectorAll('.pi-color').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const newColor = btn.dataset.color;
-      el.classList.remove(...POSTIT_COLORS);
-      el.classList.add(newColor);
-      p.color = newColor;
-      try { await supabase.from('postits').update({ color: newColor }).eq('id', p.id); } catch {}
-    });
-  });
-
-  // Delete
-  el.querySelector('.pi-del').addEventListener('click', async (e) => {
-    e.stopPropagation();
-    if (!(await uiConfirm('¿Borrar este post-it?', { title: 'Borrar post-it', confirmLabel: 'Borrar', danger: true }))) return;
-    try {
-      await supabase.from('postits').delete().eq('id', p.id);
-      state.postits = state.postits.filter(x => x.id !== p.id);
-      renderPostits();
-    } catch (err) { console.error(err); }
-  });
-
-  return el;
-}
-
-function startDrag(el, p, evt) {
-  const board = $('#postit-board');
-  const renderedRect = board.getBoundingClientRect(); // post-transform screen coords
-  const layoutW = board.offsetWidth;                  // pre-transform (unscaled)
-  const layoutH = board.offsetHeight;
-  // Uniform scale — same factor on both axes.
-  const scale = layoutW > 0 ? renderedRect.width / layoutW : 1;
-  const elRect = el.getBoundingClientRect();
-  const offsetX = evt.clientX - elRect.left;
-  const offsetY = evt.clientY - elRect.top;
-
-  el.classList.add('dragging');
-  // Bring this postit to the very front and keep it there after release.
-  bringPostitToFront(el, p.id);
-
-  const onMove = (e) => {
-    const pos = e.touches ? e.touches[0] : e;
-    const newXScreen = pos.clientX - renderedRect.left - offsetX;
-    const newYScreen = pos.clientY - renderedRect.top - offsetY;
-    // Convert to layout pixels (uniform scale on both axes)
-    const newX = newXScreen / scale;
-    const newY = newYScreen / scale;
-    // Clamp inside the board (layout coords)
-    const clampedX = Math.max(0, Math.min(layoutW - POSTIT_W, newX));
-    const clampedY = Math.max(0, Math.min(layoutH - POSTIT_H, newY));
-    el.style.left = `${clampedX}px`;
-    el.style.top = `${clampedY}px`;
-    p.x = clampedX;
-    p.y = clampedY;
-  };
-
-  const onEnd = async () => {
-    el.classList.remove('dragging');
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onEnd);
-    document.removeEventListener('touchmove', onMove);
-    document.removeEventListener('touchend', onEnd);
-    try { await supabase.from('postits').update({ x: p.x, y: p.y }).eq('id', p.id); } catch {}
-  };
-
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('mouseup', onEnd);
-  document.addEventListener('touchmove', onMove, { passive: false });
-  document.addEventListener('touchend', onEnd);
 }
 
 // ============================================================
