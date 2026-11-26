@@ -74,6 +74,63 @@ function thumbWidth(cssPx) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   return Math.ceil(cssPx * dpr);
 }
+// ============================================================
+// Reducir imágenes antes de subirlas
+// Las fotos del teléfono llegan a 4000 px o más y varios MB. Se suben
+// con el lado mayor a UPLOAD_MAX_PX como mucho: una foto de iPhone queda
+// a la mitad de tamaño y pesa una fracción.
+// ============================================================
+const UPLOAD_MAX_PX = 2000;
+const UPLOAD_JPEG_QUALITY = 0.85;
+
+// Devuelve un File listo para subir. Devuelve el ORIGINAL sin tocar si no
+// es una imagen que se pueda reducir (GIF animado, SVG, PDF…), si reducir
+// no ahorra nada, o si algo falla: optimizar nunca debe impedir subir.
+async function shrinkImageForUpload(file, maxPx = UPLOAD_MAX_PX) {
+  if (!file || !/^image\//i.test(file.type || '') || /gif|svg/i.test(file.type)) return file;
+  let url = null;
+  try {
+    url = URL.createObjectURL(file);
+    const img = new Image();
+    img.src = url;
+    await img.decode(); // respeta la orientación EXIF
+    const w0 = img.naturalWidth;
+    const h0 = img.naturalHeight;
+    if (!w0 || !h0) return file;
+    const scale = Math.min(1, maxPx / Math.max(w0, h0));
+    // Un JPEG que ya cabe se sube intacto (recomprimirlo solo le quita calidad).
+    if (scale === 1 && /jpe?g/i.test(file.type)) return file;
+    const w = Math.max(1, Math.round(w0 * scale));
+    const h = Math.max(1, Math.round(h0 * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, w, h);
+    // PNG / WebP solo siguen como PNG si de verdad tienen transparencia;
+    // una foto guardada como PNG sale como JPEG, que pesa mucho menos.
+    const type = /png|webp/i.test(file.type) && canvasHasAlpha(ctx, w, h) ? 'image/png' : 'image/jpeg';
+    const blob = await new Promise(res => canvas.toBlob(res, type, UPLOAD_JPEG_QUALITY));
+    if (!blob || blob.size >= file.size) return file;
+    const base = String(file.name || 'foto').replace(/\.[^.]*$/, '') || 'foto';
+    return new File([blob], `${base}.${type === 'image/png' ? 'png' : 'jpg'}`, { type, lastModified: file.lastModified });
+  } catch (e) {
+    console.warn('no se pudo reducir la imagen; se sube el original', e);
+    return file;
+  } finally {
+    if (url) URL.revokeObjectURL(url);
+  }
+}
+
+function canvasHasAlpha(ctx, w, h) {
+  try {
+    const data = ctx.getImageData(0, 0, w, h).data;
+    for (let i = 3; i < data.length; i += 4) if (data[i] < 250) return true;
+    return false;
+  } catch { return true; } // ante la duda, conservar la transparencia
+}
+
 const fmtDate = (iso) => {
   const d = new Date(iso);
   const now = new Date();
@@ -2540,6 +2597,7 @@ function renderFlightCard(trip, f) {
 }
 
 // ---- Adjuntos (tickets / pases) -------------------------------------------
+// Son documentos (PDF, pases con código QR): se suben tal cual, sin reducir.
 async function uploadTripFile(tripId, person, file) {
   const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
   const path = `trips/${tripId}/${crypto.randomUUID()}-${person.toLowerCase()}.${ext}`;
@@ -2655,8 +2713,9 @@ $('#trip-save').addEventListener('click', async () => {
   }
   try {
     // Portada: se sube a app-assets y se guarda la ruta en cover_path.
-    const coverFile = $('#trip-cover-input').files[0];
-    if (coverFile) {
+    const coverOriginal = $('#trip-cover-input').files[0];
+    if (coverOriginal) {
+      const coverFile = await shrinkImageForUpload(coverOriginal);
       const ext = (coverFile.name.split('.').pop() || 'jpg').toLowerCase();
       const path = `trips/${crypto.randomUUID()}-cover.${ext}`;
       const { error: upErr } = await supabase.storage.from(APP_ASSETS_BUCKET).upload(path, coverFile, {
@@ -4261,7 +4320,8 @@ function renderConfigLogin(body) {
   setupAssetUploaders();
 }
 
-async function uploadAssetFile(file, prefix) {
+async function uploadAssetFile(original, prefix) {
+  const file = await shrinkImageForUpload(original);
   const ext = (file.name.split('.').pop() || 'png').toLowerCase();
   const path = `${prefix}/${crypto.randomUUID()}.${ext}`;
   const { error } = await supabase.storage.from(APP_ASSETS_BUCKET).upload(path, file, {
@@ -4877,7 +4937,8 @@ $('#note-image-input').addEventListener('change', async () => {
   if (!files.length) return;
   setStatus($('#note-status'), 'Subiendo…');
   try {
-    for (const file of files) {
+    for (const original of files) {
+      const file = await shrinkImageForUpload(original);
       const ext = (file.name.split('.').pop() || 'png').toLowerCase();
       const path = `${crypto.randomUUID()}.${ext}`;
       const { error } = await supabase.storage.from(BUCKET).upload(path, file, {
@@ -5142,13 +5203,14 @@ function updateUploadStatus() {
 }
 
 async function uploadOne(item) {
-  const { file, row, album, caption } = item;
+  const { row, album, caption } = item;
   row.classList.remove('pending');
   row.classList.add('uploading');
   row.querySelector('.status-icon').textContent = 'cloud_upload';
   const bar = row.querySelector('.progress > div');
   bar.style.width = '15%';
   try {
+    const file = await shrinkImageForUpload(item.file);
     const ext = (file.name.split('.').pop() || 'png').toLowerCase();
     const path = `${crypto.randomUUID()}.${ext}`;
     bar.style.width = '40%';
