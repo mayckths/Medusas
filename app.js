@@ -550,9 +550,9 @@ async function registerServiceWorker() {
     // Toque en una notificación con la app ya abierta → ir a la sección.
     navigator.serviceWorker.addEventListener('message', (e) => {
       if (e.data && e.data.type === 'medusas-navigate' && e.data.hash) location.hash = e.data.hash;
-      // Llegó un push con la app abierta: si el chat está en pantalla,
-      // se refresca ya en vez de esperar al siguiente sondeo.
-      if (e.data && e.data.type === 'medusas-push') reloadChats();
+      // Llegó un push con la app abierta: el chat (o su aviso de no
+      // leídos) se refresca ya en vez de esperar al siguiente sondeo.
+      if (e.data && e.data.type === 'medusas-push') reloadChats({ background: true });
     });
   } catch (e) { console.warn('service worker no registrado', e); }
   return swRegistration;
@@ -625,6 +625,7 @@ async function sendTestPush() {
 }
 
 async function logout() {
+  stopChatBackground();
   // Antes de soltar la sesión: este dispositivo deja de recibir avisos.
   try { await disablePush(); } catch {}
   state.currentUser = null;
@@ -857,6 +858,7 @@ async function loadAll() {
   state.places = places || [];
   state.chats = (chats || []).reverse();
   state.chatNotes = chatNotes || [];
+  startChatBackground(); // tiempo real + aviso de no leídos en toda la app
   // null = la tabla aún no existe (falta correr el SQL del juego).
   state.triquiGames = triquiGames || null;
   state.trips = trips || [];
@@ -901,12 +903,14 @@ function updateSidebarBadges() {
     'triqui': triquiMyTurn() ? 1 : 0,
     'fotos': state.photos.filter(isUnread).length,
   };
-  counts.home = counts.notas + counts.fotos;
+  counts.home = counts.notas + counts.fotos + chatUnreadCount();
   $$('[data-unread]').forEach(el => {
     const c = counts[el.dataset.unread] || 0;
     el.hidden = c === 0;
     el.textContent = c;
   });
+  // La barra inferior del teléfono solo tiene sitio para un punto.
+  $$('[data-unread-dot]').forEach(el => { el.hidden = !(counts[el.dataset.unreadDot] > 0); });
 }
 
 // ============================================================
@@ -1116,21 +1120,35 @@ function renderInicio(root) {
         <div class="chat-widget" id="chat-widget">
           <div class="chat-head">
             <div class="chat-tabs" role="tablist" aria-label="Secciones del chat">
-              <button type="button" role="tab" data-tab="chat" id="chat-tab-chat">Chat</button>
+              <button type="button" role="tab" data-tab="chat" id="chat-tab-chat">Chat<span class="chat-online" id="chat-online" hidden></span></button>
               <button type="button" role="tab" data-tab="notes" id="chat-tab-notes">Notas rápidas<span class="chat-tab-count" id="chat-notes-count"></span></button>
             </div>
-            <span class="chat-notify" id="chat-notify"></span>
-            <button type="button" class="chat-toggle" id="chat-toggle" aria-expanded="false" aria-label="Expandir el chat" title="Expandir el chat"><span class="material-symbols-outlined">expand_more</span></button>
+            <button type="button" class="chat-icon-btn chat-search-btn" id="chat-search-btn" aria-label="Buscar en el chat" title="Buscar en el chat"><span class="material-symbols-outlined">search</span></button>
+            <button type="button" class="chat-icon-btn" id="chat-toggle" aria-expanded="false" aria-label="Expandir el chat" title="Expandir el chat"><span class="material-symbols-outlined">expand_more</span></button>
           </div>
           <div class="chat-alert" id="chat-alert" role="status" hidden></div>
+          <div class="chat-search" id="chat-search" hidden>
+            <span class="material-symbols-outlined">search</span>
+            <input type="search" id="chat-search-input" placeholder="Buscar en el chat…" aria-label="Buscar en el chat" autocomplete="off" />
+          </div>
           <div class="chat-body" id="chat-body" role="log" aria-live="polite" aria-label="Mensajes"></div>
           <div class="chat-notes" id="chat-notes" hidden></div>
+          <div class="chat-results" id="chat-results" hidden></div>
+          <div class="chat-typing" id="chat-typing" aria-live="polite" hidden></div>
+          <div class="chat-sheet" id="chat-sheet" hidden></div>
+          <div class="chat-reply" id="chat-reply" hidden></div>
           <form class="chat-input" id="chat-form" autocomplete="off">
-            <button type="button" class="chat-photo-btn" id="chat-photo" aria-label="Enviar una foto como sticker" title="Enviar una foto como sticker"><span class="material-symbols-outlined">add_photo_alternate</span></button>
+            <button type="button" class="chat-ghost-btn" id="chat-attach" aria-label="Foto, toque o compartir" title="Foto, toque o compartir"><span class="material-symbols-outlined">add_circle</span></button>
             <input type="file" id="chat-photo-input" accept="image/*" hidden />
             <input type="text" id="chat-input-field" maxlength="1000" enterkeyhint="send" aria-label="Mensaje" />
+            <button type="button" class="chat-ghost-btn" id="chat-mic" aria-label="Grabar nota de voz" title="Grabar nota de voz" hidden><span class="material-symbols-outlined">mic</span></button>
             <button type="submit" id="chat-send" aria-label="Enviar" title="Enviar"><span class="material-symbols-outlined">arrow_upward</span></button>
           </form>
+          <div class="chat-rec" id="chat-rec" hidden>
+            <button type="button" class="chat-ghost-btn" id="chat-rec-cancel" aria-label="Descartar grabación" title="Descartar"><span class="material-symbols-outlined">delete</span></button>
+            <span class="chat-rec-live"><i></i><span id="chat-rec-time">0:00</span> Grabando…</span>
+            <button type="button" id="chat-rec-send" aria-label="Enviar nota de voz" title="Enviar nota de voz"><span class="material-symbols-outlined">arrow_upward</span></button>
+          </div>
         </div>
         <div class="photo-widget" id="photo-widget">
           <div class="pw-empty">Aún no hay fotos para mostrar aquí.</div>
@@ -5649,24 +5667,132 @@ $$('dialog.modal').forEach(dlg => {
 // ============================================================
 // Chat (dashboard) — ocupa el lugar del tablero de post-its.
 // Cada mensaje enviado le avisa a la otra persona con un push.
+//
+// La tabla chats solo tiene texto (body), así que todo lo que no es un
+// mensaje normal viaja como un body con forma "[[tipo:...]]":
+//   [[sticker:<archivo>]]            foto enviada como sticker
+//   [[voice:<archivo>]]              nota de voz
+//   [[share:photo|trip:<id>]]        tarjeta que abre una foto o un viaje
+//   [[nudge]]                        toque ("pensando en ti")
+//   [[react:<id>:<emoji>]]           reacción a otro mensaje (no se pinta
+//                                    como mensaje, se cuelga del original)
+//   [[re:<id>|<autor>|<cita>]]texto  respuesta citando otro mensaje
 // ============================================================
-const CHAT_PAGE = 200;      // últimos N mensajes que se cargan
-const CHAT_POLL_MS = 6000;  // sondeo mientras el chat está en pantalla
+const CHAT_PAGE = 200;          // últimos N mensajes que se cargan
+const CHAT_POLL_MS = 6000;      // sondeo con el chat en pantalla
+const CHAT_BG_POLL_MS = 30000;  // sondeo en otras secciones (solo para el aviso de no leídos)
+const CHAT_REACTIONS = ['❤️', '😂', '😮', '😢', '👍', '🪼'];
+const CHAT_VOICE_MAX_S = 120;
+const CHAT_NUDGE_COOLDOWN_MS = 10000;
+const CHAT_STICKER_PX = 512;    // lado mayor del sticker que se sube
+
+const CHAT_STICKER_RE = /^\[\[sticker:(sticker-[0-9a-f-]{36}-(\d{1,4})x(\d{1,4})\.(?:jpg|png))\]\]$/;
+const CHAT_VOICE_RE = /^\[\[voice:(voice-[0-9a-f-]{36}-(\d{1,3})s\.(?:m4a|webm|ogg))\]\]$/;
+const CHAT_REACT_RE = /^\[\[react:([\w-]{1,64}):([^\]\s:]{1,16})\]\]$/;
+const CHAT_SHARE_RE = /^\[\[share:(photo|trip):([\w-]{1,64})\]\]$/;
+const CHAT_REPLY_RE = /^\[\[re:([\w-]{1,64})\|([^|\]]{0,40})\|([^\]]{0,400})\]\]([\s\S]*)$/;
+const CHAT_NUDGE = '[[nudge]]';
+
 let chatPollTimer = null;
-let chatSending = false;
+let chatBgTimer = null;
+let chatSending = false;    // un envío a la vez
+let chatMutating = 0;       // reacciones / borrados / notas en curso
 // 'ok' | 'none' (la otra persona no tiene avisos activos) | 'error'
 let chatNotifyState = 'ok';
 // Estado de la tarjeta. Vive fuera del DOM para sobrevivir a un re-render
 // de Inicio (que reconstruye el widget).
-let chatTab = 'chat';       // 'chat' | 'notes'
+let chatTab = 'chat';       // 'chat' | 'notes' | 'search'
 let chatOpen = false;       // compacto por defecto; se expande al usarlo
 let chatStick = true;       // ¿la lista está abajo del todo?
 let chatDraft = '';
 let chatBodyObserver = null;
+// Panel inferior: null | {type:'actions', id} | {type:'attach'} |
+// {type:'pick-photo'} | {type:'pick-trip'} | {type:'note-list', id}
+let chatSheet = null;
+let chatReplyTo = null;     // id del mensaje al que se responde
+let chatSearchQuery = '';
+let chatSearchResults = [];
+let chatSearchBusy = false;
+let chatSearchSeq = 0;
+let chatSearchTimer = null;
+let chatLastNudge = 0;
+// Tiempo real (presencia + "escribiendo…")
+let chatChannel = null;
+let chatPartnerOnline = false;
+let chatPartnerTyping = false;
+let chatTypingTimer = null;
+let chatLastTypingSent = 0;
+// Notas de voz
+let chatRec = null;         // grabación en curso
+let chatAudio = null;       // reproductor compartido
+let chatPlaying = null;     // archivo que suena
 
 const chatOnScreen = () => !!document.getElementById('chat-widget') && !document.hidden;
 const chatStacked = () => window.matchMedia('(max-width: 980px)').matches;
+const chatPartner = () => triquiPlayers().partner;
+const chatVoiceSupported = () => typeof MediaRecorder !== 'undefined' && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+const chatFmtSecs = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const chatFind = (id) => state.chats.find(m => String(m.id) === String(id)) || state.chatNotes.find(m => String(m.id) === String(id)) || null;
 
+// ---- Tipos de mensaje ----
+function chatParse(body) {
+  let x;
+  if ((x = CHAT_STICKER_RE.exec(body))) return { kind: 'sticker', path: x[1], w: Number(x[2]) || 1, h: Number(x[3]) || 1, cutout: x[1].endsWith('.png') };
+  if ((x = CHAT_VOICE_RE.exec(body))) return { kind: 'voice', path: x[1], secs: Number(x[2]) || 0 };
+  if ((x = CHAT_REACT_RE.exec(body))) return { kind: 'react', target: x[1], emoji: x[2] };
+  if ((x = CHAT_SHARE_RE.exec(body))) return { kind: 'share', what: x[1], ref: x[2] };
+  if (body === CHAT_NUDGE) return { kind: 'nudge' };
+  if ((x = CHAT_REPLY_RE.exec(body))) {
+    let snippet = x[3];
+    try { snippet = decodeURIComponent(x[3]); } catch {}
+    return { kind: 'text', text: x[4], reply: { id: x[1], author: x[2], snippet } };
+  }
+  return { kind: 'text', text: body, reply: null };
+}
+// Con caché por mensaje: se consulta en cada render.
+function chatP(m) {
+  const body = String(m.body || '');
+  if (m._pb !== body) { m._pb = body; m._p = chatParse(body); }
+  return m._p;
+}
+const chatVisible = () => state.chats.filter(m => chatP(m).kind !== 'react');
+
+// Texto corto que representa un mensaje (citas, avisos, notas, búsqueda).
+function chatPreview(m) {
+  const p = chatP(m);
+  if (p.kind === 'sticker') return '📷 Foto';
+  if (p.kind === 'voice') return `🎤 Nota de voz (${chatFmtSecs(p.secs)})`;
+  if (p.kind === 'nudge') return '🪼 Toque';
+  if (p.kind === 'share') {
+    if (p.what === 'trip') { const t = state.trips.find(t => String(t.id) === p.ref); return `✈️ Viaje${t ? `: ${t.title}` : ''}`; }
+    return '🖼️ Foto del álbum';
+  }
+  if (p.kind === 'react') return p.emoji;
+  return p.text;
+}
+
+// Mensajes de la otra persona que aún no he visto (para el aviso en Inicio).
+function chatUnreadCount() {
+  const me = state.currentUser;
+  if (!me) return 0;
+  return chatVisible().filter(m => m.author !== me && !(m.read_by || []).includes(me)).length;
+}
+
+// id del mensaje → Map(autor → { emoji, row }). Una reacción por persona.
+function chatReactionMap() {
+  const map = new Map();
+  for (const m of state.chats) {
+    const p = chatP(m);
+    if (p.kind !== 'react') continue;
+    if (!map.has(p.target)) map.set(p.target, new Map());
+    map.get(p.target).set(m.author, { emoji: p.emoji, row: m });
+  }
+  return map;
+}
+
+// ============================================================
+// Montaje
+// ============================================================
 function setupChatWidget() {
   const root = $('#chat-widget');
   if (!root) return;
@@ -5675,47 +5801,85 @@ function setupChatWidget() {
 
   const input = $('#chat-input-field');
   const body = $('#chat-body');
-  input.placeholder = `Mensaje para ${triquiPlayers().partner}…`;
+  input.placeholder = `Mensaje para ${chatPartner()}…`;
   input.value = chatDraft;
-  input.addEventListener('input', () => { chatDraft = input.value; });
+  input.addEventListener('input', () => {
+    chatDraft = input.value;
+    updateChatComposer();
+    if (input.value) chatSendTyping();
+  });
+  $('#chat-search-input').value = chatSearchQuery;
 
   renderChatNotifyHint();
   renderChatBody({ stick: true });
   renderChatNotes();
+  renderChatResults();
+  renderChatSheet();
+  renderChatReply();
+  renderChatPresence();
+  renderChatTyping();
+  updateChatComposer();
   applyChatTab();
   applyChatOpen();
   markIncomingChatsRead();
 
   $('#chat-form').addEventListener('submit', (e) => { e.preventDefault(); sendChatMessage(); });
-  // El botón no debe robarle el foco al campo: en el teléfono eso cierra
-  // el teclado después de cada mensaje.
+  // Los botones del compositor no deben robarle el foco al campo: en el
+  // teléfono eso cierra el teclado después de cada mensaje.
   $('#chat-send').addEventListener('mousedown', (e) => e.preventDefault());
 
-  // Foto → sticker
+  // "+" → adjuntar (foto, toque, compartir, stickers recientes)
+  $('#chat-attach').addEventListener('click', (e) => {
+    e.stopPropagation();
+    setChatSheet({ type: 'attach' });
+  });
   const photoInput = $('#chat-photo-input');
-  $('#chat-photo').addEventListener('click', () => photoInput.click());
   photoInput.addEventListener('change', () => {
     const file = photoInput.files && photoInput.files[0];
     photoInput.value = ''; // permite volver a elegir la misma foto
     if (file) sendChatSticker(file);
   });
 
-  // Mensajes y notas: guardar/quitar nota rápida, o ver un sticker en grande.
-  const onListClick = (e) => {
-    const noteBtn = e.target.closest('[data-note-id]');
-    if (noteBtn) { e.stopPropagation(); toggleChatNote(noteBtn.dataset.noteId); return; }
-    const img = e.target.closest('.chat-sticker img, .chat-note img');
-    if (img) openStickerViewer(img.currentSrc || img.src);
-  };
-  body.addEventListener('click', onListClick);
-  $('#chat-notes').addEventListener('click', onListClick);
+  // Nota de voz
+  $('#chat-mic').addEventListener('click', (e) => { e.stopPropagation(); startChatRecording(); });
+  $('#chat-rec-cancel').addEventListener('click', (e) => { e.stopPropagation(); stopChatRecording(false); });
+  $('#chat-rec-send').addEventListener('click', (e) => { e.stopPropagation(); stopChatRecording(true); });
 
-  // Pestañas
+  // Lista de mensajes
+  body.addEventListener('click', onChatListClick);
+  body.addEventListener('contextmenu', (e) => {
+    const el = e.target.closest('[data-id]');
+    if (!el || el.dataset.pending) return;
+    e.preventDefault();
+    setChatSheet({ type: 'actions', id: el.dataset.id });
+  });
+  $('#chat-notes').addEventListener('click', onChatListClick);
+  $('#chat-results').addEventListener('click', onChatListClick);
+  $('#chat-sheet').addEventListener('click', onChatSheetClick);
+  $('#chat-reply').addEventListener('click', (e) => {
+    if (e.target.closest('[data-act="cancel-reply"]')) { chatReplyTo = null; renderChatReply(); }
+  });
+
+  // Pestañas + búsqueda
   $('.chat-tabs', root).addEventListener('click', (e) => {
     const b = e.target.closest('button[data-tab]');
     if (!b) return;
     chatTab = b.dataset.tab;
+    setChatSheet(null);
     applyChatTab();
+  });
+  $('#chat-search-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    chatTab = chatTab === 'search' ? 'chat' : 'search';
+    setChatSheet(null);
+    applyChatTab();
+    if (!chatOpen) setChatOpen(true);
+    if (chatTab === 'search') $('#chat-search-input').focus();
+  });
+  $('#chat-search-input').addEventListener('input', (e) => {
+    chatSearchQuery = e.target.value;
+    clearTimeout(chatSearchTimer);
+    chatSearchTimer = setTimeout(runChatSearch, 250);
   });
 
   // Se expande al usarlo: tocar la tarjeta o enfocar el campo la abre;
@@ -5724,11 +5888,12 @@ function setupChatWidget() {
   root.addEventListener('click', () => { if (!chatOpen) setChatOpen(true); });
   root.addEventListener('focusin', (e) => { if (!chatOpen && e.target !== $('#chat-toggle')) setChatOpen(true); });
   root.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && chatOpen) { e.preventDefault(); if (root.contains(document.activeElement)) document.activeElement.blur(); setChatOpen(false); }
+    if (e.key !== 'Escape') return;
+    if (chatSheet) { e.preventDefault(); setChatSheet(null); return; }
+    if (chatTab === 'search') { e.preventDefault(); chatTab = 'chat'; applyChatTab(); return; }
+    if (chatOpen) { e.preventDefault(); if (root.contains(document.activeElement)) document.activeElement.blur(); setChatOpen(false); }
   });
 
-  // La lista se queda abajo del todo mientras la tarjeta cambia de alto
-  // (al crecer el navegador ya lo hace; al encogerse hay que empujarla).
   // Solo el scroll de la persona decide si "está abajo": mientras la
   // tarjeta se anima el alto cambia en cada cuadro y esos eventos de
   // scroll no cuentan (un salto grande la haría parecer subida).
@@ -5750,13 +5915,19 @@ function setupChatWidget() {
     if (!document.hidden) reloadChats();
   }, CHAT_POLL_MS);
 }
+
 // Al volver a la pestaña / abrir la app desde la notificación.
-document.addEventListener('visibilitychange', () => { if (chatOnScreen()) reloadChats(); });
+document.addEventListener('visibilitychange', () => {
+  chatTrackPresence();
+  if (!document.hidden && state.currentUser) reloadChats({ background: true });
+});
 // Tocar fuera de la tarjeta la recoge (los diálogos encima no cuentan).
 document.addEventListener('pointerdown', (e) => {
   if (!chatOpen) return;
   const root = document.getElementById('chat-widget');
   if (!root || root.contains(e.target) || e.target.closest('dialog, #ui-toast')) return;
+  if (chatRec) return; // grabando: no se recoge a mitad
+  setChatSheet(null);
   setChatOpen(false);
 });
 if (window.visualViewport) {
@@ -5764,6 +5935,23 @@ if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', () => { if (chatOpen && chatStacked()) { sizeChatWidget(); revealChatWidget(); } });
 }
 
+function onChatListClick(e) {
+  const hit = (sel) => e.target.closest(sel);
+  let el;
+  if ((el = hit('[data-more]'))) { e.stopPropagation(); setChatSheet({ type: 'actions', id: el.dataset.more }); return; }
+  if ((el = hit('[data-react]'))) { e.stopPropagation(); toggleChatReaction(el.dataset.target, el.dataset.react); return; }
+  if ((el = hit('[data-voice]'))) { e.stopPropagation(); toggleChatVoice(el.dataset.voice); return; }
+  if ((el = hit('[data-open-share]'))) { e.stopPropagation(); openChatShare(el.dataset.openShare); return; }
+  if ((el = hit('[data-jump]'))) { e.stopPropagation(); jumpToChatMessage(el.dataset.jump); return; }
+  if ((el = hit('[data-note-to-notes]'))) { e.stopPropagation(); chatNoteToNotes(el.dataset.noteToNotes); return; }
+  if ((el = hit('[data-note-to-list]'))) { e.stopPropagation(); setChatSheet({ type: 'note-list', id: el.dataset.noteToList }); return; }
+  if ((el = hit('[data-note-id]'))) { e.stopPropagation(); toggleChatNote(el.dataset.noteId); return; }
+  if ((el = hit('.chat-sticker img, .chat-note img'))) openStickerViewer(el.currentSrc || el.src);
+}
+
+// ============================================================
+// Tarjeta: abrir / recoger, altos, pestañas
+// ============================================================
 function setChatOpen(open) {
   if (chatOpen === open) return;
   chatOpen = open;
@@ -5829,146 +6017,299 @@ function revealChatWidget() {
 function applyChatTab() {
   const root = $('#chat-widget');
   if (!root) return;
-  const notes = chatTab === 'notes';
   $$('.chat-tabs button', root).forEach(b => {
     const on = b.dataset.tab === chatTab;
     b.classList.toggle('active', on);
     b.setAttribute('aria-selected', String(on));
   });
-  $('#chat-body').hidden = notes;
-  $('#chat-notes').hidden = !notes;
-  $('#chat-form').hidden = notes;
-  if (!notes) { const body = $('#chat-body'); if (chatStick) body.scrollTop = body.scrollHeight; }
+  $('#chat-search-btn').classList.toggle('active', chatTab === 'search');
+  $('#chat-search').hidden = chatTab !== 'search';
+  $('#chat-body').hidden = chatTab !== 'chat';
+  $('#chat-notes').hidden = chatTab !== 'notes';
+  $('#chat-results').hidden = chatTab !== 'search';
+  applyChatBottom();
+  if (chatTab === 'chat') { const body = $('#chat-body'); if (chatStick) body.scrollTop = body.scrollHeight; }
 }
 
-// El encabezado solo lleva la campana; el texto aparece (en una franja)
-// cuando el aviso NO salió, que es cuando hace falta leerlo.
+// Qué se ve en la franja inferior: compositor, grabadora o panel.
+function applyChatBottom() {
+  if (!$('#chat-widget')) return;
+  const inChat = chatTab === 'chat';
+  const recording = !!chatRec;
+  $('#chat-form').hidden = !inChat || !!chatSheet || recording;
+  $('#chat-rec').hidden = !recording;
+  $('#chat-reply').hidden = !inChat || !chatReplyTo || !!chatSheet || recording;
+  $('#chat-typing').hidden = !inChat || !chatPartnerTyping;
+  $('#chat-sheet').hidden = !chatSheet;
+}
+
+function updateChatComposer() {
+  const input = $('#chat-input-field');
+  if (!input) return;
+  const hasText = !!input.value.trim();
+  const voice = chatVoiceSupported();
+  $('#chat-send').hidden = voice && !hasText;
+  $('#chat-mic').hidden = !voice || hasText;
+}
+
+function setChatBusy(busy) {
+  ['#chat-send', '#chat-attach', '#chat-mic'].forEach(sel => { const b = $(sel); if (b) b.disabled = busy; });
+}
+
+// El texto aparece (en una franja) solo cuando el aviso NO salió, que es
+// cuando hace falta leerlo.
 function renderChatNotifyHint() {
-  const el = $('#chat-notify');
   const alert = $('#chat-alert');
-  if (!el || !alert) return;
-  const partner = triquiPlayers().partner;
+  if (!alert) return;
+  const partner = chatPartner();
   const ok = chatNotifyState === 'ok';
-  const text = chatNotifyState === 'none' ? `${partner} no tiene avisos activos`
-    : chatNotifyState === 'error' ? `No se pudo avisar a ${partner}`
-    : `${partner} recibe un aviso con cada mensaje`;
-  el.innerHTML = `<span class="material-symbols-outlined">${ok ? 'notifications_active' : 'notifications_off'}</span>`;
-  el.title = text;
-  el.setAttribute('aria-label', text);
-  el.classList.toggle('is-off', !ok);
   alert.hidden = ok;
-  alert.textContent = ok ? '' : text;
+  alert.textContent = ok ? '' : chatNotifyState === 'none' ? `${partner} no tiene avisos activos` : `No se pudo avisar a ${partner}`;
 }
 
-// ---- Notas rápidas ----
-// Un mensaje guardado como nota rápida es el mismo mensaje con
-// featured = true. Se listan en la pestaña "Notas rápidas" del chat.
-function renderChatNotes() {
-  const root = $('#chat-notes');
-  const count = $('#chat-notes-count');
-  if (!root || !count) return;
-  const notes = state.chatNotes;
-  count.textContent = notes.length ? String(notes.length) : '';
-  count.hidden = !notes.length;
-  if (!notes.length) {
-    root.innerHTML = '<div class="chat-empty">Aún no hay notas rápidas.<br/>Toca el marcador <span class="material-symbols-outlined">bookmark</span> de un mensaje para guardarlo aquí.</div>';
+// ============================================================
+// Panel inferior (acciones del mensaje, adjuntar, selectores)
+// ============================================================
+function setChatSheet(sheet) {
+  chatSheet = sheet;
+  renderChatSheet();
+  if (sheet && !chatOpen) setChatOpen(true);
+}
+
+function renderChatSheet() {
+  const root = $('#chat-sheet');
+  if (!root) return;
+  const me = state.currentUser;
+  const head = (title) => `<div class="chat-sheet-head"><span class="chat-sheet-title">${title}</span>`
+    + '<button type="button" data-act="close" aria-label="Cerrar" title="Cerrar"><span class="material-symbols-outlined">close</span></button></div>';
+  const act = (name, icon, label, extra = '') => `<button type="button" data-act="${name}" class="chat-act ${extra}"><span class="material-symbols-outlined">${icon}</span><span>${label}</span></button>`;
+  let html = '';
+  const s = chatSheet;
+  // Marca el mensaje elegido
+  $$('#chat-body .is-selected').forEach(el => el.classList.remove('is-selected'));
+
+  if (s && s.type === 'actions') {
+    const m = chatFind(s.id);
+    if (!m || m._pending) { chatSheet = null; }
+    else {
+      const p = chatP(m);
+      const mine = m.author === me;
+      const myReaction = (chatReactionMap().get(String(m.id)) || new Map()).get(me);
+      const sel = document.querySelector(`#chat-body [data-id="${CSS.escape(String(m.id))}"]`);
+      if (sel) sel.classList.add('is-selected');
+      html = head(escapeHtml(chatPreview(m)))
+        + `<div class="chat-emoji-row">${CHAT_REACTIONS.map(em => `<button type="button" data-emoji="${em}" class="${myReaction && myReaction.emoji === em ? 'is-on' : ''}" aria-label="Reaccionar ${em}" aria-pressed="${!!(myReaction && myReaction.emoji === em)}">${em}</button>`).join('')}</div>`
+        + '<div class="chat-acts">'
+        + act('reply', 'reply', 'Responder')
+        + act('note', 'bookmark', m.featured ? 'Quitar nota' : 'Nota rápida', m.featured ? 'is-on' : '')
+        + (p.kind === 'text' ? act('copy', 'content_copy', 'Copiar') : '')
+        + (mine ? act('delete', 'delete', 'Borrar', 'danger') : '')
+        + '</div>';
+    }
+  } else if (s && s.type === 'attach') {
+    const recent = chatRecentStickers();
+    html = head('Enviar')
+      + '<div class="chat-acts">'
+      + act('new-photo', 'add_a_photo', 'Foto')
+      + act('nudge', 'favorite', 'Toque')
+      + act('pick-photo', 'photo_library', 'Del álbum')
+      + act('pick-trip', 'flight_takeoff', 'Viaje')
+      + '</div>'
+      + (recent.length
+        ? `<div class="chat-sheet-label">Stickers recientes</div><div class="chat-tray">${recent.map(st => `<button type="button" data-sticker="${escapeHtml(st.path)}" aria-label="Enviar este sticker"><img src="${escapeHtml(publicImageUrl(st.path))}" alt="" loading="lazy" /></button>`).join('')}</div>`
+        : '');
+  } else if (s && s.type === 'pick-photo') {
+    const photos = state.photos.slice(0, 30);
+    html = head('Compartir una foto del álbum')
+      + (photos.length
+        ? `<div class="chat-tray">${photos.map(ph => `<button type="button" data-photo="${escapeHtml(String(ph.id))}" aria-label="Compartir esta foto"><img src="${escapeHtml(publicImageUrl(ph.storage_path, { width: thumbWidth(72) }))}" alt="${escapeHtml(ph.caption || '')}" loading="lazy" /></button>`).join('')}</div>`
+        : '<div class="chat-sheet-empty">Aún no hay fotos en el álbum.</div>');
+  } else if (s && s.type === 'pick-trip') {
+    const trips = sortTripsForDisplay(state.trips);
+    html = head('Compartir un viaje')
+      + (trips.length
+        ? `<div class="chat-list">${trips.map(t => `<button type="button" data-trip="${escapeHtml(String(t.id))}"><span class="material-symbols-outlined">flight_takeoff</span><span><b>${escapeHtml(t.title || 'Viaje')}</b><small>${escapeHtml(t.start_date ? fmtTripRange(t) : '')}</small></span></button>`).join('')}</div>`
+        : '<div class="chat-sheet-empty">Aún no hay viajes.</div>');
+  } else if (s && s.type === 'note-list') {
+    const lists = state.notes.filter(n => !n.archived_at && Array.isArray(n.checklist) && n.checklist.length);
+    html = head('Añadir a una lista')
+      + (lists.length
+        ? `<div class="chat-list">${lists.map(n => `<button type="button" data-list="${escapeHtml(String(n.id))}"><span class="material-symbols-outlined">checklist</span><span><b>${escapeHtml(n.title || 'Sin título')}</b><small>${n.checklist.length} ítem${n.checklist.length === 1 ? '' : 's'}</small></span></button>`).join('')}</div>`
+        : '<div class="chat-sheet-empty">No hay notas con lista. Crea una en Notas y vuelve.</div>');
+  }
+  root.innerHTML = html;
+  applyChatBottom();
+}
+
+async function onChatSheetClick(e) {
+  e.stopPropagation();
+  const s = chatSheet;
+  if (!s) return;
+  let el;
+  if ((el = e.target.closest('[data-emoji]'))) { toggleChatReaction(s.id, el.dataset.emoji); return; }
+  if ((el = e.target.closest('[data-sticker]'))) { setChatSheet(null); sendChatSimple(`[[sticker:${el.dataset.sticker}]]`, '📷 Te mandó una foto', 'enviar el sticker'); return; }
+  if ((el = e.target.closest('[data-photo]'))) { setChatSheet(null); sendChatSimple(`[[share:photo:${el.dataset.photo}]]`, '🖼️ Te compartió una foto del álbum', 'compartir la foto'); return; }
+  if ((el = e.target.closest('[data-trip]'))) {
+    const t = state.trips.find(t => String(t.id) === el.dataset.trip);
+    setChatSheet(null);
+    sendChatSimple(`[[share:trip:${el.dataset.trip}]]`, `✈️ Te compartió el viaje${t && t.title ? ` "${t.title}"` : ''}`, 'compartir el viaje');
     return;
   }
-  root.innerHTML = notes.map(m => {
-    const sticker = chatSticker(m);
-    const when = new Date(m.created_at).toLocaleDateString('es', { day: 'numeric', month: 'short', year: new Date(m.created_at).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
-    const content = sticker
-      ? `<img src="${escapeHtml(publicImageUrl(sticker.path))}" alt="Foto" width="${sticker.w}" height="${sticker.h}" loading="lazy" />`
-      : `<div class="chat-note-text">${linkify(m.body)}</div>`;
-    return `<div class="chat-note${sticker ? ' has-photo' : ''}">
-      ${content}
-      <div class="chat-note-meta">
-        <span>${escapeHtml(m.author)} · ${escapeHtml(when)}</span>
-        <button type="button" data-note-id="${escapeHtml(String(m.id))}" aria-label="Quitar de notas rápidas" title="Quitar de notas rápidas"><span class="material-symbols-outlined">bookmark_remove</span></button>
-      </div>
-    </div>`;
-  }).join('');
+  if ((el = e.target.closest('[data-list]'))) { const id = s.id; setChatSheet(null); chatNoteToList(id, el.dataset.list); return; }
+  if (!(el = e.target.closest('[data-act]'))) return;
+  const act = el.dataset.act;
+  if (act === 'close') { setChatSheet(null); return; }
+  if (act === 'new-photo') { setChatSheet(null); $('#chat-photo-input').click(); return; }
+  if (act === 'nudge') { setChatSheet(null); sendChatNudge(); return; }
+  if (act === 'pick-photo' || act === 'pick-trip') { setChatSheet({ type: act }); return; }
+  if (act === 'reply') {
+    chatReplyTo = s.id;
+    setChatSheet(null);
+    renderChatReply();
+    const input = $('#chat-input-field');
+    if (input) input.focus();
+    return;
+  }
+  if (act === 'note') { const id = s.id; setChatSheet(null); toggleChatNote(id); return; }
+  if (act === 'copy') {
+    const m = chatFind(s.id);
+    setChatSheet(null);
+    try { await navigator.clipboard.writeText(m ? chatP(m).text || '' : ''); uiToast('Copiado'); }
+    catch { uiToast('No se pudo copiar', { error: true }); }
+    return;
+  }
+  if (act === 'delete') { deleteChatMessage(s.id); }
 }
 
-async function toggleChatNote(id) {
-  const inChat = state.chats.find(m => String(m.id) === String(id));
-  const inNotes = state.chatNotes.find(m => String(m.id) === String(id));
-  const m = inChat || inNotes;
-  if (!m || m._pending) return;
-  const prevNotes = state.chatNotes;
-  const next = !m.featured;
-  const apply = (value, notes) => {
-    if (inChat) inChat.featured = value;
-    if (inNotes) inNotes.featured = value;
-    state.chatNotes = notes;
-    renderChatBody();
-    renderChatNotes();
-  };
-  apply(next, next
-    ? [{ ...m, featured: true }, ...prevNotes.filter(x => String(x.id) !== String(id))]
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    : prevNotes.filter(x => String(x.id) !== String(id)));
+// Stickers ya usados en el chat (míos o recibidos), sin repetir.
+function chatRecentStickers() {
+  const seen = new Set();
+  const out = [];
+  for (let i = state.chats.length - 1; i >= 0 && out.length < 12; i--) {
+    const m = state.chats[i];
+    const p = chatP(m);
+    if (p.kind !== 'sticker' || m._pending || seen.has(p.path)) continue;
+    seen.add(p.path);
+    out.push(p);
+  }
+  return out;
+}
+
+function renderChatReply() {
+  const root = $('#chat-reply');
+  if (!root) return;
+  const m = chatReplyTo ? chatFind(chatReplyTo) : null;
+  if (!m) { chatReplyTo = null; root.innerHTML = ''; applyChatBottom(); return; }
+  root.innerHTML = `<span class="material-symbols-outlined">reply</span>`
+    + `<span class="chat-reply-text"><b>${escapeHtml(m.author)}</b> ${escapeHtml(chatPreview(m))}</span>`
+    + '<button type="button" data-act="cancel-reply" aria-label="Cancelar respuesta" title="Cancelar respuesta"><span class="material-symbols-outlined">close</span></button>';
+  applyChatBottom();
+}
+
+// ============================================================
+// Enviar
+// ============================================================
+async function chatInsert(body) {
+  const me = state.currentUser;
+  const { data, error } = await supabase.from('chats').insert({ author: me, body, read_by: [me] }).select().single();
+  if (error) throw error;
+  return data;
+}
+// La burbuja aparece de una (provisional) y luego se confirma o se quita.
+function chatPushTemp(body, extra = {}) {
+  const me = state.currentUser;
+  const temp = { id: `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, author: me, body, created_at: new Date().toISOString(), read_by: [me], _pending: true, ...extra };
+  state.chats.push(temp);
+  renderChatBody({ stick: true });
+  return temp;
+}
+function chatCommitTemp(temp, data) {
+  const saved = data || { ...temp, _pending: false, _localUrl: undefined };
+  const i = state.chats.indexOf(temp);
+  if (i !== -1) state.chats[i] = saved; else state.chats.push(saved);
+  renderChatBody({ stick: true });
+  chatBroadcast('new');
+  return saved;
+}
+function chatDropTemp(temp) {
+  state.chats = state.chats.filter(m => m !== temp);
+  renderChatBody({ stick: true });
+}
+
+// Texto ya armado (sticker repetido, tarjeta, toque…): guarda y avisa.
+async function sendChatSimple(body, pushBody, errLabel, pushTitle) {
+  if (chatSending) return false;
+  chatSending = true;
+  setChatBusy(true);
+  const temp = chatPushTemp(body);
   try {
-    const { error } = await supabase.from('chats').update({ featured: next }).eq('id', m.id);
-    if (error) throw error;
-    uiToast(next ? 'Guardado en notas rápidas' : 'Quitado de notas rápidas');
+    const data = await chatInsert(body);
+    chatCommitTemp(temp, data);
+    notifyChatMessage(pushTitle || state.currentUser, pushBody);
+    return true;
   } catch (e) {
-    console.error('chat note', e);
-    apply(!next, prevNotes);
-    uiToast(`No se pudo ${next ? 'guardar' : 'quitar'} la nota rápida: ${e.message || e}`, { error: true, duration: 5000 });
+    console.error('chat send', e);
+    chatDropTemp(temp);
+    uiToast(`No se pudo ${errLabel}: ${e.message || e}`, { error: true, duration: 5000 });
+    return false;
+  } finally {
+    chatSending = false;
+    setChatBusy(false);
   }
 }
 
 async function sendChatMessage() {
   const input = $('#chat-input-field');
-  const btn = $('#chat-send');
-  const body = (input.value || '').trim();
-  if (!body || chatSending) return;
-  chatSending = true;
-  btn.disabled = true;
-  const me = state.currentUser;
-  // La burbuja aparece de una; si el guardado falla se quita y el texto
-  // vuelve al campo.
-  const temp = { id: `tmp-${Date.now()}`, author: me, body, created_at: new Date().toISOString(), read_by: [me], _pending: true };
-  state.chats.push(temp);
+  const text = (input.value || '').trim();
+  if (!text || chatSending) return;
+  // Respuesta: la cita viaja dentro del mensaje para que se lea aunque
+  // el original ya no esté cargado.
+  let body = text;
+  const replyTo = chatReplyTo ? chatFind(chatReplyTo) : null;
+  if (replyTo) {
+    const snippet = chatPreview(replyTo).replace(/\s+/g, ' ').slice(0, 80);
+    body = `[[re:${replyTo.id}|${String(replyTo.author).replace(/[|\]]/g, '')}|${encodeURIComponent(snippet)}]]${text}`;
+  }
   input.value = '';
   chatDraft = '';
-  renderChatBody({ stick: true });
-  try {
-    const { data, error } = await supabase.from('chats')
-      .insert({ author: me, body, read_by: [me] }).select().single();
-    if (error) throw error;
-    const i = state.chats.indexOf(temp);
-    const saved = data || { ...temp, _pending: false };
-    if (i !== -1) state.chats[i] = saved; else state.chats.push(saved);
-    renderChatBody({ stick: true });
-    notifyChatMessage(me, body.length > 140 ? `${body.slice(0, 139)}…` : body);
-  } catch (e) {
-    console.error('chat send', e);
-    state.chats = state.chats.filter(m => m !== temp);
-    renderChatBody({ stick: true });
-    if ($('#chat-input-field') === input && !input.value) { input.value = body; chatDraft = body; }
-    uiToast(`No se pudo enviar el mensaje: ${e.message || e}`, { error: true, duration: 5000 });
-  } finally {
-    chatSending = false;
-    btn.disabled = false;
+  chatReplyTo = null;
+  renderChatReply();
+  updateChatComposer();
+  const ok = await sendChatSimple(body, text.length > 140 ? `${text.slice(0, 139)}…` : text, 'enviar el mensaje');
+  if (!ok && $('#chat-input-field') === input && !input.value) {
+    // El texto vuelve al campo (y la cita, si había).
+    input.value = text;
+    chatDraft = text;
+    if (replyTo) { chatReplyTo = replyTo.id; renderChatReply(); }
+    updateChatComposer();
   }
 }
 
-// ---- Fotos como stickers ----
-// La tabla chats no tiene columna de imagen, así que un sticker es un
-// mensaje cuyo body es exactamente "[[sticker:<archivo>]]". El nombre del
-// archivo lleva el tamaño (…-320x512.jpg) para reservar el espacio de la
-// burbuja antes de que la imagen cargue: así el scroll no salta.
-const CHAT_STICKER_RE = /^\[\[sticker:(sticker-[0-9a-f-]{36}-(\d{1,4})x(\d{1,4})\.(?:jpg|png))\]\]$/;
-const CHAT_STICKER_PX = 512; // lado mayor del archivo que se sube
-function chatSticker(m) {
-  const x = CHAT_STICKER_RE.exec(m.body || '');
-  return x ? { path: x[1], w: Number(x[2]) || 1, h: Number(x[3]) || 1, cutout: x[1].endsWith('.png') } : null;
+// Toque: un "pensando en ti" sin escribir nada.
+async function sendChatNudge() {
+  const wait = CHAT_NUDGE_COOLDOWN_MS - (Date.now() - chatLastNudge);
+  if (wait > 0) { uiToast(`Espera ${Math.ceil(wait / 1000)} s para mandar otro toque`); return; }
+  const me = state.currentUser;
+  if (await sendChatSimple(CHAT_NUDGE, 'Un toque desde Medusas', 'mandar el toque', `🪼 ${me} está pensando en ti`)) chatLastNudge = Date.now();
 }
 
-// Reduce la foto a tamaño sticker. PNG / WebP / GIF conservan la
-// transparencia (salen como PNG); el resto sale como JPEG.
+// Push a la otra persona. No bloquea el envío; el resultado solo decide
+// si hay que avisar de que el aviso no salió.
+function notifyChatMessage(title, preview) {
+  supabase.functions.invoke('notify', { body: { title, body: preview, hash: '#/inicio' } })
+    .then(({ data, error }) => {
+      if (error) { console.warn('notify', error.message || error); chatNotifyState = 'error'; }
+      else chatNotifyState = (data && data.sent === 0) ? 'none' : 'ok';
+      renderChatNotifyHint();
+    })
+    .catch((e) => { console.warn('notify', e); chatNotifyState = 'error'; renderChatNotifyHint(); });
+}
+
+// ---- Fotos como stickers ----
+// El nombre del archivo lleva el tamaño (…-320x512.jpg) para reservar el
+// espacio de la burbuja antes de que la imagen cargue: así el scroll no
+// salta. PNG / WebP / GIF conservan la transparencia (salen como PNG); el
+// resto sale como JPEG.
 async function makeStickerFile(file) {
   const url = URL.createObjectURL(file);
   try {
@@ -6001,51 +6342,50 @@ function preloadImage(src, timeoutMs = 2500) {
   });
 }
 
-async function sendChatSticker(file) {
-  if (chatSending) return;
-  const btn = $('#chat-photo');
+// Sube un archivo (sticker o audio) y guarda el mensaje que lo señala.
+// Si algo falla no queda ni burbuja ni archivo huérfano.
+async function sendChatUpload({ path, blob, type, body, pushBody, errLabel, localUrl, preload }) {
+  if (chatSending) return false;
   chatSending = true;
-  if (btn) btn.disabled = true;
-  const me = state.currentUser;
+  setChatBusy(true);
   let temp = null;
   let uploadedPath = null;
   try {
-    const st = await makeStickerFile(file);
-    const body = `[[sticker:${st.path}]]`;
-    temp = { id: `tmp-${Date.now()}`, author: me, body, created_at: new Date().toISOString(), read_by: [me], _pending: true, _localUrl: URL.createObjectURL(st.blob) };
-    state.chats.push(temp);
-    renderChatBody({ stick: true });
-
-    const { error: upErr } = await supabase.storage.from(BUCKET).upload(st.path, st.blob, {
-      cacheControl: '31536000', upsert: false, contentType: st.type,
+    temp = chatPushTemp(body, localUrl ? { _localUrl: localUrl } : {});
+    const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, blob, {
+      cacheControl: '31536000', upsert: false, contentType: type,
     });
     if (upErr) throw upErr;
-    uploadedPath = st.path;
-    const { data, error } = await supabase.from('chats')
-      .insert({ author: me, body, read_by: [me] }).select().single();
-    if (error) throw error;
+    uploadedPath = path;
+    const data = await chatInsert(body);
     uploadedPath = null; // ya pertenece a un mensaje guardado
-    await preloadImage(publicImageUrl(st.path));
-    const i = state.chats.indexOf(temp);
-    const saved = data || { ...temp, _pending: false, _localUrl: undefined };
-    if (i !== -1) state.chats[i] = saved; else state.chats.push(saved);
-    URL.revokeObjectURL(temp._localUrl);
-    renderChatBody({ stick: true });
-    notifyChatMessage(me, '📷 Te mandó una foto');
+    if (preload) await preloadImage(publicImageUrl(path));
+    chatCommitTemp(temp, data);
+    notifyChatMessage(state.currentUser, pushBody);
+    return true;
   } catch (e) {
-    console.error('chat sticker', e);
-    if (temp) {
-      state.chats = state.chats.filter(m => m !== temp);
-      URL.revokeObjectURL(temp._localUrl);
-      renderChatBody({ stick: true });
-    }
-    // Si el archivo subió pero el mensaje no se guardó, no dejarlo huérfano.
+    console.error('chat upload', e);
+    if (temp) chatDropTemp(temp);
     if (uploadedPath) { try { await supabase.storage.from(BUCKET).remove([uploadedPath]); } catch {} }
-    uiToast(`No se pudo enviar la foto: ${e.message || e}`, { error: true, duration: 5000 });
+    uiToast(`No se pudo ${errLabel}: ${e.message || e}`, { error: true, duration: 5000 });
+    return false;
   } finally {
+    if (localUrl) URL.revokeObjectURL(localUrl);
     chatSending = false;
-    if (btn) btn.disabled = false;
+    setChatBusy(false);
   }
+}
+
+async function sendChatSticker(file) {
+  if (chatSending) return;
+  let st;
+  try { st = await makeStickerFile(file); }
+  catch (e) { uiToast(`No se pudo enviar la foto: ${e.message || e}`, { error: true, duration: 5000 }); return; }
+  await sendChatUpload({
+    path: st.path, blob: st.blob, type: st.type, body: `[[sticker:${st.path}]]`,
+    pushBody: '📷 Te mandó una foto', errLabel: 'enviar la foto',
+    localUrl: URL.createObjectURL(st.blob), preload: true,
+  });
 }
 
 // Sticker en grande: toca en cualquier parte para cerrar.
@@ -6063,20 +6403,489 @@ function openStickerViewer(src) {
   if (!dlg.open) dlg.showModal();
 }
 
-// Push a la otra persona. No bloquea el envío; el resultado solo ajusta
-// la leyenda del encabezado para no prometer un aviso que no salió.
-function notifyChatMessage(author, preview) {
-  supabase.functions.invoke('notify', { body: { title: author, body: preview, hash: '#/inicio' } })
-    .then(({ data, error }) => {
-      if (error) { console.warn('notify', error.message || error); chatNotifyState = 'error'; }
-      else chatNotifyState = (data && data.sent === 0) ? 'none' : 'ok';
-      renderChatNotifyHint();
-    })
-    .catch((e) => { console.warn('notify', e); chatNotifyState = 'error'; renderChatNotifyHint(); });
+// ---- Notas de voz ----
+async function startChatRecording() {
+  if (chatRec || chatSending) return;
+  if (!chatVoiceSupported()) { uiToast('Este navegador no permite grabar audio', { error: true }); return; }
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) {
+    uiToast(e && e.name === 'NotAllowedError' ? 'Falta el permiso del micrófono' : `No se pudo usar el micrófono: ${e.message || e}`, { error: true, duration: 5000 });
+    return;
+  }
+  // mp4 primero: es lo que graba Safari y lo que suena en todas partes.
+  const mime = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+  let recorder;
+  try { recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); }
+  catch (e) { stream.getTracks().forEach(t => t.stop()); uiToast(`No se pudo grabar: ${e.message || e}`, { error: true }); return; }
+  const rec = { recorder, stream, chunks: [], startedAt: Date.now(), send: false, timer: null };
+  recorder.addEventListener('dataavailable', (e) => { if (e.data && e.data.size) rec.chunks.push(e.data); });
+  recorder.addEventListener('stop', () => finishChatRecording(rec));
+  recorder.start();
+  chatRec = rec;
+  const tick = () => {
+    const secs = (Date.now() - rec.startedAt) / 1000;
+    const el = $('#chat-rec-time');
+    if (el) el.textContent = chatFmtSecs(secs);
+    if (secs >= CHAT_VOICE_MAX_S) stopChatRecording(true);
+  };
+  rec.timer = setInterval(tick, 250);
+  tick();
+  if (!chatOpen) setChatOpen(true);
+  applyChatBottom();
 }
 
-async function reloadChats() {
-  if (chatSending || !chatOnScreen()) return;
+function stopChatRecording(send) {
+  const rec = chatRec;
+  if (!rec) return;
+  rec.send = send;
+  rec.secs = Math.round((Date.now() - rec.startedAt) / 1000);
+  clearInterval(rec.timer);
+  try { if (rec.recorder.state !== 'inactive') rec.recorder.stop(); else finishChatRecording(rec); }
+  catch { finishChatRecording(rec); }
+}
+
+async function finishChatRecording(rec) {
+  if (rec.done) return;
+  rec.done = true;
+  rec.stream.getTracks().forEach(t => t.stop());
+  if (chatRec === rec) chatRec = null;
+  applyChatBottom();
+  if (!rec.send) return;
+  if (rec.secs < 1 || !rec.chunks.length) { uiToast('La nota de voz quedó muy corta'); return; }
+  const mime = rec.recorder.mimeType || (rec.chunks[0] && rec.chunks[0].type) || 'audio/webm';
+  const [ext, type] = /mp4|m4a|aac/.test(mime) ? ['m4a', 'audio/mp4'] : /ogg/.test(mime) ? ['ogg', 'audio/ogg'] : ['webm', 'audio/webm'];
+  const blob = new Blob(rec.chunks, { type });
+  const path = `voice-${crypto.randomUUID()}-${Math.min(999, rec.secs)}s.${ext}`;
+  await sendChatUpload({ path, blob, type, body: `[[voice:${path}]]`, pushBody: '🎤 Te mandó una nota de voz', errLabel: 'enviar la nota de voz' });
+}
+
+function toggleChatVoice(path) {
+  if (!chatAudio) {
+    chatAudio = new Audio();
+    chatAudio.addEventListener('timeupdate', paintChatVoice);
+    chatAudio.addEventListener('ended', () => { chatPlaying = null; paintChatVoice(); });
+    chatAudio.addEventListener('pause', paintChatVoice);
+    chatAudio.addEventListener('error', () => {
+      if (!chatPlaying) return;
+      chatPlaying = null; paintChatVoice();
+      uiToast('No se pudo reproducir la nota de voz', { error: true });
+    });
+  }
+  if (chatPlaying === path && !chatAudio.paused) { chatAudio.pause(); return; }
+  if (chatPlaying !== path) { chatPlaying = path; chatAudio.src = publicImageUrl(path); }
+  chatAudio.play().catch(() => {});
+  paintChatVoice();
+}
+
+// Refleja el reproductor en los botones de voz que haya en pantalla.
+function paintChatVoice() {
+  $$('#chat-widget [data-voice]').forEach(btn => {
+    const on = chatPlaying === btn.dataset.voice;
+    const playing = on && chatAudio && !chatAudio.paused;
+    const total = Number(btn.dataset.secs) || 0;
+    const cur = on && chatAudio ? chatAudio.currentTime : 0;
+    $('.material-symbols-outlined', btn).textContent = playing ? 'pause' : 'play_arrow';
+    btn.setAttribute('aria-label', playing ? 'Pausar nota de voz' : 'Reproducir nota de voz');
+    const row = btn.closest('.voice-row');
+    if (!row) return;
+    $('.voice-bar i', row).style.width = `${total ? Math.min(100, (cur / total) * 100) : 0}%`;
+    $('.voice-time', row).textContent = chatFmtSecs(on && cur > 0 ? cur : total);
+  });
+}
+
+// ---- Tarjetas compartidas ----
+function openChatShare(ref) {
+  const [what, id] = ref.split(':');
+  if (what === 'trip') {
+    if (state.trips.some(t => String(t.id) === id)) location.hash = `#/viajes/${id}`;
+    else uiToast('Ese viaje ya no existe');
+    return;
+  }
+  const photo = state.photos.find(p => String(p.id) === id);
+  if (!photo) { uiToast('Esa foto ya no está en el álbum'); return; }
+  const list = state.photos.filter(p => (p.album || '') === (photo.album || ''));
+  openLightbox(list, Math.max(0, list.indexOf(photo)));
+}
+
+// ============================================================
+// Reacciones, borrar
+// ============================================================
+async function toggleChatReaction(targetId, emoji) {
+  const me = state.currentUser;
+  const target = chatFind(targetId);
+  if (!target || target._pending) return;
+  const mine = state.chats.filter(m => { const p = chatP(m); return m.author === me && p.kind === 'react' && p.target === String(targetId); });
+  const same = mine.some(m => chatP(m).emoji === emoji);
+  const prev = state.chats;
+  // Optimista: fuera mi reacción anterior, dentro la nueva (si cambia).
+  state.chats = state.chats.filter(m => !mine.includes(m));
+  let temp = null;
+  if (!same) {
+    temp = { id: `tmp-r-${Date.now()}`, author: me, body: `[[react:${targetId}:${emoji}]]`, created_at: new Date().toISOString(), read_by: [me], _pending: true };
+    state.chats.push(temp);
+  }
+  chatSheet = null;
+  renderChatBody();
+  renderChatSheet();
+  chatMutating++;
+  try {
+    const saved = mine.filter(m => !m._pending).map(m => m.id);
+    if (saved.length) {
+      const { error } = await supabase.from('chats').delete().in('id', saved);
+      if (error) throw error;
+    }
+    if (temp) {
+      const data = await chatInsert(temp.body);
+      const i = state.chats.indexOf(temp);
+      if (i !== -1) state.chats[i] = data || { ...temp, _pending: false };
+      if (target.author !== me) notifyChatMessage(me, `Reaccionó ${emoji} a "${chatPreview(target).replace(/\s+/g, ' ').slice(0, 60)}"`);
+    }
+    chatBroadcast('new');
+  } catch (e) {
+    console.error('chat reaction', e);
+    state.chats = prev;
+    renderChatBody();
+    uiToast(`No se pudo guardar la reacción: ${e.message || e}`, { error: true, duration: 5000 });
+  } finally { chatMutating--; }
+}
+
+async function deleteChatMessage(id) {
+  const me = state.currentUser;
+  const m = chatFind(id);
+  if (!m || m._pending || m.author !== me) return;
+  if (!(await uiConfirm('¿Borrar este mensaje? Se borra para los dos y no se puede deshacer.', { title: 'Borrar mensaje', confirmLabel: 'Borrar', danger: true }))) return;
+  chatMutating++;
+  try {
+    // .select() confirma que de verdad se borró una fila (RLS puede
+    // responder "ok" sin borrar nada).
+    const { data, error } = await supabase.from('chats').delete().eq('id', m.id).select('id');
+    if (error) throw error;
+    if (!data || !data.length) throw new Error('la base no borró el mensaje');
+    const p = chatP(m);
+    if (p.kind === 'sticker' || p.kind === 'voice') {
+      // El archivo solo se borra si nadie más lo usa: otro mensaje (un
+      // sticker reenviado) o una nota creada a partir de él.
+      try {
+        const inNote = state.notes.some(n => Array.isArray(n.images) && n.images.includes(p.path));
+        const { data: others, error: othersErr } = await supabase.from('chats').select('id').eq('body', m.body).limit(1);
+        if (!inNote && !othersErr && others && !others.length) await supabase.storage.from(BUCKET).remove([p.path]);
+      } catch (e) { console.warn('chat file cleanup', e); }
+      if (chatPlaying === p.path && chatAudio) { chatAudio.pause(); chatPlaying = null; }
+    }
+    state.chats = state.chats.filter(x => String(x.id) !== String(id));
+    state.chatNotes = state.chatNotes.filter(x => String(x.id) !== String(id));
+    if (String(chatReplyTo) === String(id)) chatReplyTo = null;
+    chatSheet = null;
+    renderChatBody();
+    renderChatNotes();
+    renderChatSheet();
+    renderChatReply();
+    chatBroadcast('new');
+    uiToast('Mensaje borrado');
+  } catch (e) {
+    console.error('chat delete', e);
+    uiToast(`No se pudo borrar el mensaje: ${e.message || e}`, { error: true, duration: 5000 });
+  } finally { chatMutating--; }
+}
+
+// ============================================================
+// Notas rápidas
+// Un mensaje guardado como nota rápida es el mismo mensaje con
+// featured = true. Se listan en la pestaña "Notas rápidas" del chat.
+// ============================================================
+function renderChatNotes() {
+  const root = $('#chat-notes');
+  const count = $('#chat-notes-count');
+  if (!root || !count) return;
+  const notes = state.chatNotes;
+  count.textContent = notes.length ? String(notes.length) : '';
+  count.hidden = !notes.length;
+  if (!notes.length) {
+    root.innerHTML = '<div class="chat-empty">Aún no hay notas rápidas.<br/>En un mensaje, toca <span class="material-symbols-outlined">more_horiz</span> y elige «Nota rápida».</div>';
+    return;
+  }
+  const btn = (attr, id, icon, label) => `<button type="button" ${attr}="${escapeHtml(String(id))}" aria-label="${label}" title="${label}"><span class="material-symbols-outlined">${icon}</span></button>`;
+  root.innerHTML = notes.map(m => {
+    const p = chatP(m);
+    const d = new Date(m.created_at);
+    const when = d.toLocaleDateString('es', { day: 'numeric', month: 'short', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
+    const content = p.kind === 'sticker'
+      ? `<img src="${escapeHtml(publicImageUrl(p.path))}" alt="Foto" width="${p.w}" height="${p.h}" loading="lazy" />`
+      : p.kind === 'voice' ? chatVoiceHtml(p)
+      : `<div class="chat-note-text">${linkify(chatPreview(m))}</div>`;
+    return `<div class="chat-note${p.kind === 'sticker' ? ' has-photo' : ''}">
+      ${content}
+      <div class="chat-note-meta">
+        <span>${escapeHtml(m.author)} · ${escapeHtml(when)}</span>
+        <span class="chat-note-acts">
+          ${p.kind === 'voice' ? '' : btn('data-note-to-notes', m.id, 'note_add', 'Pasar a Notas')}
+          ${p.kind === 'text' ? btn('data-note-to-list', m.id, 'playlist_add', 'Añadir a una lista') : ''}
+          ${btn('data-note-id', m.id, 'bookmark_remove', 'Quitar de notas rápidas')}
+        </span>
+      </div>
+    </div>`;
+  }).join('');
+  paintChatVoice();
+}
+
+async function toggleChatNote(id) {
+  const inChat = state.chats.find(m => String(m.id) === String(id));
+  const inNotes = state.chatNotes.find(m => String(m.id) === String(id));
+  const m = inChat || inNotes;
+  if (!m || m._pending) return;
+  const prevNotes = state.chatNotes;
+  const next = !m.featured;
+  const apply = (value, notes) => {
+    if (inChat) inChat.featured = value;
+    if (inNotes) inNotes.featured = value;
+    state.chatNotes = notes;
+    renderChatBody();
+    renderChatNotes();
+  };
+  apply(next, next
+    ? [{ ...m, featured: true }, ...prevNotes.filter(x => String(x.id) !== String(id))]
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    : prevNotes.filter(x => String(x.id) !== String(id)));
+  chatMutating++;
+  try {
+    const { error } = await supabase.from('chats').update({ featured: next }).eq('id', m.id);
+    if (error) throw error;
+    chatBroadcast('new');
+    uiToast(next ? 'Guardado en notas rápidas' : 'Quitado de notas rápidas');
+  } catch (e) {
+    console.error('chat note', e);
+    apply(!next, prevNotes);
+    uiToast(`No se pudo ${next ? 'guardar' : 'quitar'} la nota rápida: ${e.message || e}`, { error: true, duration: 5000 });
+  } finally { chatMutating--; }
+}
+
+// Nota rápida → nota de verdad en la sección Notas (compartida).
+async function chatNoteToNotes(id) {
+  const m = chatFind(id);
+  if (!m) return;
+  const p = chatP(m);
+  if (p.kind === 'voice') return;
+  const me = state.currentUser;
+  const text = chatPreview(m).trim();
+  const long = text.length > 60;
+  const payload = {
+    title: p.kind === 'sticker' ? 'Foto del chat' : (long ? `${text.slice(0, 57)}…` : text),
+    content: p.kind !== 'sticker' && long ? text : '',
+    content_is_rich: false,
+    visibility: 'public',
+    links: [], images: p.kind === 'sticker' ? [p.path] : [], tags: [],
+    pinned: false, checklist: [],
+    created_by: me, seen_by: [me],
+  };
+  try {
+    const { data, error } = await supabase.from('notes').insert(payload).select().single();
+    if (error) throw error;
+    state.notes.unshift(data || { ...payload, id: `local-${Date.now()}`, created_at: new Date().toISOString() });
+    uiToast('Nota creada en Notas ✓');
+    notifyPartner({ title: `${me} escribió una nota`, body: payload.title, hash: '#/notas' });
+  } catch (e) {
+    console.error('chat note → notes', e);
+    uiToast(`No se pudo crear la nota: ${e.message || e}`, { error: true, duration: 5000 });
+  }
+}
+
+// Nota rápida → un ítem más en la lista de una nota existente.
+async function chatNoteToList(id, noteId) {
+  const m = chatFind(id);
+  const note = state.notes.find(n => String(n.id) === String(noteId));
+  if (!m || !note) return;
+  const text = chatPreview(m).replace(/\s+/g, ' ').trim();
+  const updated = [...(note.checklist || []), { text, done: false }];
+  try {
+    const { error } = await supabase.from('notes').update({ checklist: updated }).eq('id', note.id);
+    if (error) throw error;
+    note.checklist = updated;
+    uiToast(`Añadido a "${note.title || 'la lista'}" ✓`);
+  } catch (e) {
+    console.error('chat note → list', e);
+    uiToast(`No se pudo añadir a la lista: ${e.message || e}`, { error: true, duration: 5000 });
+  }
+}
+
+// ============================================================
+// Buscar
+// ============================================================
+async function runChatSearch() {
+  const q = chatSearchQuery.trim();
+  const seq = ++chatSearchSeq;
+  if (q.length < 2) { chatSearchResults = []; chatSearchBusy = false; renderChatResults(); return; }
+  const needle = q.toLowerCase();
+  const match = (m) => { const p = chatP(m); return p.kind === 'text' && p.text.toLowerCase().includes(needle); };
+  const byNewest = (a, b) => new Date(b.created_at) - new Date(a.created_at);
+  // Primero lo que ya está cargado; luego el historial completo.
+  chatSearchResults = chatVisible().filter(m => !m._pending && match(m)).sort(byNewest);
+  chatSearchBusy = true;
+  renderChatResults();
+  try {
+    const esc = q.replace(/[\\%_]/g, '\\$&');
+    const { data, error } = await supabase.from('chats').select('*')
+      .ilike('body', `%${esc}%`).order('created_at', { ascending: false }).limit(80);
+    if (seq !== chatSearchSeq) return;
+    if (error) throw error;
+    const seen = new Set(chatSearchResults.map(m => String(m.id)));
+    chatSearchResults = [...chatSearchResults, ...(data || []).filter(m => !seen.has(String(m.id)) && match(m))].sort(byNewest);
+  } catch (e) { console.warn('chat search', e); }
+  finally { if (seq === chatSearchSeq) { chatSearchBusy = false; renderChatResults(); } }
+}
+
+function renderChatResults() {
+  const root = $('#chat-results');
+  if (!root) return;
+  const q = chatSearchQuery.trim();
+  if (q.length < 2) { root.innerHTML = '<div class="chat-empty">Escribe al menos dos letras para buscar en todo el historial.</div>'; return; }
+  if (!chatSearchResults.length) {
+    root.innerHTML = `<div class="chat-empty">${chatSearchBusy ? 'Buscando…' : 'Sin resultados.'}</div>`;
+    return;
+  }
+  const mark = (text) => {
+    const i = text.toLowerCase().indexOf(q.toLowerCase());
+    if (i === -1) return escapeHtml(text);
+    const from = Math.max(0, i - 40);
+    return (from ? '…' : '') + escapeHtml(text.slice(from, i)) + `<mark>${escapeHtml(text.slice(i, i + q.length))}</mark>` + escapeHtml(text.slice(i + q.length, i + q.length + 80));
+  };
+  root.innerHTML = chatSearchResults.map(m => {
+    const d = new Date(m.created_at);
+    const when = d.toLocaleDateString('es', { day: 'numeric', month: 'short', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
+    return `<button type="button" class="chat-result" data-jump="${escapeHtml(String(m.id))}">
+      <span class="chat-result-text">${mark(chatP(m).text)}</span>
+      <span class="chat-result-meta">${escapeHtml(m.author)} · ${escapeHtml(when)}</span>
+    </button>`;
+  }).join('') + (chatSearchBusy ? '<div class="chat-empty">Buscando más…</div>' : '');
+}
+
+// Lleva al mensaje dentro de la conversación y lo resalta un momento.
+function jumpToChatMessage(id) {
+  if (!state.chats.some(m => String(m.id) === String(id))) { uiToast('Ese mensaje es más antiguo que lo cargado en el chat'); return; }
+  chatTab = 'chat';
+  applyChatTab();
+  const el = document.querySelector(`#chat-body [data-id="${CSS.escape(String(id))}"]`);
+  if (!el) return;
+  chatStick = false;
+  el.scrollIntoView({ block: 'center' });
+  el.classList.remove('flash');
+  void el.offsetWidth; // reinicia la animación
+  el.classList.add('flash');
+}
+
+// ============================================================
+// Tiempo real: en línea + "escribiendo…" + refresco inmediato
+// Usa un canal de Supabase Realtime (broadcast y presencia), que no
+// necesita tablas. Si el proyecto no lo permite, simplemente no aparece
+// y el chat sigue funcionando por sondeo.
+// ============================================================
+function startChatRealtime() {
+  const me = state.currentUser;
+  if (chatChannel || !me) return;
+  try {
+    const ch = supabase.channel('medusas-chat', { config: { presence: { key: me }, broadcast: { self: false } } });
+    chatChannel = ch;
+    ch.on('presence', { event: 'sync' }, () => {
+      chatPartnerOnline = Object.keys(ch.presenceState() || {}).some(k => k !== me);
+      if (!chatPartnerOnline) chatSetPartnerTyping(false);
+      renderChatPresence();
+    });
+    ch.on('broadcast', { event: 'typing' }, ({ payload }) => {
+      if (payload && payload.user && payload.user !== me) chatSetPartnerTyping(true);
+    });
+    ch.on('broadcast', { event: 'new' }, () => { chatSetPartnerTyping(false); reloadChats({ background: true }); });
+    ch.subscribe((status) => {
+      if (status === 'SUBSCRIBED') chatTrackPresence();
+      else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') console.warn('chat realtime', status);
+    });
+  } catch (e) { console.warn('chat realtime', e); chatChannel = null; }
+}
+
+function stopChatRealtime() {
+  if (!chatChannel) return;
+  try { supabase.removeChannel(chatChannel); } catch {}
+  chatChannel = null;
+  chatPartnerOnline = false;
+  chatSetPartnerTyping(false);
+}
+
+// "En línea" = con la app al frente.
+function chatTrackPresence() {
+  if (!chatChannel || !state.currentUser) return;
+  try {
+    const r = document.hidden ? chatChannel.untrack() : chatChannel.track({ user: state.currentUser });
+    if (r && r.catch) r.catch(() => {});
+  } catch {}
+}
+
+function chatBroadcast(event, payload = {}) {
+  if (!chatChannel) return;
+  try {
+    const r = chatChannel.send({ type: 'broadcast', event, payload: { user: state.currentUser, ...payload } });
+    if (r && r.catch) r.catch(() => {});
+  } catch {}
+}
+
+function chatSendTyping() {
+  const now = Date.now();
+  if (now - chatLastTypingSent < 2500) return;
+  chatLastTypingSent = now;
+  chatBroadcast('typing');
+}
+
+function chatSetPartnerTyping(on) {
+  clearTimeout(chatTypingTimer);
+  chatPartnerTyping = on;
+  if (on) chatTypingTimer = setTimeout(() => chatSetPartnerTyping(false), 4000);
+  renderChatTyping();
+}
+
+function renderChatTyping() {
+  const el = $('#chat-typing');
+  if (!el) return;
+  el.innerHTML = chatPartnerTyping ? `${escapeHtml(chatPartner())} está escribiendo<span class="chat-dots"><i></i><i></i><i></i></span>` : '';
+  applyChatBottom();
+}
+
+function renderChatPresence() {
+  const dot = $('#chat-online');
+  if (!dot) return;
+  dot.hidden = !chatPartnerOnline;
+  dot.title = `${chatPartner()} está en línea`;
+  dot.setAttribute('aria-label', dot.title);
+}
+
+// Arranca lo que vive en toda la app (no solo en Inicio): tiempo real y
+// un sondeo lento para el aviso de mensajes sin leer.
+function startChatBackground() {
+  if (!state.currentUser) return;
+  startChatRealtime();
+  if (!chatBgTimer) {
+    chatBgTimer = setInterval(() => {
+      if (!state.currentUser || document.hidden || document.getElementById('chat-widget')) return;
+      reloadChats({ background: true });
+    }, CHAT_BG_POLL_MS);
+  }
+}
+
+function stopChatBackground() {
+  if (chatBgTimer) { clearInterval(chatBgTimer); chatBgTimer = null; }
+  if (chatPollTimer) { clearInterval(chatPollTimer); chatPollTimer = null; }
+  if (chatRec) stopChatRecording(false);
+  if (chatAudio) { try { chatAudio.pause(); } catch {} }
+  chatPlaying = null;
+  stopChatRealtime();
+  chatSheet = null; chatReplyTo = null; chatDraft = ''; chatTab = 'chat'; chatOpen = false;
+  chatSearchQuery = ''; chatSearchResults = [];
+}
+
+// ============================================================
+// Recargar + leídos
+// ============================================================
+// `background`: también fuera de Inicio (aviso de no leídos, push, canal).
+async function reloadChats(opts = {}) {
+  if (chatSending || chatMutating || !state.currentUser || document.hidden) return;
+  if (!opts.background && !chatOnScreen()) return;
   try {
     const [{ data, error }, { data: notes, error: notesErr }] = await Promise.all([
       supabase.from('chats').select('*').order('created_at', { ascending: false }).limit(CHAT_PAGE),
@@ -6085,14 +6894,17 @@ async function reloadChats() {
     if (error) { console.warn('chat reload', error.message || error); return; }
     // Un envío pudo empezar mientras esperábamos: su burbuja provisional
     // manda, este resultado ya está viejo.
-    if (!data || chatSending) return;
+    if (!data || chatSending || chatMutating) return;
     const next = data.reverse();
     const sig = (list) => list.map(m => `${m.id}:${(m.read_by || []).length}:${m.featured ? 1 : 0}`).join('|');
     // Sin cambios → no se toca el DOM (conserva scroll y selección).
     if (sig(next) !== sig(state.chats)) {
       state.chats = next;
       renderChatBody();
+      if (chatSheet && chatSheet.type === 'actions') renderChatSheet();
+      renderChatReply();
       markIncomingChatsRead();
+      updateSidebarBadges();
     }
     if (!notesErr && notes && sig(notes) !== sig(state.chatNotes)) {
       state.chatNotes = notes;
@@ -6116,8 +6928,12 @@ async function markIncomingChatsRead() {
       else m.read_by = next;
     } catch (e) { console.warn('chat read', e); }
   }));
+  updateSidebarBadges();
 }
 
+// ============================================================
+// Pintar la conversación
+// ============================================================
 // Detect URLs and convert to <a>
 function linkify(text) {
   const escaped = escapeHtml(text);
@@ -6138,6 +6954,25 @@ function chatDayLabel(iso) {
   });
 }
 
+function chatVoiceHtml(p) {
+  return `<span class="voice-row"><button type="button" class="voice-play" data-voice="${escapeHtml(p.path)}" data-secs="${p.secs}" aria-label="Reproducir nota de voz"><span class="material-symbols-outlined">play_arrow</span></button>`
+    + `<span class="voice-bar"><i></i></span><span class="voice-time">${chatFmtSecs(p.secs)}</span></span>`;
+}
+
+function chatShareHtml(p) {
+  if (p.what === 'trip') {
+    const t = state.trips.find(t => String(t.id) === p.ref);
+    const cover = t ? tripCoverUrl(t) : null;
+    return `<button type="button" class="chat-card-main" data-open-share="trip:${escapeHtml(p.ref)}">`
+      + (cover ? `<img src="${escapeHtml(cover)}" alt="" loading="lazy" />` : '<span class="chat-card-icon material-symbols-outlined">flight_takeoff</span>')
+      + `<span class="chat-card-text"><small>Viaje</small><b>${escapeHtml(t ? (t.title || 'Viaje') : 'Viaje no disponible')}</b>${t && t.start_date ? `<small>${escapeHtml(fmtTripRange(t))}</small>` : ''}</span></button>`;
+  }
+  const ph = state.photos.find(x => String(x.id) === p.ref);
+  return `<button type="button" class="chat-card-main" data-open-share="photo:${escapeHtml(p.ref)}">`
+    + (ph ? `<img src="${escapeHtml(publicImageUrl(ph.storage_path, { width: thumbWidth(72) }))}" alt="" loading="lazy" />` : '<span class="chat-card-icon material-symbols-outlined">hide_image</span>')
+    + `<span class="chat-card-text"><small>Foto del álbum</small><b>${escapeHtml(ph ? (ph.album || 'Sin álbum') : 'Foto no disponible')}</b>${ph && ph.caption ? `<small>${escapeHtml(ph.caption)}</small>` : ''}</span></button>`;
+}
+
 // `stick: true` baja al último mensaje pase lo que pase (al abrir y al
 // enviar). Sin él, solo baja si ya estabas abajo: un mensaje nuevo no te
 // arranca de lo que estabas leyendo más arriba.
@@ -6146,13 +6981,15 @@ function renderChatBody(opts = {}) {
   if (!body) return;
   const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
   const prevTop = body.scrollTop;
-  const msgs = state.chats;
+  const msgs = chatVisible();
   if (!msgs.length) {
     body.innerHTML = '<div class="chat-empty">Todavía no hay mensajes.<br/>Escribe el primero.</div>';
     return;
   }
   body.innerHTML = '';
   const me = state.currentUser;
+  const reactions = chatReactionMap();
+  const selected = chatSheet && chatSheet.type === 'actions' ? String(chatSheet.id) : null;
   let lastDay = '';
   let lastAuthor = '';
   for (const m of msgs) {
@@ -6165,35 +7002,71 @@ function renderChatBody(opts = {}) {
       lastDay = day;
       lastAuthor = '';
     }
+    const p = chatP(m);
     const mine = m.author === me;
+    const side = mine ? 'mine' : 'theirs';
+    const div = document.createElement('div');
+    div.dataset.id = String(m.id);
+    if (m._pending) div.dataset.pending = '1';
+
+    if (p.kind === 'nudge') {
+      div.className = 'chat-nudge';
+      div.innerHTML = `<span class="chat-nudge-emoji">🪼</span> ${mine ? `Le mandaste un toque a ${escapeHtml(chatPartner())}` : `${escapeHtml(m.author)} está pensando en ti`}`;
+      body.appendChild(div);
+      lastAuthor = '';
+      continue;
+    }
+
     const read = mine && Array.isArray(m.read_by) && m.read_by.some(u => u !== me);
     const time = new Date(m.created_at).toLocaleTimeString('es', { hour: 'numeric', minute: '2-digit' });
     const [mark, markTitle] = m._pending ? ['schedule', 'Enviando…'] : read ? ['done_all', 'Leído'] : ['check', 'Enviado'];
-    const saved = !!m.featured;
-    const noteLabel = saved ? 'Quitar de notas rápidas' : 'Guardar como nota rápida';
-    const meta = `<span class="bubble-meta">`
-      + (m._pending ? '' : `<button type="button" class="chat-note-btn${saved ? ' is-on' : ''}" data-note-id="${escapeHtml(String(m.id))}" aria-pressed="${saved}" aria-label="${noteLabel}" title="${noteLabel}"><span class="material-symbols-outlined${saved ? ' filled' : ''}">bookmark</span></button>`)
+    const meta = '<span class="bubble-meta">'
+      + (m.featured ? '<span class="material-symbols-outlined filled chat-saved" title="Nota rápida" aria-label="Nota rápida">bookmark</span>' : '')
       + time
       + (mine ? `<span class="material-symbols-outlined read-mark${read ? ' is-read' : ''}" title="${markTitle}" aria-label="${markTitle}">${mark}</span>` : '')
+      + (m._pending ? '' : `<button type="button" class="chat-more-btn" data-more="${escapeHtml(String(m.id))}" aria-label="Opciones del mensaje" title="Opciones del mensaje"><span class="material-symbols-outlined">more_horiz</span></button>`)
       + '</span>';
-    const div = document.createElement('div');
-    const sticker = chatSticker(m);
-    if (sticker) {
+    const state2 = `${m._pending ? ' pending' : ''}${selected === String(m.id) ? ' is-selected' : ''}`;
+
+    if (p.kind === 'sticker') {
       // Sin burbuja: la foto pegada sobre el chat, un poco torcida.
-      const side = 150 / Math.max(sticker.w, sticker.h);
-      const tilt = (sticker.path.charCodeAt(8) % 2 ? 1 : -1) * (mine ? 2.5 : 2); // estable por archivo
-      div.className = `chat-sticker ${mine ? 'mine' : 'theirs'}${sticker.cutout ? ' cutout' : ''}${m._pending ? ' pending' : ''}`;
-      div.innerHTML = `<img src="${escapeHtml(m._localUrl || publicImageUrl(sticker.path))}" alt="Foto"`
-        + ` width="${Math.round(sticker.w * side)}" height="${Math.round(sticker.h * side)}" style="--tilt:${tilt}deg" />${meta}`;
+      const k = 150 / Math.max(p.w, p.h);
+      const tilt = (p.path.charCodeAt(8) % 2 ? 1 : -1) * (mine ? 2.5 : 2); // estable por archivo
+      div.className = `chat-sticker ${side}${p.cutout ? ' cutout' : ''}${state2}`;
+      div.innerHTML = `<img src="${escapeHtml(m._localUrl || publicImageUrl(p.path))}" alt="Foto"`
+        + ` width="${Math.round(p.w * k)}" height="${Math.round(p.h * k)}" style="--tilt:${tilt}deg" />${meta}`;
+    } else if (p.kind === 'share') {
+      div.className = `chat-card ${side}${state2}`;
+      div.innerHTML = chatShareHtml(p) + meta;
+    } else if (p.kind === 'voice') {
+      div.className = `chat-bubble voice ${side}${m.author === lastAuthor ? ' follow' : ''}${state2}`;
+      div.innerHTML = chatVoiceHtml(p) + meta;
     } else {
-      div.className = `chat-bubble ${mine ? 'mine' : 'theirs'}${m.author === lastAuthor ? ' follow' : ''}${m._pending ? ' pending' : ''}`;
-      div.innerHTML = `<span class="bubble-text">${linkify(m.body)}</span>${meta}`;
+      const quote = p.reply
+        ? `<button type="button" class="chat-quote" data-jump="${escapeHtml(p.reply.id)}"><b>${escapeHtml(p.reply.author)}</b><span>${escapeHtml(p.reply.snippet)}</span></button>`
+        : '';
+      div.className = `chat-bubble ${side}${m.author === lastAuthor ? ' follow' : ''}${state2}`;
+      div.innerHTML = `${quote}<span class="bubble-text">${linkify(p.text)}</span>${meta}`;
     }
     body.appendChild(div);
+
+    // Reacciones colgadas del mensaje
+    const rs = reactions.get(String(m.id));
+    if (rs && rs.size) {
+      const byEmoji = new Map();
+      for (const [author, r] of rs) byEmoji.set(r.emoji, [...(byEmoji.get(r.emoji) || []), author]);
+      const row = document.createElement('div');
+      row.className = `chat-reactions ${side}`;
+      row.innerHTML = [...byEmoji].map(([emoji, authors]) =>
+        `<button type="button" data-react="${emoji}" data-target="${escapeHtml(String(m.id))}" class="${authors.includes(me) ? 'is-mine' : ''}" title="${escapeHtml(authors.join(', '))}" aria-label="${emoji} de ${escapeHtml(authors.join(' y '))}">${emoji}${authors.length > 1 ? `<span>${authors.length}</span>` : ''}</button>`
+      ).join('');
+      body.appendChild(row);
+    }
     lastAuthor = m.author;
   }
   body.scrollTop = (opts.stick || atBottom) ? body.scrollHeight : prevTop;
   chatStick = !!(opts.stick || atBottom);
+  paintChatVoice();
 }
 
 // ============================================================
