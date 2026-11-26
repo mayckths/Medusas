@@ -525,7 +525,10 @@ nav.menu a .m-icon { font-size: 20px; width: 22px; text-align: center; }
 .notif-bell .material-symbols-outlined { font-size: 20px; }
 .notif-popover .icon .material-symbols-outlined { font-size: 18px; }
 .lb-nav .material-symbols-outlined { font-size: 2rem; }
-.lb-close .material-symbols-outlined { font-size: 20px; }
+.lb-close .material-symbols-outlined,
+.lb-pin .material-symbols-outlined,
+.lb-feature .material-symbols-outlined,
+.lb-delete .material-symbols-outlined { font-size: 20px; }
 .media-card .play-overlay .play .material-symbols-outlined { font-size: 26px; }
 .config-tabs button .material-symbols-outlined { font-size: 18px; }
 .bubble-actions .material-symbols-outlined { font-size: 16px; }
@@ -2168,9 +2171,7 @@ dialog.lightbox[open] { display: block; }
 dialog.lightbox::backdrop { background: rgba(0,0,0,0.92); }
 
 .lb-stage {
-  /* safe-area: en PWA de iOS la barra de estado es translúcida y el
-     diálogo ocupa toda la pantalla, también por debajo de ella. */
-  position: absolute; inset: calc(4rem + env(safe-area-inset-top, 0px)) 4.5rem 4rem 4.5rem;
+  position: absolute; inset: 4rem 4.5rem 4rem 4.5rem;
   display: flex; align-items: center; justify-content: center;
   overflow: hidden;
 }
@@ -2282,26 +2283,29 @@ dialog.lightbox .lb-tag-add:hover {
   border-color: rgba(255, 255, 255, 0.35);
 }
 dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
-.lb-nav, .lb-close, .lb-actions > button {
+@media (max-width: 760px) {
+  dialog.lightbox .lb-tags { bottom: 5rem; }
+}
+
+.lb-nav, .lb-close, .lb-pin, .lb-feature, .lb-move, .lb-delete {
+  position: absolute;
   background: rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.18);
   color: white;
   cursor: pointer;
   border-radius: 999px;
+  z-index: 2;
   display: grid; place-items: center;
-  padding: 0;
-  font: inherit;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
-  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease, box-shadow 0.15s ease;
 }
-.lb-nav, .lb-close { position: absolute; z-index: 2; }
-.lb-nav:hover, .lb-close:hover, .lb-actions > button:hover {
+.lb-nav:hover, .lb-close:hover, .lb-pin:hover, .lb-feature:hover, .lb-move:hover, .lb-delete:hover {
   background: rgba(0, 0, 0, 0.8);
   border-color: rgba(255, 255, 255, 0.35);
   transform: scale(1.08);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
-.lb-nav:active, .lb-close:active, .lb-actions > button:active {
+.lb-nav:active, .lb-close:active, .lb-pin:active,
+.lb-feature:active, .lb-move:active, .lb-delete:active {
   transform: scale(0.96);
 }
 .lb-nav { top: 50%; transform: translateY(-50%); width: 48px; height: 48px; font-size: 1.6rem; line-height: 1; }
@@ -2310,128 +2314,24 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 .lb-nav:active { transform: translateY(-50%) scale(0.96); }
 .lb-nav.prev { left: 0.6rem; }
 .lb-nav.next { right: 0.6rem; }
-.lb-close { top: calc(0.6rem + env(safe-area-inset-top, 0px)); right: 0.6rem; width: 38px; height: 38px; font-size: 1rem; }
-
-/* Photo actions. Desktop: a row of icon buttons across the top (delete
-   pushed to the far left, away from the rest). The row itself ignores
-   pointer events so clicking the gap still closes the lightbox. */
-.lb-actions {
-  position: absolute; z-index: 2;
-  top: calc(0.6rem + env(safe-area-inset-top, 0px));
-  left: 0.6rem; right: 4rem;
-  display: flex; justify-content: flex-end; gap: 1rem;
-  pointer-events: none;
-}
-.lb-actions > button {
-  position: relative;
-  flex: none;
-  width: 38px; height: 38px;
-  pointer-events: auto;
-}
-.lb-actions .material-symbols-outlined { font-size: 20px; }
-.lb-actions .lb-label { display: none; }
-/* Desktop adds tags from the "+ Etiqueta" chip next to the tag list. */
-.lb-actions > .lb-tag { display: none; }
-.lb-actions > .lb-delete { order: -1; margin-right: auto; }
+.lb-close { top: 0.6rem; right: 0.6rem; width: 38px; height: 38px; font-size: 1rem; }
+.lb-pin { top: 0.6rem; right: 4rem; width: 38px; height: 38px; font-size: 0.95rem; }
 .lb-pin.is-on { background: var(--accent); color: var(--on-accent); border-color: transparent; }
 .lb-pin.is-on:hover { background: var(--accent-hover); border-color: transparent; }
+.lb-feature { top: 0.6rem; right: 7.4rem; width: 38px; height: 38px; font-size: 0.95rem; }
 .lb-feature.is-on { background: var(--warn); border-color: transparent; }
 .lb-feature.is-on:hover { background: #ffc857; border-color: transparent; }
-.lb-actions > .lb-delete:hover { background: var(--danger); border-color: transparent; }
-
-/* "Álbum · 2 / 14" — where this photo lives. Also the visible feedback
-   after moving it to another album. */
-.lb-meta {
-  position: absolute; z-index: 2;
-  top: calc(0.6rem + env(safe-area-inset-top, 0px));
-  left: 50%; transform: translateX(-50%);
-  height: 38px; max-width: min(30vw, 320px);
-  display: flex; align-items: center; gap: 0.35rem;
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 0.82rem; font-weight: 500;
-  white-space: nowrap;
-  pointer-events: none;
-}
-.lb-meta .material-symbols-outlined { font-size: 16px; flex: none; }
-.lb-meta-album { overflow: hidden; text-overflow: ellipsis; }
-.lb-meta-count { flex: none; color: rgba(255, 255, 255, 0.6); }
+.lb-move { top: 0.6rem; right: 10.8rem; width: 38px; height: 38px; font-size: 0.95rem; }
+.lb-delete { top: 0.6rem; left: 0.6rem; width: 38px; height: 38px; font-size: 0.95rem; }
+.lb-delete:hover { background: var(--danger); border-color: transparent; }
 
 @media (max-width: 760px) {
-  /* Mobile: stack the lightbox as a column — photo on top, then caption,
-     tags and a labelled action bar at the bottom. The old layout kept
-     every action as a 34px icon on the top edge, which in the iOS PWA
-     sits underneath the status bar / Dynamic Island. */
-  dialog.lightbox[open] { display: flex; flex-direction: column; }
-  .lb-stage {
-    position: relative; inset: auto;
-    flex: 1 1 auto; min-height: 0;
-    margin: calc(env(safe-area-inset-top, 0px) + 3.2rem) 0.6rem 0.6rem;
-  }
-  .lb-nav { width: 40px; height: 40px; top: calc(50% - 1.5rem); }
-  .lb-close { width: 34px; height: 34px; }
-  .lb-meta {
-    left: 0.9rem; transform: none;
-    height: 34px; max-width: calc(100vw - 4.6rem);
-  }
-
-  dialog.lightbox .lightbox-cap {
-    position: static; flex: none;
-    background: none;
-    padding: 0 1rem 0.55rem;
-  }
-  /* One scrollable row of tags; the auto margins center it while it
-     still fits. Adding a tag lives in the action bar below. */
-  dialog.lightbox .lb-tags {
-    position: static; transform: none; flex: none;
-    max-width: none;
-    flex-wrap: nowrap; justify-content: flex-start;
-    overflow-x: auto; scrollbar-width: none;
-    padding: 0 0.8rem 0.65rem;
-  }
-  dialog.lightbox .lb-tags::-webkit-scrollbar { display: none; }
-  dialog.lightbox .lb-tags:not(:has(.lb-tag-chip)) { display: none; }
-  dialog.lightbox .lb-tag-chip { flex: none; white-space: nowrap; padding: 0.3rem 0.7rem; font-size: 0.8rem; }
-  dialog.lightbox .lb-tag-chip:first-child { margin-left: auto; }
-  dialog.lightbox .lb-tag-chip:nth-last-child(2) { margin-right: auto; }
-  dialog.lightbox .lb-tag-add { display: none; }
-
-  .lb-actions {
-    position: static; flex: none;
-    justify-content: space-around; gap: 0.15rem;
-    pointer-events: auto;
-    padding: 0.35rem 0.4rem calc(0.35rem + env(safe-area-inset-bottom, 0px));
-    background: rgba(20, 20, 22, 0.78);
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-  }
-  .lb-actions > button,
-  .lb-actions > button:hover {
-    flex: 1 1 0; min-width: 0;
-    width: auto; height: auto; min-height: 54px;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 3px;
-    background: transparent;
-    border: 0; border-radius: 12px;
-    box-shadow: none;
-    transform: none;
-  }
-  .lb-actions > button:active { background: rgba(255, 255, 255, 0.14); transform: scale(0.96); }
-  .lb-actions > .lb-tag { display: flex; }
-  .lb-actions > .lb-delete { order: 0; margin-right: 0; }
-  .lb-actions .material-symbols-outlined { font-size: 24px; }
-  .lb-actions .lb-label {
-    display: block;
-    font-size: 0.68rem; font-weight: 500; line-height: 1.2;
-    opacity: 0.9;
-  }
-  /* Active toggles tint the icon + label instead of filling a circle. */
-  .lb-actions > .lb-feature.is-on,
-  .lb-actions > .lb-feature.is-on:hover { background: transparent; color: var(--warn); }
-  .lb-actions > .lb-pin.is-on,
-  .lb-actions > .lb-pin.is-on:hover { background: transparent; color: var(--accent-hover); }
-  .lb-actions > .lb-delete,
-  .lb-actions > .lb-delete:hover { background: transparent; color: #ff9c85; }
+  .lb-stage { inset: 4rem 0.6rem 5rem 0.6rem; }
+  .lb-nav { width: 40px; height: 40px; }
+  .lb-pin, .lb-feature, .lb-move, .lb-close, .lb-delete { width: 34px; height: 34px; }
+  .lb-pin { right: 3.4rem; }
+  .lb-feature { right: 6.4rem; }
+  .lb-move { right: 9.4rem; }
 }
 
 /* Filled toggle for Material Symbols (pin/star active state) */
@@ -3859,10 +3759,11 @@ dialog.lightbox .lb-tag-chip button::before {
   position: absolute;
   inset: -6px;
 }
-/* Lightbox close / prev / next on mobile: 34–40px buttons → ±5px reaches
-   44px. (The photo actions live in the bottom bar at full size.) */
+/* Lightbox toolbar on mobile: 34px buttons at 54px pitch → ±5px reaches
+   44px with 10px clearance between neighbors. */
 @media (max-width: 760px) {
-  .lb-close::before, .lb-nav::before {
+  .lb-pin::before, .lb-feature::before, .lb-move::before,
+  .lb-close::before, .lb-delete::before, .lb-nav::before {
     content: "";
     position: absolute;
     inset: -5px;

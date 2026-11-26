@@ -28,7 +28,7 @@
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
 
-    <link rel="stylesheet" href="./styles.css?v=20261113a" />
+    <link rel="stylesheet" href="./styles.css?v=20261105e" />
 
     <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>
@@ -328,8 +328,11 @@
     <dialog class="lightbox" id="dlg-lightbox">
       <button class="lb-nav prev" id="lb-prev" aria-label="Anterior"><span class="material-symbols-outlined">chevron_left</span></button>
       <button class="lb-nav next" id="lb-next" aria-label="Siguiente"><span class="material-symbols-outlined">chevron_right</span></button>
-      <button class="lb-close" id="lb-close" title="Cerrar" aria-label="Cerrar"><span class="material-symbols-outlined">close</span></button>
-      <div class="lb-meta" id="lb-meta" aria-live="polite"></div>
+      <button class="lb-close" id="lb-close" aria-label="Cerrar"><span class="material-symbols-outlined">close</span></button>
+      <button class="lb-pin" id="lb-pin" aria-label="Anclar"><span class="material-symbols-outlined">keep</span></button>
+      <button class="lb-feature" id="lb-feature" aria-label="Destacar"><span class="material-symbols-outlined">star</span></button>
+      <button class="lb-move" id="lb-move" aria-label="Mover a otro álbum"><span class="material-symbols-outlined">drive_file_move</span></button>
+      <button class="lb-delete" id="lb-delete" aria-label="Eliminar"><span class="material-symbols-outlined">delete</span></button>
       <div class="lb-stage" id="lb-stage">
         <img id="lightbox-img" src="" alt="" />
         <div class="lb-spinner" id="lb-spinner" hidden aria-hidden="true">
@@ -338,18 +341,8 @@
           <span></span><span></span><span></span><span></span>
         </div>
       </div>
-      <div class="lightbox-cap" id="lightbox-cap" hidden></div>
       <div class="lb-tags" id="lb-tags"></div>
-      <!-- Acciones de la foto. Desktop: iconos arriba (eliminar a la
-           izquierda, el resto a la derecha). Mobile: barra inferior con
-           texto, al alcance del pulgar y fuera de la barra de estado. -->
-      <div class="lb-actions" id="lb-actions">
-        <button class="lb-tag" id="lb-tag" type="button" title="Añadir etiqueta" aria-label="Añadir etiqueta"><span class="material-symbols-outlined">sell</span><span class="lb-label">Etiqueta</span></button>
-        <button class="lb-move" id="lb-move" type="button" title="Mover a otro álbum" aria-label="Mover a otro álbum"><span class="material-symbols-outlined">drive_file_move</span><span class="lb-label">Mover</span></button>
-        <button class="lb-feature" id="lb-feature" type="button" title="Destacar" aria-label="Destacar" aria-pressed="false"><span class="material-symbols-outlined">star</span><span class="lb-label">Destacar</span></button>
-        <button class="lb-pin" id="lb-pin" type="button" title="Anclar" aria-label="Anclar" aria-pressed="false"><span class="material-symbols-outlined">keep</span><span class="lb-label">Anclar</span></button>
-        <button class="lb-delete" id="lb-delete" type="button" title="Eliminar foto" aria-label="Eliminar foto"><span class="material-symbols-outlined">delete</span><span class="lb-label">Eliminar</span></button>
-      </div>
+      <div class="lightbox-cap" id="lightbox-cap" hidden></div>
     </dialog>
 
     <!-- ==================== Place editor ==================== -->
@@ -635,6 +628,6 @@
       <div class="notif-list" id="notif-list"></div>
     </div>
 
-    <script type="module" src="./app.js?v=20261113a"></script>
+    <script type="module" src="./app.js?v=20261105e"></script>
   </body>
 </html>

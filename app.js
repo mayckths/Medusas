@@ -5412,77 +5412,15 @@ function renderLightbox() {
   if (p.caption) { $('#lightbox-cap').textContent = p.caption; $('#lightbox-cap').hidden = false; }
   else $('#lightbox-cap').hidden = true;
 
-  renderLightboxToggles(p);
-  renderLightboxMeta(p);
+  // Toggle icon FILL: filled when active, outlined when not
+  $('#lb-pin').classList.toggle('is-on', !!p.pinned);
+  $('#lb-pin .material-symbols-outlined').classList.toggle('filled', !!p.pinned);
+  $('#lb-feature').classList.toggle('is-on', !!p.featured);
+  $('#lb-feature .material-symbols-outlined').classList.toggle('filled', !!p.featured);
+
   renderLightboxTags(p);
 
   if (isUnread(p)) markSeen('photos', p);
-}
-
-// Pin / star buttons: filled icon + "on" tint when active. The label is
-// only visible in the mobile action bar; title/aria cover the desktop
-// icon-only buttons.
-function renderLightboxToggles(p) {
-  const sync = (sel, on, offLabel, onLabel, offTitle, onTitle) => {
-    const btn = $(sel);
-    btn.classList.toggle('is-on', on);
-    btn.setAttribute('aria-pressed', String(on));
-    btn.title = on ? onTitle : offTitle;
-    btn.setAttribute('aria-label', btn.title);
-    $('.material-symbols-outlined', btn).classList.toggle('filled', on);
-    $('.lb-label', btn).textContent = on ? onLabel : offLabel;
-  };
-  sync('#lb-feature', !!p.featured, 'Destacar', 'Destacada', 'Destacar', 'Quitar de destacadas');
-  sync('#lb-pin', !!p.pinned, 'Anclar', 'Anclada', 'Anclar', 'Desanclar');
-}
-
-// "Álbum · 2 / 14" — which album the photo is in and where we are in the
-// list. Doubles as the confirmation after moving the photo.
-function renderLightboxMeta(p) {
-  const root = $('#lb-meta');
-  if (!root) return;
-  const total = lightboxState.list.length;
-  root.innerHTML = `
-    <span class="material-symbols-outlined">${p.album ? 'folder' : 'folder_off'}</span>
-    <span class="lb-meta-album">${escapeHtml(p.album || 'Sin álbum')}</span>
-    ${total > 1 ? `<span class="lb-meta-count">· ${lightboxState.index + 1} / ${total}</span>` : ''}
-  `;
-}
-
-// Write a partial update for one photo. The lightbox mutates the photo
-// object first (optimistic) and calls this; on failure the caller rolls
-// back. Supabase reports failures in `error` instead of throwing.
-async function saveLightboxPhoto(p, patch) {
-  const { error } = await supabase.from('photos').update(patch).eq('id', p.id);
-  if (error) throw error;
-}
-
-async function setLightboxTags(p, next) {
-  const prev = Array.isArray(p.tags) ? p.tags : [];
-  p.tags = next;
-  lightboxState.dirty = true;
-  if (lightboxState.list[lightboxState.index] === p) renderLightboxTags(p);
-  try {
-    await saveLightboxPhoto(p, { tags: next });
-  } catch (err) {
-    console.error('photo tags', err);
-    p.tags = prev;
-    if (lightboxState.list[lightboxState.index] === p) renderLightboxTags(p);
-    uiAlert('No se pudo guardar la etiqueta: ' + (err.message || err), { title: 'Error' });
-  }
-}
-
-// Ask for one or more tags (comma-separated) and add them to the photo.
-// Shared by the "+ Etiqueta" chip (desktop) and the action-bar button.
-async function addLightboxTag(p) {
-  const raw = await uiPrompt('Separa varias con comas.', { title: 'Añadir etiqueta', placeholder: 'verano, viajes…', required: true, confirmLabel: 'Añadir' });
-  if (!raw) return;
-  const current = Array.isArray(p.tags) ? p.tags : [];
-  // Strip a leading "#" — chips already render one.
-  const incoming = raw.split(',').map(s => s.trim().replace(/^#+/, '').trim()).filter(Boolean);
-  const next = Array.from(new Set([...current, ...incoming]));
-  if (next.length === current.length) return;
-  await setLightboxTags(p, next);
 }
 
 function renderLightboxTags(p) {
@@ -5495,9 +5433,15 @@ function renderLightboxTags(p) {
     chip.className = 'lb-tag-chip';
     chip.style.setProperty('--tag-color', tagColor(t));
     chip.innerHTML = `#${escapeHtml(t)} <button type="button" aria-label="Quitar etiqueta">×</button>`;
-    chip.querySelector('button').addEventListener('click', (e) => {
+    chip.querySelector('button').addEventListener('click', async (e) => {
       e.stopPropagation();
-      setLightboxTags(p, tags.filter(x => x !== t));
+      const next = tags.filter(x => x !== t);
+      p.tags = next;
+      // Keep the in-memory copy in state.photos in sync
+      const inState = state.photos.find(x => x.id === p.id);
+      if (inState) inState.tags = next;
+      renderLightboxTags(p);
+      try { await supabase.from('photos').update({ tags: next }).eq('id', p.id); } catch (err) { console.error('photo tag remove', err); }
     });
     root.appendChild(chip);
   });
@@ -5506,9 +5450,18 @@ function renderLightboxTags(p) {
   addBtn.type = 'button';
   addBtn.className = 'lb-tag-add';
   addBtn.innerHTML = '<span class="material-symbols-outlined">add</span> Etiqueta';
-  addBtn.addEventListener('click', (e) => {
+  addBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
-    addLightboxTag(p);
+    const raw = await uiPrompt('Etiqueta', { title: 'Añadir etiqueta', placeholder: 'verano, viajes…', required: true });
+    if (!raw) return;
+    // Allow comma-separated bulk add
+    const incoming = raw.split(',').map(s => s.trim()).filter(Boolean);
+    const next = Array.from(new Set([...(Array.isArray(p.tags) ? p.tags : []), ...incoming]));
+    p.tags = next;
+    const inState = state.photos.find(x => x.id === p.id);
+    if (inState) inState.tags = next;
+    renderLightboxTags(p);
+    try { await supabase.from('photos').update({ tags: next }).eq('id', p.id); } catch (err) { console.error('photo tag add', err); }
   });
   root.appendChild(addBtn);
 }
@@ -5531,30 +5484,23 @@ dlgLightbox.addEventListener('click', (e) => {
   }
 });
 
-// Pin / star: flip the button right away, save in the background, and
-// roll back if the save fails (so the UI never lies about the state).
-async function toggleLightboxFlag(field, errLabel) {
-  const p = lightboxState.list[lightboxState.index];
-  if (!p) return;
-  const paint = () => { if (lightboxState.list[lightboxState.index] === p) renderLightboxToggles(p); };
-  p[field] = !p[field];
-  lightboxState.dirty = true;
-  paint();
-  try {
-    await saveLightboxPhoto(p, { [field]: p[field] });
-  } catch (err) {
-    console.error('photo ' + field, err);
-    p[field] = !p[field];
-    paint();
-    uiAlert(`No se pudo ${errLabel}: ` + (err.message || err), { title: 'Error' });
-  }
-}
-$('#lb-pin').addEventListener('click', (e) => { e.stopPropagation(); toggleLightboxFlag('pinned', 'anclar la foto'); });
-$('#lb-feature').addEventListener('click', (e) => { e.stopPropagation(); toggleLightboxFlag('featured', 'destacar la foto'); });
-$('#lb-tag').addEventListener('click', (e) => {
+$('#lb-pin').addEventListener('click', async (e) => {
   e.stopPropagation();
   const p = lightboxState.list[lightboxState.index];
-  if (p) addLightboxTag(p);
+  if (!p) return;
+  p.pinned = !p.pinned;
+  lightboxState.dirty = true;
+  await supabase.from('photos').update({ pinned: p.pinned }).eq('id', p.id);
+  renderLightbox();
+});
+$('#lb-feature').addEventListener('click', async (e) => {
+  e.stopPropagation();
+  const p = lightboxState.list[lightboxState.index];
+  if (!p) return;
+  p.featured = !p.featured;
+  lightboxState.dirty = true;
+  await supabase.from('photos').update({ featured: p.featured }).eq('id', p.id);
+  renderLightbox();
 });
 $('#lb-move').addEventListener('click', (e) => {
   e.stopPropagation();
@@ -5569,18 +5515,11 @@ $('#lb-delete').addEventListener('click', async (e) => {
   const p = lightboxState.list[lightboxState.index];
   if (!p) return;
   if (!(await uiConfirm('¿Eliminar esta foto? No se puede deshacer.', { title: 'Eliminar foto', confirmLabel: 'Eliminar', danger: true }))) return;
-  // Row first: if that fails the photo is still intact and we can say so.
-  // The storage object is cleaned up afterwards (best effort).
-  const { error } = await supabase.from('photos').delete().eq('id', p.id);
-  if (error) {
-    uiAlert('No se pudo eliminar la foto: ' + (error.message || error), { title: 'Error' });
-    return;
-  }
-  try { await supabase.storage.from(BUCKET).remove([p.storage_path]); } catch (err) { console.warn('storage cleanup failed', err); }
+  try { await supabase.storage.from(BUCKET).remove([p.storage_path]); } catch {}
+  await supabase.from('photos').delete().eq('id', p.id);
   // Remove from state caches
   state.photos = state.photos.filter(x => x.id !== p.id);
-  const at = lightboxState.list.indexOf(p);
-  if (at !== -1) lightboxState.list.splice(at, 1);
+  lightboxState.list.splice(lightboxState.index, 1);
   lightboxState.dirty = true;
   if (!lightboxState.list.length) { dlgLightbox.close(); return; }
   lightboxState.index = Math.min(lightboxState.index, lightboxState.list.length - 1);
