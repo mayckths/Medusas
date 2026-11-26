@@ -434,6 +434,7 @@ const state = {
   photos: [],
   places: [],
   chats: [],
+  chatNotes: [],
   trips: [],
   tripDays: [],
   tripBookings: [],
@@ -829,6 +830,7 @@ async function loadAll() {
     { data: photos },
     { data: places },
     { data: chats },
+    { data: chatNotes },
     { data: triquiGames },
     { data: trips, error: tripsErr },
     { data: tripDays },
@@ -841,6 +843,9 @@ async function loadAll() {
     // Los más recientes primero (y se invierten al guardar): con orden
     // ascendente + limit llegarían los mensajes MÁS VIEJOS del historial.
     supabase.from('chats').select('*').order('created_at', { ascending: false }).limit(CHAT_PAGE),
+    // Notas rápidas = mensajes guardados (featured). Van aparte para que
+    // no se pierdan cuando el mensaje sale de los últimos CHAT_PAGE.
+    supabase.from('chats').select('*').eq('featured', true).order('created_at', { ascending: false }),
     supabase.from('triqui_games').select('*').order('created_at', { ascending: false }).limit(200),
     supabase.from('trips').select('*').order('start_date', { ascending: true }),
     supabase.from('trip_days').select('*').order('day_number', { ascending: true }),
@@ -851,6 +856,7 @@ async function loadAll() {
   state.photos = photos || [];
   state.places = places || [];
   state.chats = (chats || []).reverse();
+  state.chatNotes = chatNotes || [];
   // null = la tabla aún no existe (falta correr el SQL del juego).
   state.triquiGames = triquiGames || null;
   state.trips = trips || [];
@@ -1079,11 +1085,11 @@ function renderInicio(root) {
   const totalUnread = totalUnreadCount();
 
   // The left column shows the section blocks in the configured order.
-  // The right column is the photo widget + the chat.
+  // The right column is the chat + the photo widget under it.
   const greeting = getDashboardGreeting(state.currentUser);
   root.innerHTML = `
-    <div class="page-head">
-      <div>
+    <div class="page-head dash-head">
+      <div class="dash-head-text">
         <h1>${escapeHtml(greeting.headline)}</h1>
         ${greeting.sub ? `<div class="sub">${escapeHtml(greeting.sub)}</div>` : ''}
       </div>
@@ -1107,21 +1113,27 @@ function renderInicio(root) {
       </div>
 
       <div class="col-right">
-        <div class="photo-widget" id="photo-widget">
-          <div class="pw-empty">Aún no hay fotos para mostrar aquí.</div>
-        </div>
         <div class="chat-widget" id="chat-widget">
           <div class="chat-head">
-            <span class="chat-title">Chat</span>
+            <div class="chat-tabs" role="tablist" aria-label="Secciones del chat">
+              <button type="button" role="tab" data-tab="chat" id="chat-tab-chat">Chat</button>
+              <button type="button" role="tab" data-tab="notes" id="chat-tab-notes">Notas rápidas<span class="chat-tab-count" id="chat-notes-count"></span></button>
+            </div>
             <span class="chat-notify" id="chat-notify"></span>
+            <button type="button" class="chat-toggle" id="chat-toggle" aria-expanded="false" aria-label="Expandir el chat" title="Expandir el chat"><span class="material-symbols-outlined">expand_more</span></button>
           </div>
+          <div class="chat-alert" id="chat-alert" role="status" hidden></div>
           <div class="chat-body" id="chat-body" role="log" aria-live="polite" aria-label="Mensajes"></div>
+          <div class="chat-notes" id="chat-notes" hidden></div>
           <form class="chat-input" id="chat-form" autocomplete="off">
             <button type="button" class="chat-photo-btn" id="chat-photo" aria-label="Enviar una foto como sticker" title="Enviar una foto como sticker"><span class="material-symbols-outlined">add_photo_alternate</span></button>
             <input type="file" id="chat-photo-input" accept="image/*" hidden />
             <input type="text" id="chat-input-field" maxlength="1000" enterkeyhint="send" aria-label="Mensaje" />
             <button type="submit" id="chat-send" aria-label="Enviar" title="Enviar"><span class="material-symbols-outlined">arrow_upward</span></button>
           </form>
+        </div>
+        <div class="photo-widget" id="photo-widget">
+          <div class="pw-empty">Aún no hay fotos para mostrar aquí.</div>
         </div>
       </div>
     </div>
@@ -1212,21 +1224,7 @@ function fitColRightToViewport() {
   if (!col) return;
   col.style.height = '';
   col.style.maxHeight = '';
-  // The chat takes whatever is left under the photo widget so its input
-  // is visible without scrolling (desktop only — the CSS ignores
-  // --chat-h once the columns stack). Measured from the non-sticky grid
-  // so the result is the same at any scroll position.
-  const chat = document.getElementById('chat-widget');
-  const cols = document.querySelector('.dashboard-cols');
-  const photo = document.getElementById('photo-widget');
-  if (!chat || !cols || !photo) return;
-  const top = cols.getBoundingClientRect().top + window.scrollY + photo.offsetHeight + 16;
-  const h = Math.max(260, Math.min(460, window.innerHeight - top - 20));
-  const body = document.getElementById('chat-body');
-  const atBottom = body && body.scrollHeight - body.scrollTop - body.clientHeight < 40;
-  chat.style.setProperty('--chat-h', `${Math.round(h)}px`);
-  // Resizing must not hide the latest message behind the input.
-  if (atBottom) body.scrollTop = body.scrollHeight;
+  sizeChatWidget();
 }
 if (!window._medusasColResizeWired) {
   window._medusasColResizeWired = true;
@@ -5658,17 +5656,34 @@ let chatPollTimer = null;
 let chatSending = false;
 // 'ok' | 'none' (la otra persona no tiene avisos activos) | 'error'
 let chatNotifyState = 'ok';
+// Estado de la tarjeta. Vive fuera del DOM para sobrevivir a un re-render
+// de Inicio (que reconstruye el widget).
+let chatTab = 'chat';       // 'chat' | 'notes'
+let chatOpen = false;       // compacto por defecto; se expande al usarlo
+let chatStick = true;       // ¿la lista está abajo del todo?
+let chatDraft = '';
+let chatBodyObserver = null;
 
 const chatOnScreen = () => !!document.getElementById('chat-widget') && !document.hidden;
+const chatStacked = () => window.matchMedia('(max-width: 980px)').matches;
 
 function setupChatWidget() {
   const root = $('#chat-widget');
   if (!root) return;
   if (chatPollTimer) { clearInterval(chatPollTimer); chatPollTimer = null; }
+  if (chatBodyObserver) { try { chatBodyObserver.disconnect(); } catch {} chatBodyObserver = null; }
 
-  $('#chat-input-field').placeholder = `Mensaje para ${triquiPlayers().partner}…`;
+  const input = $('#chat-input-field');
+  const body = $('#chat-body');
+  input.placeholder = `Mensaje para ${triquiPlayers().partner}…`;
+  input.value = chatDraft;
+  input.addEventListener('input', () => { chatDraft = input.value; });
+
   renderChatNotifyHint();
   renderChatBody({ stick: true });
+  renderChatNotes();
+  applyChatTab();
+  applyChatOpen();
   markIncomingChatsRead();
 
   $('#chat-form').addEventListener('submit', (e) => { e.preventDefault(); sendChatMessage(); });
@@ -5684,10 +5699,51 @@ function setupChatWidget() {
     photoInput.value = ''; // permite volver a elegir la misma foto
     if (file) sendChatSticker(file);
   });
-  $('#chat-body').addEventListener('click', (e) => {
-    const img = e.target.closest('.chat-sticker img');
+
+  // Mensajes y notas: guardar/quitar nota rápida, o ver un sticker en grande.
+  const onListClick = (e) => {
+    const noteBtn = e.target.closest('[data-note-id]');
+    if (noteBtn) { e.stopPropagation(); toggleChatNote(noteBtn.dataset.noteId); return; }
+    const img = e.target.closest('.chat-sticker img, .chat-note img');
     if (img) openStickerViewer(img.currentSrc || img.src);
+  };
+  body.addEventListener('click', onListClick);
+  $('#chat-notes').addEventListener('click', onListClick);
+
+  // Pestañas
+  $('.chat-tabs', root).addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-tab]');
+    if (!b) return;
+    chatTab = b.dataset.tab;
+    applyChatTab();
   });
+
+  // Se expande al usarlo: tocar la tarjeta o enfocar el campo la abre;
+  // el botón del encabezado, Escape o tocar fuera la recogen.
+  $('#chat-toggle').addEventListener('click', (e) => { e.stopPropagation(); setChatOpen(!chatOpen); });
+  root.addEventListener('click', () => { if (!chatOpen) setChatOpen(true); });
+  root.addEventListener('focusin', (e) => { if (!chatOpen && e.target !== $('#chat-toggle')) setChatOpen(true); });
+  root.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && chatOpen) { e.preventDefault(); if (root.contains(document.activeElement)) document.activeElement.blur(); setChatOpen(false); }
+  });
+
+  // La lista se queda abajo del todo mientras la tarjeta cambia de alto
+  // (al crecer el navegador ya lo hace; al encogerse hay que empujarla).
+  // Solo el scroll de la persona decide si "está abajo": mientras la
+  // tarjeta se anima el alto cambia en cada cuadro y esos eventos de
+  // scroll no cuentan (un salto grande la haría parecer subida).
+  let bodyH = body.clientHeight;
+  body.addEventListener('scroll', () => {
+    if (body.clientHeight !== bodyH) return; // redimensionando: lo resuelve el observer
+    chatStick = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
+  });
+  if (typeof ResizeObserver !== 'undefined') {
+    chatBodyObserver = new ResizeObserver(() => {
+      bodyH = body.clientHeight;
+      if (chatStick) body.scrollTop = body.scrollHeight;
+    });
+    chatBodyObserver.observe(body);
+  }
 
   chatPollTimer = setInterval(() => {
     if (!document.getElementById('chat-widget')) { clearInterval(chatPollTimer); chatPollTimer = null; return; }
@@ -5696,18 +5752,171 @@ function setupChatWidget() {
 }
 // Al volver a la pestaña / abrir la app desde la notificación.
 document.addEventListener('visibilitychange', () => { if (chatOnScreen()) reloadChats(); });
+// Tocar fuera de la tarjeta la recoge (los diálogos encima no cuentan).
+document.addEventListener('pointerdown', (e) => {
+  if (!chatOpen) return;
+  const root = document.getElementById('chat-widget');
+  if (!root || root.contains(e.target) || e.target.closest('dialog, #ui-toast')) return;
+  setChatOpen(false);
+});
+if (window.visualViewport) {
+  // Teclado del teléfono: el chat abierto ocupa justo lo que queda visible.
+  window.visualViewport.addEventListener('resize', () => { if (chatOpen && chatStacked()) { sizeChatWidget(); revealChatWidget(); } });
+}
 
+function setChatOpen(open) {
+  if (chatOpen === open) return;
+  chatOpen = open;
+  applyChatOpen();
+  if (open) { revealChatWidget(); markIncomingChatsRead(); }
+}
+
+function applyChatOpen() {
+  const root = $('#chat-widget');
+  const btn = $('#chat-toggle');
+  if (!root || !btn) return;
+  sizeChatWidget();
+  root.classList.toggle('is-open', chatOpen);
+  const label = chatOpen ? 'Recoger el chat' : 'Expandir el chat';
+  btn.setAttribute('aria-expanded', String(chatOpen));
+  btn.setAttribute('aria-label', label);
+  btn.title = label;
+  $('.material-symbols-outlined', btn).textContent = chatOpen ? 'expand_less' : 'expand_more';
+}
+
+// Altos de la tarjeta (los lee el CSS):
+//   --chat-h       compacto. En desktop, lo que deja la foto de debajo.
+//   --chat-open-h  expandido. Lo que cabe en pantalla desde donde está.
+function sizeChatWidget() {
+  const chat = document.getElementById('chat-widget');
+  if (!chat) return;
+  const clamp = (lo, v, hi) => Math.round(Math.max(lo, Math.min(hi, v)));
+  const rect = chat.getBoundingClientRect();
+  if (chatStacked()) {
+    chat.style.removeProperty('--chat-h');
+    const vv = window.visualViewport;
+    const visible = vv ? vv.height : window.innerHeight;
+    chat.style.setProperty('--chat-open-h', `${clamp(260, visible - chatSafeTop() - 24, 520)}px`);
+    return;
+  }
+  const cols = document.querySelector('.dashboard-cols');
+  const photo = document.getElementById('photo-widget');
+  const top = cols ? cols.getBoundingClientRect().top + window.scrollY : rect.top + window.scrollY;
+  const compact = clamp(200, window.innerHeight - top - (photo ? photo.offsetHeight : 0) - 36, 300);
+  chat.style.setProperty('--chat-h', `${compact}px`);
+  chat.style.setProperty('--chat-open-h', `${clamp(Math.max(compact, 320), window.innerHeight - Math.max(rect.top, 16) - 20, 620)}px`);
+}
+
+// Alto de la barra de estado en la PWA (env() no se puede leer desde JS,
+// así que el CSS lo expone como --safe-top).
+function chatSafeTop() {
+  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--safe-top')) || 0;
+}
+
+// En el teléfono, al abrir: sube la tarjeta hasta el borde superior
+// visible para que quepa entera sobre el teclado.
+function revealChatWidget() {
+  const chat = document.getElementById('chat-widget');
+  if (!chat || !chatStacked()) return;
+  requestAnimationFrame(() => {
+    const vv = window.visualViewport;
+    const want = (vv ? vv.offsetTop : 0) + chatSafeTop() + 12;
+    const delta = chat.getBoundingClientRect().top - want;
+    if (Math.abs(delta) > 4) window.scrollBy({ top: delta, behavior: 'smooth' });
+  });
+}
+
+function applyChatTab() {
+  const root = $('#chat-widget');
+  if (!root) return;
+  const notes = chatTab === 'notes';
+  $$('.chat-tabs button', root).forEach(b => {
+    const on = b.dataset.tab === chatTab;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', String(on));
+  });
+  $('#chat-body').hidden = notes;
+  $('#chat-notes').hidden = !notes;
+  $('#chat-form').hidden = notes;
+  if (!notes) { const body = $('#chat-body'); if (chatStick) body.scrollTop = body.scrollHeight; }
+}
+
+// El encabezado solo lleva la campana; el texto aparece (en una franja)
+// cuando el aviso NO salió, que es cuando hace falta leerlo.
 function renderChatNotifyHint() {
   const el = $('#chat-notify');
-  if (!el) return;
-  const partner = escapeHtml(triquiPlayers().partner);
-  const [icon, text] = chatNotifyState === 'none'
-    ? ['notifications_off', `${partner} no tiene avisos activos`]
-    : chatNotifyState === 'error'
-      ? ['notifications_off', `No se pudo avisar a ${partner}`]
-      : ['notifications_active', `${partner} recibe un aviso`];
-  el.innerHTML = `<span class="material-symbols-outlined">${icon}</span> ${text}`;
-  el.classList.toggle('is-off', chatNotifyState !== 'ok');
+  const alert = $('#chat-alert');
+  if (!el || !alert) return;
+  const partner = triquiPlayers().partner;
+  const ok = chatNotifyState === 'ok';
+  const text = chatNotifyState === 'none' ? `${partner} no tiene avisos activos`
+    : chatNotifyState === 'error' ? `No se pudo avisar a ${partner}`
+    : `${partner} recibe un aviso con cada mensaje`;
+  el.innerHTML = `<span class="material-symbols-outlined">${ok ? 'notifications_active' : 'notifications_off'}</span>`;
+  el.title = text;
+  el.setAttribute('aria-label', text);
+  el.classList.toggle('is-off', !ok);
+  alert.hidden = ok;
+  alert.textContent = ok ? '' : text;
+}
+
+// ---- Notas rápidas ----
+// Un mensaje guardado como nota rápida es el mismo mensaje con
+// featured = true. Se listan en la pestaña "Notas rápidas" del chat.
+function renderChatNotes() {
+  const root = $('#chat-notes');
+  const count = $('#chat-notes-count');
+  if (!root || !count) return;
+  const notes = state.chatNotes;
+  count.textContent = notes.length ? String(notes.length) : '';
+  count.hidden = !notes.length;
+  if (!notes.length) {
+    root.innerHTML = '<div class="chat-empty">Aún no hay notas rápidas.<br/>Toca el marcador <span class="material-symbols-outlined">bookmark</span> de un mensaje para guardarlo aquí.</div>';
+    return;
+  }
+  root.innerHTML = notes.map(m => {
+    const sticker = chatSticker(m);
+    const when = new Date(m.created_at).toLocaleDateString('es', { day: 'numeric', month: 'short', year: new Date(m.created_at).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
+    const content = sticker
+      ? `<img src="${escapeHtml(publicImageUrl(sticker.path))}" alt="Foto" width="${sticker.w}" height="${sticker.h}" loading="lazy" />`
+      : `<div class="chat-note-text">${linkify(m.body)}</div>`;
+    return `<div class="chat-note${sticker ? ' has-photo' : ''}">
+      ${content}
+      <div class="chat-note-meta">
+        <span>${escapeHtml(m.author)} · ${escapeHtml(when)}</span>
+        <button type="button" data-note-id="${escapeHtml(String(m.id))}" aria-label="Quitar de notas rápidas" title="Quitar de notas rápidas"><span class="material-symbols-outlined">bookmark_remove</span></button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function toggleChatNote(id) {
+  const inChat = state.chats.find(m => String(m.id) === String(id));
+  const inNotes = state.chatNotes.find(m => String(m.id) === String(id));
+  const m = inChat || inNotes;
+  if (!m || m._pending) return;
+  const prevNotes = state.chatNotes;
+  const next = !m.featured;
+  const apply = (value, notes) => {
+    if (inChat) inChat.featured = value;
+    if (inNotes) inNotes.featured = value;
+    state.chatNotes = notes;
+    renderChatBody();
+    renderChatNotes();
+  };
+  apply(next, next
+    ? [{ ...m, featured: true }, ...prevNotes.filter(x => String(x.id) !== String(id))]
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    : prevNotes.filter(x => String(x.id) !== String(id)));
+  try {
+    const { error } = await supabase.from('chats').update({ featured: next }).eq('id', m.id);
+    if (error) throw error;
+    uiToast(next ? 'Guardado en notas rápidas' : 'Quitado de notas rápidas');
+  } catch (e) {
+    console.error('chat note', e);
+    apply(!next, prevNotes);
+    uiToast(`No se pudo ${next ? 'guardar' : 'quitar'} la nota rápida: ${e.message || e}`, { error: true, duration: 5000 });
+  }
 }
 
 async function sendChatMessage() {
@@ -5723,6 +5932,7 @@ async function sendChatMessage() {
   const temp = { id: `tmp-${Date.now()}`, author: me, body, created_at: new Date().toISOString(), read_by: [me], _pending: true };
   state.chats.push(temp);
   input.value = '';
+  chatDraft = '';
   renderChatBody({ stick: true });
   try {
     const { data, error } = await supabase.from('chats')
@@ -5737,7 +5947,7 @@ async function sendChatMessage() {
     console.error('chat send', e);
     state.chats = state.chats.filter(m => m !== temp);
     renderChatBody({ stick: true });
-    if ($('#chat-input-field') === input && !input.value) input.value = body;
+    if ($('#chat-input-field') === input && !input.value) { input.value = body; chatDraft = body; }
     uiToast(`No se pudo enviar el mensaje: ${e.message || e}`, { error: true, duration: 5000 });
   } finally {
     chatSending = false;
@@ -5868,19 +6078,26 @@ function notifyChatMessage(author, preview) {
 async function reloadChats() {
   if (chatSending || !chatOnScreen()) return;
   try {
-    const { data, error } = await supabase.from('chats').select('*')
-      .order('created_at', { ascending: false }).limit(CHAT_PAGE);
+    const [{ data, error }, { data: notes, error: notesErr }] = await Promise.all([
+      supabase.from('chats').select('*').order('created_at', { ascending: false }).limit(CHAT_PAGE),
+      supabase.from('chats').select('*').eq('featured', true).order('created_at', { ascending: false }),
+    ]);
     if (error) { console.warn('chat reload', error.message || error); return; }
     // Un envío pudo empezar mientras esperábamos: su burbuja provisional
     // manda, este resultado ya está viejo.
     if (!data || chatSending) return;
     const next = data.reverse();
-    const sig = (list) => list.map(m => `${m.id}:${(m.read_by || []).length}`).join('|');
+    const sig = (list) => list.map(m => `${m.id}:${(m.read_by || []).length}:${m.featured ? 1 : 0}`).join('|');
     // Sin cambios → no se toca el DOM (conserva scroll y selección).
-    if (sig(next) === sig(state.chats)) return;
-    state.chats = next;
-    renderChatBody();
-    markIncomingChatsRead();
+    if (sig(next) !== sig(state.chats)) {
+      state.chats = next;
+      renderChatBody();
+      markIncomingChatsRead();
+    }
+    if (!notesErr && notes && sig(notes) !== sig(state.chatNotes)) {
+      state.chatNotes = notes;
+      renderChatNotes();
+    }
   } catch (e) { console.warn('chat reload', e); }
 }
 
@@ -5952,7 +6169,11 @@ function renderChatBody(opts = {}) {
     const read = mine && Array.isArray(m.read_by) && m.read_by.some(u => u !== me);
     const time = new Date(m.created_at).toLocaleTimeString('es', { hour: 'numeric', minute: '2-digit' });
     const [mark, markTitle] = m._pending ? ['schedule', 'Enviando…'] : read ? ['done_all', 'Leído'] : ['check', 'Enviado'];
-    const meta = `<span class="bubble-meta">${time}`
+    const saved = !!m.featured;
+    const noteLabel = saved ? 'Quitar de notas rápidas' : 'Guardar como nota rápida';
+    const meta = `<span class="bubble-meta">`
+      + (m._pending ? '' : `<button type="button" class="chat-note-btn${saved ? ' is-on' : ''}" data-note-id="${escapeHtml(String(m.id))}" aria-pressed="${saved}" aria-label="${noteLabel}" title="${noteLabel}"><span class="material-symbols-outlined${saved ? ' filled' : ''}">bookmark</span></button>`)
+      + time
       + (mine ? `<span class="material-symbols-outlined read-mark${read ? ' is-read' : ''}" title="${markTitle}" aria-label="${markTitle}">${mark}</span>` : '')
       + '</span>';
     const div = document.createElement('div');
@@ -5972,6 +6193,7 @@ function renderChatBody(opts = {}) {
     lastAuthor = m.author;
   }
   body.scrollTop = (opts.stick || atBottom) ? body.scrollHeight : prevTop;
+  chatStick = !!(opts.stick || atBottom);
 }
 
 // ============================================================

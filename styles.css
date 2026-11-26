@@ -1,4 +1,5 @@
 :root, :root[data-theme="dark"] {
+  --safe-top: env(safe-area-inset-top, 0px); /* readable from JS */
   color-scheme: dark;
   /* "Shared Hearth" palette — terracotta primary, forest-green secondary,
      cream tertiary, warm-brown neutral. Surfaces stay dark so the photo
@@ -189,8 +190,8 @@ body {
 }
 .inicio-fresh .page-head                            { animation-delay: 0.00s; }
 .inicio-fresh .stats-widget                         { animation-delay: 0.22s; }
-.inicio-fresh .col-right .photo-widget              { animation-delay: 0.46s; }
-.inicio-fresh .col-right .chat-widget               { animation-delay: 0.78s; }
+.inicio-fresh .col-right .chat-widget               { animation-delay: 0.46s; }
+.inicio-fresh .col-right .photo-widget              { animation-delay: 0.78s; }
 .inicio-fresh .col-left .section-block:nth-child(1) { animation-delay: 0.56s; }
 .inicio-fresh .col-left .section-block:nth-child(2) { animation-delay: 0.80s; }
 .inicio-fresh .col-left .section-block:nth-child(3) { animation-delay: 1.04s; }
@@ -621,6 +622,12 @@ nav.menu a .m-icon { font-size: 20px; width: 22px; text-align: center; }
 .page-head h1 { margin: 0; font-size: 1.6rem; letter-spacing: -0.02em; }
 .page-head .sub { font-size: 0.88rem; }
 .page-head .actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+/* Inicio: the bell + settings stay on the first row, top-right, at any
+   width. A long greeting wraps inside its own column instead of pushing
+   the icons under the subtitle. */
+.page-head.dash-head { flex-wrap: nowrap; align-items: flex-start; }
+.dash-head .dash-head-text { flex: 1 1 auto; min-width: 0; }
+.dash-head .actions { flex: none; flex-wrap: nowrap; }
 
 @media (max-width: 760px) {
   .app-shell { flex-direction: column; }
@@ -2343,7 +2350,7 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 .notif-popover .notif-item .dot { width: 7px; height: 7px; border-radius: 999px; background: var(--accent); flex-shrink: 0; margin-top: 0.4rem; }
 .notif-popover .empty { padding: 1.5rem; }
 
-/* ======== Right column: photo widget + chat ======== */
+/* ======== Right column: chat + photo widget ======== */
 .col-right { min-height: 0; }
 .col-right .photo-widget {
   flex: 0 0 auto;
@@ -2357,7 +2364,7 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 }
 @media (min-width: 981px) {
   /* Side by side with the rest of Inicio: a slightly shorter photo so
-     the chat (input included) fits under it without scrolling. */
+     it still fits under the (compact) chat without scrolling. */
   .col-right .photo-widget { height: clamp(200px, 30vh, 300px); }
 }
 @media (max-width: 760px) {
@@ -2385,32 +2392,64 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
   color: var(--text);
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
-  height: 340px;
+  /* Compact until it is used, then it grows (.is-open). Both heights
+     come from sizeChatWidget(); the fallbacks cover the first paint. */
+  height: var(--chat-h, 212px);
+  flex: none;
   display: flex; flex-direction: column; overflow: hidden;
+  transition: height 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-@media (min-width: 981px) {
-  /* --chat-h comes from fitColRightToViewport(): what is left of the
-     viewport under the photo widget. */
-  .col-right .chat-widget { height: var(--chat-h, 320px); }
-}
+.chat-widget.is-open { height: var(--chat-open-h, min(520px, 70dvh)); }
+.chat-widget:not(.is-open) { cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .chat-widget { transition: none; } }
+.chat-widget [hidden] { display: none !important; }
 .chat-widget .chat-head {
-  padding: 0.7rem 1rem 0.6rem;
+  padding: 0.5rem 0.55rem 0.5rem 0.6rem;
   border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; gap: 0.6rem;
+  display: flex; align-items: center; gap: 0.35rem;
   flex-shrink: 0;
 }
-.chat-widget .chat-title {
-  font-family: 'Playfair Display', serif;
-  font-size: 1.05rem; font-weight: 600;
+/* Chat | Notas rápidas */
+.chat-widget .chat-tabs {
+  display: inline-flex; gap: 2px; min-width: 0;
+  background: var(--surface-alt); border: 1px solid var(--border);
+  border-radius: 999px; padding: 2px;
+}
+.chat-widget .chat-tabs button {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  background: transparent; border: 0; border-radius: 999px;
+  padding: 0.32rem 0.7rem;
+  font: inherit; font-size: 0.8rem; font-weight: 600; white-space: nowrap;
+  color: var(--text-dim); cursor: pointer;
+}
+.chat-widget .chat-tabs button.active { background: #fff; color: var(--text); box-shadow: 0 1px 3px rgba(74, 69, 66, 0.18); }
+.chat-widget .chat-tab-count {
+  min-width: 1.15rem; padding: 0 0.3rem; border-radius: 999px;
+  background: var(--accent); color: var(--on-accent);
+  font-size: 0.66rem; font-weight: 700; line-height: 1.15rem; text-align: center;
 }
 .chat-widget .chat-notify {
-  margin-left: auto; min-width: 0;
-  display: inline-flex; align-items: center; gap: 0.3rem;
-  font-size: 0.72rem; font-weight: 500; color: var(--text-dim);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-left: auto; flex: none;
+  display: grid; place-items: center; width: 28px; height: 28px;
+  color: var(--text-dim);
 }
-.chat-widget .chat-notify .material-symbols-outlined { font-size: 15px; flex: none; }
+.chat-widget .chat-notify .material-symbols-outlined { font-size: 17px; }
 .chat-widget .chat-notify.is-off { color: var(--danger); }
+.chat-widget .chat-toggle {
+  flex: none; width: 32px; height: 32px; padding: 0;
+  display: grid; place-items: center;
+  background: transparent; border: 0; border-radius: 999px;
+  color: var(--text-dim); cursor: pointer;
+}
+.chat-widget .chat-toggle:hover { background: var(--surface-alt); color: var(--text); }
+.chat-widget .chat-toggle .material-symbols-outlined { font-size: 22px; }
+/* Only shown when the push did NOT go out. */
+.chat-widget .chat-alert {
+  flex: none; padding: 0.35rem 0.9rem;
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+  color: var(--danger); font-size: 0.74rem; font-weight: 500;
+  border-bottom: 1px solid var(--border);
+}
 .chat-widget .chat-body {
   flex: 1 1 0; min-height: 0;
   overflow-y: auto; overscroll-behavior: contain;
@@ -2450,6 +2489,50 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 }
 .chat-bubble .read-mark { font-size: 13px; }
 .chat-bubble a { color: inherit; text-decoration: underline; }
+/* Bookmark next to the time: save / unsave the message as a quick note. */
+.chat-note-btn {
+  position: relative;
+  display: inline-grid; place-items: center;
+  background: transparent; border: 0; padding: 0; margin-right: 0.15rem;
+  color: inherit; opacity: 0.55; cursor: pointer;
+}
+.chat-note-btn::before { content: ""; position: absolute; inset: -9px -7px; } /* touch target */
+.chat-note-btn .material-symbols-outlined { font-size: 15px; }
+.chat-note-btn:hover, .chat-note-btn.is-on { opacity: 1; }
+.chat-bubble.theirs .chat-note-btn.is-on,
+.chat-sticker .chat-note-btn.is-on { color: var(--accent); }
+
+/* Quick notes tab */
+.chat-widget .chat-notes {
+  flex: 1 1 0; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain;
+  padding: 0.7rem 0.8rem;
+  display: flex; flex-direction: column; gap: 0.5rem;
+}
+.chat-widget .chat-notes .chat-empty .material-symbols-outlined { font-size: 15px; vertical-align: -3px; }
+.chat-note {
+  flex: none;
+  background: #fff; border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 12px; padding: 0.55rem 0.5rem 0.35rem 0.75rem;
+}
+.chat-note-text { font-size: 0.9rem; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-note-text a { color: var(--accent); }
+.chat-note img {
+  display: block; width: auto; height: auto; max-width: 120px; max-height: 120px;
+  border-radius: 10px; cursor: zoom-in;
+}
+.chat-note-meta {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  margin-top: 0.15rem; font-size: 0.68rem; color: var(--text-dim);
+}
+.chat-note-meta button {
+  display: grid; place-items: center; width: 32px; height: 32px; padding: 0;
+  background: transparent; border: 0; border-radius: 999px;
+  color: var(--text-dim); cursor: pointer;
+}
+.chat-note-meta button:hover { background: var(--surface-alt); color: var(--danger); }
+.chat-note-meta button .material-symbols-outlined { font-size: 18px; }
 .chat-widget .chat-input {
   display: flex; align-items: center; gap: 0.45rem;
   padding: 0.55rem 0.6rem; border-top: 1px solid var(--border);
