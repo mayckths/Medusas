@@ -1124,7 +1124,6 @@ function renderInicio(root) {
               <button type="button" role="tab" data-tab="notes" id="chat-tab-notes">Notas rápidas<span class="chat-tab-count" id="chat-notes-count"></span></button>
             </div>
             <button type="button" class="chat-icon-btn chat-search-btn" id="chat-search-btn" aria-label="Buscar en el chat" title="Buscar en el chat"><span class="material-symbols-outlined">search</span></button>
-            <button type="button" class="chat-icon-btn" id="chat-toggle" aria-expanded="false" aria-label="Expandir el chat" title="Expandir el chat"><span class="material-symbols-outlined">expand_more</span></button>
           </div>
           <div class="chat-alert" id="chat-alert" role="status" hidden></div>
           <div class="chat-search" id="chat-search" hidden>
@@ -5702,7 +5701,6 @@ let chatNotifyState = 'ok';
 // Estado de la tarjeta. Vive fuera del DOM para sobrevivir a un re-render
 // de Inicio (que reconstruye el widget).
 let chatTab = 'chat';       // 'chat' | 'notes' | 'search'
-let chatOpen = false;       // compacto por defecto; se expande al usarlo
 let chatStick = true;       // ¿la lista está abajo del todo?
 let chatDraft = '';
 let chatBodyObserver = null;
@@ -5820,7 +5818,7 @@ function setupChatWidget() {
   renderChatTyping();
   updateChatComposer();
   applyChatTab();
-  applyChatOpen();
+  sizeChatWidget();
   markIncomingChatsRead();
 
   $('#chat-form').addEventListener('submit', (e) => { e.preventDefault(); sendChatMessage(); });
@@ -5873,7 +5871,6 @@ function setupChatWidget() {
     chatTab = chatTab === 'search' ? 'chat' : 'search';
     setChatSheet(null);
     applyChatTab();
-    if (!chatOpen) setChatOpen(true);
     if (chatTab === 'search') $('#chat-search-input').focus();
   });
   $('#chat-search-input').addEventListener('input', (e) => {
@@ -5882,16 +5879,11 @@ function setupChatWidget() {
     chatSearchTimer = setTimeout(runChatSearch, 250);
   });
 
-  // Se expande al usarlo: tocar la tarjeta o enfocar el campo la abre;
-  // el botón del encabezado, Escape o tocar fuera la recogen.
-  $('#chat-toggle').addEventListener('click', (e) => { e.stopPropagation(); setChatOpen(!chatOpen); });
-  root.addEventListener('click', () => { if (!chatOpen) setChatOpen(true); });
-  root.addEventListener('focusin', (e) => { if (!chatOpen && e.target !== $('#chat-toggle')) setChatOpen(true); });
+  // Escape cierra el panel abierto o la búsqueda.
   root.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (chatSheet) { e.preventDefault(); setChatSheet(null); return; }
-    if (chatTab === 'search') { e.preventDefault(); chatTab = 'chat'; applyChatTab(); return; }
-    if (chatOpen) { e.preventDefault(); if (root.contains(document.activeElement)) document.activeElement.blur(); setChatOpen(false); }
+    if (chatTab === 'search') { e.preventDefault(); chatTab = 'chat'; applyChatTab(); }
   });
 
   // Solo el scroll de la persona decide si "está abajo": mientras la
@@ -5921,20 +5913,6 @@ document.addEventListener('visibilitychange', () => {
   chatTrackPresence();
   if (!document.hidden && state.currentUser) reloadChats({ background: true });
 });
-// Tocar fuera de la tarjeta la recoge (los diálogos encima no cuentan).
-document.addEventListener('pointerdown', (e) => {
-  if (!chatOpen) return;
-  const root = document.getElementById('chat-widget');
-  if (!root || root.contains(e.target) || e.target.closest('dialog, #ui-toast')) return;
-  if (chatRec) return; // grabando: no se recoge a mitad
-  setChatSheet(null);
-  setChatOpen(false);
-});
-if (window.visualViewport) {
-  // Teclado del teléfono: el chat abierto ocupa justo lo que queda visible.
-  window.visualViewport.addEventListener('resize', () => { if (chatOpen && chatStacked()) { sizeChatWidget(); revealChatWidget(); } });
-}
-
 function onChatListClick(e) {
   const hit = (sel) => e.target.closest(sel);
   let el;
@@ -5950,68 +5928,23 @@ function onChatListClick(e) {
 }
 
 // ============================================================
-// Tarjeta: abrir / recoger, altos, pestañas
+// Tarjeta: alto y pestañas
 // ============================================================
-function setChatOpen(open) {
-  if (chatOpen === open) return;
-  chatOpen = open;
-  applyChatOpen();
-  if (open) { revealChatWidget(); markIncomingChatsRead(); }
-}
-
-function applyChatOpen() {
-  const root = $('#chat-widget');
-  const btn = $('#chat-toggle');
-  if (!root || !btn) return;
-  sizeChatWidget();
-  root.classList.toggle('is-open', chatOpen);
-  const label = chatOpen ? 'Recoger el chat' : 'Expandir el chat';
-  btn.setAttribute('aria-expanded', String(chatOpen));
-  btn.setAttribute('aria-label', label);
-  btn.title = label;
-  $('.material-symbols-outlined', btn).textContent = chatOpen ? 'expand_less' : 'expand_more';
-}
-
-// Altos de la tarjeta (los lee el CSS):
-//   --chat-h       compacto. En desktop, lo que deja la foto de debajo.
-//   --chat-open-h  expandido. Lo que cabe en pantalla desde donde está.
+// El chat siempre está a tamaño completo. En el teléfono el alto es fijo
+// (CSS). En desktop se calcula para que el chat y la foto de debajo
+// quepan juntos en la columna cuando queda pegada arriba, y para que el
+// campo de texto se vea sin hacer scroll al entrar.
 function sizeChatWidget() {
   const chat = document.getElementById('chat-widget');
   if (!chat) return;
-  const clamp = (lo, v, hi) => Math.round(Math.max(lo, Math.min(hi, v)));
-  const rect = chat.getBoundingClientRect();
-  if (chatStacked()) {
-    chat.style.removeProperty('--chat-h');
-    const vv = window.visualViewport;
-    const visible = vv ? vv.height : window.innerHeight;
-    chat.style.setProperty('--chat-open-h', `${clamp(260, visible - chatSafeTop() - 24, 520)}px`);
-    return;
-  }
+  if (chatStacked()) { chat.style.removeProperty('--chat-h'); return; }
   const cols = document.querySelector('.dashboard-cols');
   const photo = document.getElementById('photo-widget');
-  const top = cols ? cols.getBoundingClientRect().top + window.scrollY : rect.top + window.scrollY;
-  const compact = clamp(200, window.innerHeight - top - (photo ? photo.offsetHeight : 0) - 36, 300);
-  chat.style.setProperty('--chat-h', `${compact}px`);
-  chat.style.setProperty('--chat-open-h', `${clamp(Math.max(compact, 320), window.innerHeight - Math.max(rect.top, 16) - 20, 620)}px`);
-}
-
-// Alto de la barra de estado en la PWA (env() no se puede leer desde JS,
-// así que el CSS lo expone como --safe-top).
-function chatSafeTop() {
-  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--safe-top')) || 0;
-}
-
-// En el teléfono, al abrir: sube la tarjeta hasta el borde superior
-// visible para que quepa entera sobre el teclado.
-function revealChatWidget() {
-  const chat = document.getElementById('chat-widget');
-  if (!chat || !chatStacked()) return;
-  requestAnimationFrame(() => {
-    const vv = window.visualViewport;
-    const want = (vv ? vv.offsetTop : 0) + chatSafeTop() + 12;
-    const delta = chat.getBoundingClientRect().top - want;
-    if (Math.abs(delta) > 4) window.scrollBy({ top: delta, behavior: 'smooth' });
-  });
+  const top = cols ? cols.getBoundingClientRect().top + window.scrollY : chat.getBoundingClientRect().top + window.scrollY;
+  const withPhoto = window.innerHeight - 48 - (photo ? photo.offsetHeight : 0); // 16 arriba + 16 de separación + 16 abajo
+  const onEntry = window.innerHeight - top - 20;
+  const h = Math.round(Math.max(320, Math.min(620, withPhoto, onEntry)));
+  chat.style.setProperty('--chat-h', `${h}px`);
 }
 
 function applyChatTab() {
@@ -6073,7 +6006,6 @@ function renderChatNotifyHint() {
 function setChatSheet(sheet) {
   chatSheet = sheet;
   renderChatSheet();
-  if (sheet && !chatOpen) setChatOpen(true);
 }
 
 function renderChatSheet() {
@@ -6367,7 +6299,13 @@ async function sendChatUpload({ path, blob, type, body, pushBody, errLabel, loca
     console.error('chat upload', e);
     if (temp) chatDropTemp(temp);
     if (uploadedPath) { try { await supabase.storage.from(BUCKET).remove([uploadedPath]); } catch {} }
-    uiToast(`No se pudo ${errLabel}: ${e.message || e}`, { error: true, duration: 5000 });
+    // Supabase rechaza el tipo de archivo (415 / "mime type ... is not
+    // supported"): el bucket solo admite ciertos tipos. Es un ajuste del
+    // bucket, no un fallo pasajero, así que se dice tal cual.
+    const badType = e && (String(e.statusCode) === '415' || e.status === 415 || /mime/i.test(e.message || ''));
+    uiToast(badType
+      ? `El almacenamiento de Supabase no acepta archivos ${type}. Hay que añadir ese tipo a los permitidos del bucket "${BUCKET}".`
+      : `No se pudo ${errLabel}: ${e.message || e}`, { error: true, duration: badType ? 9000 : 5000 });
     return false;
   } finally {
     if (localUrl) URL.revokeObjectURL(localUrl);
@@ -6410,7 +6348,11 @@ async function startChatRecording() {
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
   catch (e) {
-    uiToast(e && e.name === 'NotAllowedError' ? 'Falta el permiso del micrófono' : `No se pudo usar el micrófono: ${e.message || e}`, { error: true, duration: 5000 });
+    const name = e && e.name;
+    uiToast(name === 'NotAllowedError' || name === 'SecurityError'
+      ? 'El micrófono está bloqueado para Medusas. Actívalo en los ajustes del navegador o del teléfono y vuelve a intentar.'
+      : name === 'NotFoundError' ? 'No se encontró ningún micrófono en este dispositivo.'
+      : `No se pudo usar el micrófono: ${e.message || e}`, { error: true, duration: 8000 });
     return;
   }
   // mp4 primero: es lo que graba Safari y lo que suena en todas partes.
@@ -6431,7 +6373,6 @@ async function startChatRecording() {
   };
   rec.timer = setInterval(tick, 250);
   tick();
-  if (!chatOpen) setChatOpen(true);
   applyChatBottom();
 }
 
@@ -6875,7 +6816,7 @@ function stopChatBackground() {
   if (chatAudio) { try { chatAudio.pause(); } catch {} }
   chatPlaying = null;
   stopChatRealtime();
-  chatSheet = null; chatReplyTo = null; chatDraft = ''; chatTab = 'chat'; chatOpen = false;
+  chatSheet = null; chatReplyTo = null; chatDraft = ''; chatTab = 'chat';
   chatSearchQuery = ''; chatSearchResults = [];
 }
 
