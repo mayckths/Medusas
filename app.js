@@ -1117,6 +1117,8 @@ function renderInicio(root) {
           </div>
           <div class="chat-body" id="chat-body" role="log" aria-live="polite" aria-label="Mensajes"></div>
           <form class="chat-input" id="chat-form" autocomplete="off">
+            <button type="button" class="chat-photo-btn" id="chat-photo" aria-label="Enviar una foto como sticker" title="Enviar una foto como sticker"><span class="material-symbols-outlined">add_photo_alternate</span></button>
+            <input type="file" id="chat-photo-input" accept="image/*" hidden />
             <input type="text" id="chat-input-field" maxlength="1000" enterkeyhint="send" aria-label="Mensaje" />
             <button type="submit" id="chat-send" aria-label="Enviar" title="Enviar"><span class="material-symbols-outlined">arrow_upward</span></button>
           </form>
@@ -5674,6 +5676,19 @@ function setupChatWidget() {
   // el teclado después de cada mensaje.
   $('#chat-send').addEventListener('mousedown', (e) => e.preventDefault());
 
+  // Foto → sticker
+  const photoInput = $('#chat-photo-input');
+  $('#chat-photo').addEventListener('click', () => photoInput.click());
+  photoInput.addEventListener('change', () => {
+    const file = photoInput.files && photoInput.files[0];
+    photoInput.value = ''; // permite volver a elegir la misma foto
+    if (file) sendChatSticker(file);
+  });
+  $('#chat-body').addEventListener('click', (e) => {
+    const img = e.target.closest('.chat-sticker img');
+    if (img) openStickerViewer(img.currentSrc || img.src);
+  });
+
   chatPollTimer = setInterval(() => {
     if (!document.getElementById('chat-widget')) { clearInterval(chatPollTimer); chatPollTimer = null; return; }
     if (!document.hidden) reloadChats();
@@ -5717,7 +5732,7 @@ async function sendChatMessage() {
     const saved = data || { ...temp, _pending: false };
     if (i !== -1) state.chats[i] = saved; else state.chats.push(saved);
     renderChatBody({ stick: true });
-    notifyChatMessage(me, body);
+    notifyChatMessage(me, body.length > 140 ? `${body.slice(0, 139)}…` : body);
   } catch (e) {
     console.error('chat send', e);
     state.chats = state.chats.filter(m => m !== temp);
@@ -5730,10 +5745,117 @@ async function sendChatMessage() {
   }
 }
 
+// ---- Fotos como stickers ----
+// La tabla chats no tiene columna de imagen, así que un sticker es un
+// mensaje cuyo body es exactamente "[[sticker:<archivo>]]". El nombre del
+// archivo lleva el tamaño (…-320x512.jpg) para reservar el espacio de la
+// burbuja antes de que la imagen cargue: así el scroll no salta.
+const CHAT_STICKER_RE = /^\[\[sticker:(sticker-[0-9a-f-]{36}-(\d{1,4})x(\d{1,4})\.(?:jpg|png))\]\]$/;
+const CHAT_STICKER_PX = 512; // lado mayor del archivo que se sube
+function chatSticker(m) {
+  const x = CHAT_STICKER_RE.exec(m.body || '');
+  return x ? { path: x[1], w: Number(x[2]) || 1, h: Number(x[3]) || 1, cutout: x[1].endsWith('.png') } : null;
+}
+
+// Reduce la foto a tamaño sticker. PNG / WebP / GIF conservan la
+// transparencia (salen como PNG); el resto sale como JPEG.
+async function makeStickerFile(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = url;
+    try { await img.decode(); } catch { throw new Error('ese archivo no se puede leer como imagen'); }
+    const scale = Math.min(1, CHAT_STICKER_PX / Math.max(img.naturalWidth, img.naturalHeight));
+    const w = Math.max(1, Math.round(img.naturalWidth * scale));
+    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+    const keepAlpha = /png|webp|gif/i.test(file.type);
+    const type = keepAlpha ? 'image/png' : 'image/jpeg';
+    const blob = await new Promise(res => canvas.toBlob(res, type, 0.86));
+    if (!blob) throw new Error('no se pudo procesar la imagen');
+    return { blob, type, w, h, path: `sticker-${crypto.randomUUID()}-${w}x${h}.${keepAlpha ? 'png' : 'jpg'}` };
+  } finally { URL.revokeObjectURL(url); }
+}
+
+// Espera (como mucho un momento) a que la imagen esté en caché, para que
+// al cambiar la vista previa local por la URL real no parpadee.
+function preloadImage(src, timeoutMs = 2500) {
+  return new Promise(res => {
+    const img = new Image();
+    const done = () => res();
+    img.onload = done; img.onerror = done;
+    setTimeout(done, timeoutMs);
+    img.src = src;
+  });
+}
+
+async function sendChatSticker(file) {
+  if (chatSending) return;
+  const btn = $('#chat-photo');
+  chatSending = true;
+  if (btn) btn.disabled = true;
+  const me = state.currentUser;
+  let temp = null;
+  let uploadedPath = null;
+  try {
+    const st = await makeStickerFile(file);
+    const body = `[[sticker:${st.path}]]`;
+    temp = { id: `tmp-${Date.now()}`, author: me, body, created_at: new Date().toISOString(), read_by: [me], _pending: true, _localUrl: URL.createObjectURL(st.blob) };
+    state.chats.push(temp);
+    renderChatBody({ stick: true });
+
+    const { error: upErr } = await supabase.storage.from(BUCKET).upload(st.path, st.blob, {
+      cacheControl: '31536000', upsert: false, contentType: st.type,
+    });
+    if (upErr) throw upErr;
+    uploadedPath = st.path;
+    const { data, error } = await supabase.from('chats')
+      .insert({ author: me, body, read_by: [me] }).select().single();
+    if (error) throw error;
+    uploadedPath = null; // ya pertenece a un mensaje guardado
+    await preloadImage(publicImageUrl(st.path));
+    const i = state.chats.indexOf(temp);
+    const saved = data || { ...temp, _pending: false, _localUrl: undefined };
+    if (i !== -1) state.chats[i] = saved; else state.chats.push(saved);
+    URL.revokeObjectURL(temp._localUrl);
+    renderChatBody({ stick: true });
+    notifyChatMessage(me, '📷 Te mandó una foto');
+  } catch (e) {
+    console.error('chat sticker', e);
+    if (temp) {
+      state.chats = state.chats.filter(m => m !== temp);
+      URL.revokeObjectURL(temp._localUrl);
+      renderChatBody({ stick: true });
+    }
+    // Si el archivo subió pero el mensaje no se guardó, no dejarlo huérfano.
+    if (uploadedPath) { try { await supabase.storage.from(BUCKET).remove([uploadedPath]); } catch {} }
+    uiToast(`No se pudo enviar la foto: ${e.message || e}`, { error: true, duration: 5000 });
+  } finally {
+    chatSending = false;
+    if (btn) btn.disabled = false;
+  }
+}
+
+// Sticker en grande: toca en cualquier parte para cerrar.
+function openStickerViewer(src) {
+  let dlg = document.getElementById('sticker-viewer');
+  if (!dlg) {
+    dlg = document.createElement('dialog');
+    dlg.id = 'sticker-viewer';
+    dlg.className = 'sticker-viewer';
+    dlg.innerHTML = '<img alt="Foto del chat" /><button type="button" class="lb-close" aria-label="Cerrar" title="Cerrar"><span class="material-symbols-outlined">close</span></button>';
+    dlg.addEventListener('click', () => dlg.close());
+    document.body.appendChild(dlg);
+  }
+  dlg.querySelector('img').src = src;
+  if (!dlg.open) dlg.showModal();
+}
+
 // Push a la otra persona. No bloquea el envío; el resultado solo ajusta
 // la leyenda del encabezado para no prometer un aviso que no salió.
-function notifyChatMessage(author, body) {
-  const preview = body.length > 140 ? `${body.slice(0, 139)}…` : body;
+function notifyChatMessage(author, preview) {
   supabase.functions.invoke('notify', { body: { title: author, body: preview, hash: '#/inicio' } })
     .then(({ data, error }) => {
       if (error) { console.warn('notify', error.message || error); chatNotifyState = 'error'; }
@@ -5830,12 +5952,22 @@ function renderChatBody(opts = {}) {
     const read = mine && Array.isArray(m.read_by) && m.read_by.some(u => u !== me);
     const time = new Date(m.created_at).toLocaleTimeString('es', { hour: 'numeric', minute: '2-digit' });
     const [mark, markTitle] = m._pending ? ['schedule', 'Enviando…'] : read ? ['done_all', 'Leído'] : ['check', 'Enviado'];
-    const div = document.createElement('div');
-    div.className = `chat-bubble ${mine ? 'mine' : 'theirs'}${m.author === lastAuthor ? ' follow' : ''}${m._pending ? ' pending' : ''}`;
-    div.innerHTML = `<span class="bubble-text">${linkify(m.body)}</span>`
-      + `<span class="bubble-meta">${time}`
+    const meta = `<span class="bubble-meta">${time}`
       + (mine ? `<span class="material-symbols-outlined read-mark${read ? ' is-read' : ''}" title="${markTitle}" aria-label="${markTitle}">${mark}</span>` : '')
       + '</span>';
+    const div = document.createElement('div');
+    const sticker = chatSticker(m);
+    if (sticker) {
+      // Sin burbuja: la foto pegada sobre el chat, un poco torcida.
+      const side = 150 / Math.max(sticker.w, sticker.h);
+      const tilt = (sticker.path.charCodeAt(8) % 2 ? 1 : -1) * (mine ? 2.5 : 2); // estable por archivo
+      div.className = `chat-sticker ${mine ? 'mine' : 'theirs'}${sticker.cutout ? ' cutout' : ''}${m._pending ? ' pending' : ''}`;
+      div.innerHTML = `<img src="${escapeHtml(m._localUrl || publicImageUrl(sticker.path))}" alt="Foto"`
+        + ` width="${Math.round(sticker.w * side)}" height="${Math.round(sticker.h * side)}" style="--tilt:${tilt}deg" />${meta}`;
+    } else {
+      div.className = `chat-bubble ${mine ? 'mine' : 'theirs'}${m.author === lastAuthor ? ' follow' : ''}${m._pending ? ' pending' : ''}`;
+      div.innerHTML = `<span class="bubble-text">${linkify(m.body)}</span>${meta}`;
+    }
     body.appendChild(div);
     lastAuthor = m.author;
   }
