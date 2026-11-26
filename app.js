@@ -333,113 +333,6 @@ function tagColor(tag) {
   return TAG_PALETTE[h % TAG_PALETTE.length];
 }
 
-// Spotify / YouTube URL parsing
-function parseMediaUrl(rawUrl) {
-  if (!rawUrl) return null;
-  let url;
-  try { url = new URL(rawUrl.trim()); } catch { return null; }
-  const host = url.hostname.replace(/^www\./, '');
-
-  if (host === 'open.spotify.com' || host === 'spotify.com') {
-    const m = url.pathname.match(/^\/(playlist|track|album|episode|show|artist)\/([A-Za-z0-9]+)/);
-    if (m) {
-      const [, type, id] = m;
-      return {
-        kind: 'spotify',
-        embedUrl: `https://open.spotify.com/embed/${type}/${id}`,
-        normalizedUrl: `https://open.spotify.com/${type}/${id}`,
-        thumbnailUrl: null,
-      };
-    }
-  }
-  if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com') {
-    const list = url.searchParams.get('list');
-    const v = url.searchParams.get('v');
-    if (v) {
-      return {
-        kind: 'youtube',
-        embedUrl: `https://www.youtube.com/embed/${v}${list ? `?list=${list}` : ''}`,
-        normalizedUrl: rawUrl,
-        thumbnailUrl: `https://i.ytimg.com/vi/${v}/hqdefault.jpg`,
-      };
-    }
-    if (url.pathname.startsWith('/playlist') && list) {
-      return {
-        kind: 'youtube',
-        embedUrl: `https://www.youtube.com/embed/videoseries?list=${list}`,
-        normalizedUrl: rawUrl,
-        thumbnailUrl: null,
-      };
-    }
-    const shorts = url.pathname.match(/^\/shorts\/([A-Za-z0-9_-]+)/);
-    if (shorts) {
-      return {
-        kind: 'youtube',
-        embedUrl: `https://www.youtube.com/embed/${shorts[1]}`,
-        normalizedUrl: rawUrl,
-        thumbnailUrl: `https://i.ytimg.com/vi/${shorts[1]}/hqdefault.jpg`,
-      };
-    }
-  }
-  if (host === 'youtu.be') {
-    const id = url.pathname.replace(/^\//, '');
-    if (id) {
-      return {
-        kind: 'youtube',
-        embedUrl: `https://www.youtube.com/embed/${id}`,
-        normalizedUrl: rawUrl,
-        thumbnailUrl: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
-      };
-    }
-  }
-  return null;
-}
-
-// Try to fetch a title via oEmbed (best-effort). For Spotify, we
-// additionally hit our `spotify-info` edge function because Spotify's
-// own oEmbed doesn't return the artist.
-async function fetchOembedTitle(parsed) {
-  if (!parsed) return null;
-  try {
-    const target = parsed.kind === 'spotify'
-      ? `https://open.spotify.com/oembed?url=${encodeURIComponent(parsed.normalizedUrl)}`
-      : `https://www.youtube.com/oembed?url=${encodeURIComponent(parsed.normalizedUrl)}&format=json`;
-    const res = await fetch(target);
-    if (!res.ok) return null;
-    const json = await res.json();
-    const result = {
-      title: json.title || null,
-      thumbnail: json.thumbnail_url || null,
-      // For YouTube this is the channel name (usually the artist).
-      author: json.author_name || null,
-    };
-    if (parsed.kind === 'spotify') {
-      // Fall back to the edge function for the artist
-      try {
-        const u = `https://vmdsibzivcugjidtkhzt.supabase.co/functions/v1/spotify-info?url=${encodeURIComponent(parsed.normalizedUrl)}`;
-        const sres = await fetch(u);
-        if (sres.ok) {
-          const sjson = await sres.json();
-          if (sjson?.artist && !result.author) result.author = sjson.artist;
-        }
-      } catch {}
-    }
-    return result;
-  } catch {
-    return null;
-  }
-}
-
-// Helper used everywhere we need to render a media item label: combines
-// title + artist into "Title — Artist" when both exist.
-function displayMediaTitle(m) {
-  if (!m) return '';
-  const t = (m.title || '').trim();
-  const a = (m.artist || '').trim();
-  if (t && a) return `${t} — ${a}`;
-  return t || a || 'Sin título';
-}
-
 // Unread = the other user added it and current user hasn't opened it
 function isUnread(item) {
   if (!state.currentUser || !item) return false;
@@ -513,7 +406,6 @@ async function markAllUnreadEverywhere() {
   const sharedNotes = state.notes.filter(n => n.visibility !== 'private');
   await Promise.all([
     markAllSeen('notes', sharedNotes),
-    markAllSeen('media', state.media),
     markAllSeen('photos', state.photos),
   ]);
   // Belt-and-braces refresh in case any of the inner calls didn't
@@ -529,7 +421,6 @@ function markSectionVisited(hash) {
   if (hash === '#/notas' || hash === '#/notas/publicas' || hash === '#/notas/privadas') {
     return markAllSeen('notes', state.notes.filter(n => n.visibility !== 'private'));
   }
-  if (hash === '#/musica') return markAllSeen('media', state.media);
   if (hash === '#/fotos' || hash.startsWith('#/fotos/album/')) return markAllSeen('photos', state.photos);
 }
 
@@ -540,7 +431,6 @@ const state = {
   currentUser: null,
   route: '#/inicio',
   notes: [],
-  media: [],
   photos: [],
   places: [],
   chats: [],
@@ -557,7 +447,7 @@ const state = {
   settings: {
     photo_widget: { mode: 'featured', interval_ms: 6000 },
   },
-  view: { notas: 'cards', musica: 'cards' },
+  view: { notas: 'cards' },
   filterTag: { notas: null, lugares: null, fotos: null },
   /* Notas page top-level tab: false (activas) or true (archivadas).
      Archived notes hide from the default view + dashboard but their
@@ -639,7 +529,101 @@ function loginAs(name) {
   localStorage.setItem(AUTH_KEY, name);
 }
 
+// ============================================================
+// Notificaciones push (Web Push)
+// Cada dispositivo se suscribe desde Configuración → Cuenta; la Edge
+// Function "notify" le avisa a la otra persona cuando se crea algo.
+// En iPhone solo funciona con la app agregada a la pantalla de inicio.
+// ============================================================
+const VAPID_PUBLIC_KEY = 'BFs0JOyzbZuLCjxB-_3dIgPqtSlG0iOo37Cqn6CjkwDU7IDEPkJHOgrBEOtO6QFhHxicnRT9QrfRoIq87Ky79d8';
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches
+  || window.navigator.standalone === true;
+const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+
+let swRegistration = null;
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return null;
+  try {
+    swRegistration = await navigator.serviceWorker.register('./sw.js');
+    // Toque en una notificación con la app ya abierta → ir a la sección.
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'medusas-navigate' && e.data.hash) location.hash = e.data.hash;
+    });
+  } catch (e) { console.warn('service worker no registrado', e); }
+  return swRegistration;
+}
+
+function vapidKeyBytes() {
+  const b64 = (VAPID_PUBLIC_KEY + '==='.slice((VAPID_PUBLIC_KEY.length + 3) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+  return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+}
+
+async function currentPushSubscription() {
+  if (!pushSupported()) return null;
+  const reg = swRegistration || await navigator.serviceWorker.getRegistration();
+  return reg ? reg.pushManager.getSubscription() : null;
+}
+
+async function savePushSubscription(sub) {
+  const j = sub.toJSON();
+  const { error } = await supabase.from('push_subscriptions').upsert({
+    endpoint: j.endpoint,
+    name: state.currentUser,
+    p256dh: j.keys.p256dh,
+    auth: j.keys.auth,
+  }, { onConflict: 'endpoint' });
+  if (error) throw error;
+}
+
+// Debe llamarse desde un toque del usuario (iOS lo exige para el permiso).
+async function enablePush() {
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') throw new Error('No diste permiso para las notificaciones');
+  const reg = swRegistration || await registerServiceWorker();
+  if (!reg) throw new Error('No se pudo preparar la app para notificaciones');
+  await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKeyBytes() });
+  await savePushSubscription(sub);
+}
+
+async function disablePush() {
+  const sub = await currentPushSubscription();
+  if (!sub) return;
+  try { await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint); } catch {}
+  try { await sub.unsubscribe(); } catch {}
+}
+
+// Al abrir la app: si este dispositivo ya está suscrito, se refresca su
+// fila (por si cambió de persona o el sistema renovó la suscripción).
+async function syncPushSubscription() {
+  try {
+    if (!state.currentUser || !pushSupported() || Notification.permission !== 'granted') return;
+    const sub = await currentPushSubscription();
+    if (sub) await savePushSubscription(sub);
+  } catch (e) { console.warn('push sync', e); }
+}
+
+// Avisa a la otra persona. Nunca bloquea ni rompe el guardado: si la
+// función no existe o falla, solo queda un aviso en consola.
+function notifyPartner({ title, body = '', hash = '#/inicio' }) {
+  supabase.functions.invoke('notify', { body: { title, body, hash } })
+    .then(({ error }) => { if (error) console.warn('notify', error.message || error); })
+    .catch((e) => console.warn('notify', e));
+}
+
+async function sendTestPush() {
+  const { data, error } = await supabase.functions.invoke('notify', {
+    body: { title: 'Medusas 🪼', body: 'Las notificaciones funcionan en este dispositivo.', hash: '#/inicio', test: true },
+  });
+  if (error) throw error;
+  return data;
+}
+
 async function logout() {
+  // Antes de soltar la sesión: este dispositivo deja de recibir avisos.
+  try { await disablePush(); } catch {}
   state.currentUser = null;
   localStorage.removeItem(AUTH_KEY);
   if (authMode === 'secure') {
@@ -840,10 +824,10 @@ async function initAuthUI() {
 async function loadAll() {
   const [
     { data: notes },
-    { data: media },
     { data: photos },
     { data: places },
     { data: chats },
+    { data: triquiGames },
     { data: postits },
     { data: trips, error: tripsErr },
     { data: tripDays },
@@ -851,10 +835,10 @@ async function loadAll() {
     { data: tripFlights },
   ] = await Promise.all([
     supabase.from('notes').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
-    supabase.from('media').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('photos').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('places').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }),
     supabase.from('chats').select('*').order('created_at', { ascending: true }).limit(200),
+    supabase.from('triqui_games').select('*').order('created_at', { ascending: false }).limit(200),
     supabase.from('postits').select('*').order('z_index', { ascending: true }).order('created_at', { ascending: true }),
     supabase.from('trips').select('*').order('start_date', { ascending: true }),
     supabase.from('trip_days').select('*').order('day_number', { ascending: true }),
@@ -862,10 +846,11 @@ async function loadAll() {
     supabase.from('trip_flights').select('*').order('depart_at', { ascending: true }),
   ]);
   state.notes = notes || [];
-  state.media = media || [];
   state.photos = photos || [];
   state.places = places || [];
   state.chats = chats || [];
+  // null = la tabla aún no existe (falta correr el SQL del juego).
+  state.triquiGames = triquiGames || null;
   state.postits = postits || [];
   state.trips = trips || [];
   state.tripDays = tripDays || [];
@@ -879,50 +864,6 @@ async function loadAll() {
   // so it's already there even on non-dashboard routes
   const ambient = state.photos.find(p => p.featured) || state.photos[0];
   if (ambient) setBgPhoto(ambient.storage_path);
-  // Background: backfill missing Spotify/YouTube thumbnails
-  backfillMediaThumbnails();
-}
-
-let backfillRan = false;
-async function backfillMediaThumbnails() {
-  if (backfillRan) return;
-  backfillRan = true;
-  // Bump this when the backfill logic changes (e.g., new sources for
-  // missing artists) so it re-runs once per client.
-  const BACKFILL_VERSION = 'v2-spotify-artist';
-  try {
-    if (localStorage.getItem('medusas:media-backfill') === BACKFILL_VERSION) return;
-  } catch {}
-  // Anything that's missing a thumbnail OR an artist gets a fetch.
-  const needs = state.media.filter(m => !m.thumbnail_url || !m.artist);
-  if (!needs.length) return;
-  let anyChanged = false;
-  for (const m of needs) {
-    const parsed = parseMediaUrl(m.url);
-    if (!parsed) continue;
-    let thumb = m.thumbnail_url || parsed.thumbnailUrl;
-    let artist = m.artist;
-    let oe = null;
-    // Only hit oembed once per item, and only if there's something to fetch
-    if (!thumb || !artist) {
-      try { oe = await fetchOembedTitle(parsed); } catch {}
-      if (oe?.thumbnail && !thumb) thumb = oe.thumbnail;
-      if (oe?.author && !artist) artist = oe.author;
-    }
-    const updates = {};
-    if (thumb && thumb !== m.thumbnail_url) updates.thumbnail_url = thumb;
-    if (artist && artist !== m.artist) updates.artist = artist;
-    if (Object.keys(updates).length) {
-      Object.assign(m, updates);
-      try { await supabase.from('media').update(updates).eq('id', m.id); } catch {}
-      anyChanged = true;
-    }
-  }
-  try { localStorage.setItem('medusas:media-backfill', BACKFILL_VERSION); } catch {}
-  // Re-render current view to show the new thumbnails / titles
-  if (anyChanged && (state.route === '#/musica' || state.route === '#/inicio')) {
-    router();
-  }
 }
 
 async function loadSettings() {
@@ -950,10 +891,10 @@ function updateSidebarBadges() {
   const counts = {
     'home': 0,
     'notas': notifNotes,
-    'musica': state.media.filter(isUnread).length,
+    'triqui': triquiMyTurn() ? 1 : 0,
     'fotos': state.photos.filter(isUnread).length,
   };
-  counts.home = counts.notas + counts.musica + counts.fotos;
+  counts.home = counts.notas + counts.fotos;
   $$('[data-unread]').forEach(el => {
     const c = counts[el.dataset.unread] || 0;
     el.hidden = c === 0;
@@ -1022,7 +963,7 @@ async function router() {
       // Legacy public/private URLs collapse into a single notes view
       renderNotas(content);
       break;
-    case hash === '#/musica': renderMusica(content); break;
+    case hash === '#/triqui': renderTriqui(content); break;
     case hash === '#/fotos': renderFotos(content); break;
     case hash.startsWith('#/fotos/album/'): renderAlbumDetail(content, hash.slice('#/fotos/album/'.length)); break;
     case hash === '#/viajes': renderViajes(content); break;
@@ -1057,7 +998,7 @@ function rerenderCurrentPage() {
     case hash === '#/notas/publicas':
     case hash === '#/notas/privadas':
       renderNotas(content); break;
-    case hash === '#/musica': renderMusica(content); break;
+    case hash === '#/triqui': renderTriqui(content); break;
     case hash === '#/fotos': renderFotos(content); break;
     case hash.startsWith('#/fotos/album/'): renderAlbumDetail(content, hash.slice('#/fotos/album/'.length)); break;
     case hash === '#/viajes': renderViajes(content); break;
@@ -1069,7 +1010,7 @@ function rerenderCurrentPage() {
 // ============================================================
 // Page: Inicio (dashboard)
 // ============================================================
-const DEFAULT_DASHBOARD_ORDER = ['notes', 'media', 'photos', 'trips'];
+const DEFAULT_DASHBOARD_ORDER = ['notes', 'photos', 'trips'];
 
 function getDashboardOrder() {
   const raw = state.settings.dashboard_order;
@@ -1107,14 +1048,6 @@ function renderInicio(root) {
           <a href="#/notas/publicas">Ver todas →</a>
         </div>
         <div class="grid-cards" id="dash-notes-grid"></div>
-      </section>`,
-    media: `
-      <section class="section-block" data-sec="media">
-        <div class="section-head">
-          <h2>Música reciente</h2>
-          <a href="#/musica">Ver toda →</a>
-        </div>
-        <div class="grid-cards" id="dash-media-grid"></div>
       </section>`,
     photos: `
       <section class="section-block dash-photos-section" data-sec="photos">
@@ -1198,14 +1131,6 @@ function renderInicio(root) {
     else notesGrid.innerHTML = '<div class="empty">Aún no hay notas.</div>';
   }
 
-  // Recent media (3 cards)
-  const mediaGrid = $('#dash-media-grid');
-  if (mediaGrid) {
-    const recentMedia = state.media.slice(0, 3);
-    if (recentMedia.length) recentMedia.forEach(m => mediaGrid.appendChild(renderMediaCard(m)));
-    else mediaGrid.innerHTML = '<div class="empty">Aún no hay música.</div>';
-  }
-
   // Recent photos
   const photosGrid = $('#dash-photos-grid');
   if (photosGrid) {
@@ -1237,7 +1162,7 @@ function renderInicio(root) {
   requestAnimationFrame(() => {
     fitColRightToViewport();
     // Hide overflowing cards so dashboard sections always show one row
-    ['#dash-notes-grid', '#dash-media-grid', '#dash-places-grid']
+    ['#dash-notes-grid', '#dash-places-grid']
       .forEach(sel => clampGridToOneRow(document.querySelector(sel)));
   });
 }
@@ -1440,7 +1365,6 @@ function renderRelationshipStats() {
 function totalUnreadCount() {
   // Private notes never count as notifications
   return state.notes.filter(n => n.visibility !== 'private' && isUnread(n)).length
-    + state.media.filter(isUnread).length
     + state.photos.filter(isUnread).length;
 }
 
@@ -1672,8 +1596,8 @@ function renderNotas(root) {
       <div>
         <h1>Notas</h1>
       </div>
-      <button class="add-btn" id="notes-add-btn" type="button" title="Nueva nota" aria-label="Nueva nota"><span class="material-symbols-outlined">add</span></button>
     </div>
+    <button class="notes-fab" id="notes-add-btn" type="button" title="Nueva nota" aria-label="Nueva nota"><span class="material-symbols-outlined">add</span></button>
     ${archivedCount > 0 ? `
       <div class="seg-tabs" id="notes-archive-tabs">
         <button class="seg-tab ${!showArchived ? 'active' : ''}" data-archived="0">Activas</button>
@@ -1775,11 +1699,38 @@ function clampPopoverX(pop) {
   if (dx) pop.style.transform = `translateX(${dx}px)`;
 }
 
+// Colores de nota estilo Keep. Sin color elegido, cada nota toma uno fijo
+// derivado de su id, así la cuadrícula se ve variada desde el primer día.
+const NOTE_COLORS = [
+  { key: 'crema',    label: 'Crema',    hex: '#f9f6f0' },
+  { key: 'coral',    label: 'Coral',    hex: '#f8b4ab' },
+  { key: 'durazno',  label: 'Durazno',  hex: '#f5b98a' },
+  { key: 'arena',    label: 'Arena',    hex: '#f6ecae' },
+  { key: 'menta',    label: 'Menta',    hex: '#d7efc6' },
+  { key: 'salvia',   label: 'Salvia',   hex: '#b5ddd0' },
+  { key: 'niebla',   label: 'Niebla',   hex: '#cfe1ee' },
+  { key: 'tormenta', label: 'Tormenta', hex: '#b0cbe0' },
+  { key: 'lila',     label: 'Lila',     hex: '#d4c3e6' },
+  { key: 'flor',     label: 'Flor',     hex: '#f4d3df' },
+];
+function autoNoteColorKey(id) {
+  const str = String(id || '');
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  return NOTE_COLORS[1 + (h % (NOTE_COLORS.length - 1))].key;
+}
+function noteColorKey(note) {
+  if (note?.color && NOTE_COLORS.some(c => c.key === note.color)) return note.color;
+  return note?.id ? autoNoteColorKey(note.id) : 'crema';
+}
+const noteColorHex = (key) => (NOTE_COLORS.find(c => c.key === key) || NOTE_COLORS[0]).hex;
+
 function renderNoteCard(note) {
   const card = document.createElement('article');
   // Cream notebook card (rediseño Figma) — no tag stripe.
   card.className = 'card clickable note-card';
   card.dataset.id = note.id;
+  card.style.setProperty('--note-bg', noteColorHex(noteColorKey(note)));
   // Unique transition name so the browser can morph this card between
   // positions when the list re-renders (e.g., on pin/unpin).
   card.style.viewTransitionName = `note-${cssSafeId(note.id)}`;
@@ -2906,155 +2857,152 @@ $('#flight-delete').addEventListener('click', async () => {
 });
 
 // ============================================================
-// Page: Música
+// Page: Triqui (tres en línea por turnos, cada uno en su celular)
+// Una fila de triqui_games por partida. X siempre empieza; quien empieza
+// se alterna entre partidas. El marcador sale del historial.
 // ============================================================
-function getMediaCategory(m) {
-  if (m.kind === 'spotify') {
-    if (m.url && m.url.includes('/playlist/')) return 'playlists';
-    return 'musica';
-  }
-  if (m.kind === 'youtube') {
-    // a playlist URL on YouTube is /playlist?list=... (no v=)
-    if (m.url && /playlist\?/i.test(m.url) && !/[?&]v=/.test(m.url)) return 'playlists';
-    return 'videos';
-  }
-  return 'musica';
+const TRIQUI_LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+function triquiWinLine(board) {
+  return TRIQUI_LINES.find(([a, b, c]) => board[a] !== '.' && board[a] === board[b] && board[b] === board[c]) || null;
+}
+function triquiPlayers() {
+  const names = state._userAssets ? Object.keys(state._userAssets) : ['Jaime', 'Mayck'];
+  const me = state.currentUser;
+  return { me, partner: names.find(n => n !== me) || 'tu pareja' };
+}
+const triquiCurrent = () => (state.triquiGames && state.triquiGames[0]) || null;
+function triquiTurnName(g) { return g.turn === 'X' ? g.x_player : g.o_player; }
+function triquiMyTurn() {
+  const g = triquiCurrent();
+  return !!g && g.status === 'playing' && triquiTurnName(g) === state.currentUser;
 }
 
-function renderMusica(root) {
-  const featured = state.media.filter(m => m.featured);
-  const filter = state.filterMedia || 'all';
-  const filterCounts = { all: state.media.length, musica: 0, playlists: 0, videos: 0 };
-  for (const m of state.media) filterCounts[getMediaCategory(m)]++;
-  const items = filter === 'all' ? state.media : state.media.filter(m => getMediaCategory(m) === filter);
+async function triquiFetch() {
+  const { data, error } = await supabase.from('triqui_games').select('*').order('created_at', { ascending: false }).limit(200);
+  if (error) return false;
+  const changed = JSON.stringify(data) !== JSON.stringify(state.triquiGames);
+  state.triquiGames = data || [];
+  return changed;
+}
+
+async function triquiNewGame() {
+  const { me, partner } = triquiPlayers();
+  const last = triquiCurrent();
+  // Alterna quién empieza; la primera partida la abre quien la crea.
+  const starter = last ? (last.x_player === me ? partner : me) : me;
+  const other = starter === me ? partner : me;
+  const { error } = await supabase.from('triqui_games').insert({ x_player: starter, o_player: other });
+  if (error) { uiToast(`No se pudo crear la partida: ${error.message}`, { error: true }); return; }
+  await triquiFetch();
+  rerenderCurrentPage(); updateSidebarBadges();
+  notifyPartner({
+    title: 'Triqui: partida nueva',
+    body: starter === me ? `${me} empieza. Espera tu turno.` : `${me} te retó. ¡Empiezas tú!`,
+    hash: '#/triqui',
+  });
+}
+
+let triquiBusy = false;
+async function triquiPlay(index) {
+  const g = triquiCurrent();
+  if (triquiBusy || !g || g.status !== 'playing' || g.board[index] !== '.' || !triquiMyTurn()) return;
+  triquiBusy = true;
+  try {
+    const { me } = triquiPlayers();
+    const board = g.board.slice(0, index) + g.turn + g.board.slice(index + 1);
+    const won = !!triquiWinLine(board);
+    const draw = !won && !board.includes('.');
+    const patch = {
+      board,
+      turn: g.turn === 'X' ? 'O' : 'X',
+      status: won ? 'won' : draw ? 'draw' : 'playing',
+      winner: won ? me : null,
+      updated_at: new Date().toISOString(),
+    };
+    // El filtro por el tablero anterior evita pisar una jugada que llegó
+    // mientras tanto: si no coincide, no actualiza nada y se recarga.
+    const { data, error } = await supabase.from('triqui_games').update(patch)
+      .eq('id', g.id).eq('board', g.board).eq('status', 'playing').select('id');
+    if (error) throw error;
+    if (data && data.length) {
+      Object.assign(g, patch);
+      notifyPartner({
+        title: won ? `Triqui: ganó ${me} 🏆` : draw ? 'Triqui: empate' : 'Triqui: te toca',
+        body: won ? '¿Revancha?' : draw ? 'Nadie ganó esta vez.' : `${me} ya jugó.`,
+        hash: '#/triqui',
+      });
+    } else {
+      await triquiFetch();
+    }
+  } catch (e) {
+    uiToast(`No se pudo jugar: ${e.message || e}`, { error: true });
+  } finally {
+    triquiBusy = false;
+  }
+  rerenderCurrentPage(); updateSidebarBadges();
+}
+
+function renderTriqui(root) {
+  const { me, partner } = triquiPlayers();
+  if (state.triquiGames === null) {
+    root.innerHTML = `
+      <div class="page-head"><div><h1>Triqui</h1></div></div>
+      <div class="triqui-panel"><p class="triqui-status">Falta un paso para activar el juego: correr el SQL de Triqui en Supabase.</p></div>`;
+    return;
+  }
+  const games = state.triquiGames;
+  const g = triquiCurrent();
+  const wins = (n) => games.filter(x => x.status === 'won' && x.winner === n).length;
+  const draws = games.filter(x => x.status === 'draw').length;
+  const line = g ? triquiWinLine(g.board) : null;
+  const myTurn = triquiMyTurn();
+  const myMark = g ? (g.x_player === me ? 'X' : 'O') : '';
+
+  let status = 'Aún no hay partidas. ¡Empieza la primera!';
+  if (g) {
+    if (g.status === 'playing') status = myTurn ? `Tu turno — juegas con ${myMark}` : `Turno de ${escapeHtml(triquiTurnName(g))}…`;
+    else if (g.status === 'draw') status = 'Empate 🤝';
+    else status = g.winner === me ? '¡Ganaste! 🏆' : `Ganó ${escapeHtml(g.winner || '')}`;
+  }
 
   root.innerHTML = `
-    <div class="page-head">
-      <div>
-        <h1>Música</h1>
-        <div class="sub">Canciones, playlists y videos</div>
+    <div class="page-head"><div><h1>Triqui</h1></div></div>
+    <div class="triqui-panel">
+      <div class="triqui-score" aria-label="Marcador">
+        <div class="triqui-score-cell"><span class="n">${wins(me)}</span><span class="l">${escapeHtml(me)}</span></div>
+        <div class="triqui-score-cell"><span class="n">${draws}</span><span class="l">Empates</span></div>
+        <div class="triqui-score-cell"><span class="n">${wins(partner)}</span><span class="l">${escapeHtml(partner)}</span></div>
       </div>
-      <div class="actions">
-        <button class="add-btn" id="new-media-btn" type="button" title="Nuevo" aria-label="Nuevo"><span class="material-symbols-outlined">add</span></button>
-      </div>
-    </div>
-    ${featured.length ? `
-      <div class="featured-label"><span class="material-symbols-outlined">star</span> Destacadas</div>
-      <div class="featured-strip" id="featured-media-strip"></div>
-    ` : ''}
-    <div class="tag-filter-row" id="media-filter">
-      <button class="tag-chip tag-chip-all ${filter === 'all' ? 'active' : ''}" data-f="all">Todo <span class="count">${filterCounts.all}</span></button>
-      <button class="tag-chip ${filter === 'musica' ? 'active' : ''}" data-f="musica" style="--tag-color: #1db954;"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:-3px;">music_note</span> Canciones <span class="count">${filterCounts.musica}</span></button>
-      <button class="tag-chip ${filter === 'playlists' ? 'active' : ''}" data-f="playlists" style="--tag-color: #6d5be6;"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:-3px;">queue_music</span> Playlists <span class="count">${filterCounts.playlists}</span></button>
-      <button class="tag-chip ${filter === 'videos' ? 'active' : ''}" data-f="videos" style="--tag-color: #ff4040;"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:-3px;">play_circle</span> Videos <span class="count">${filterCounts.videos}</span></button>
-    </div>
-    <div class="grid-cards" id="media-grid"></div>
-  `;
+      <p class="triqui-status ${myTurn ? 'is-mine' : ''}" role="status" aria-live="polite">${status}</p>
+      ${g ? `
+        <div class="triqui-board ${myTurn ? 'can-play' : ''}" id="triqui-board" role="grid" aria-label="Tablero">
+          ${g.board.split('').map((c, i) => `
+            <button type="button" class="triqui-cell ${c === 'X' ? 'is-x' : c === 'O' ? 'is-o' : ''} ${line && line.includes(i) ? 'is-win' : ''}"
+              data-i="${i}" ${c !== '.' || !myTurn ? 'disabled' : ''}
+              aria-label="Casilla ${i + 1}: ${c === '.' ? 'vacía' : c}">${c === '.' ? '' : c}</button>`).join('')}
+        </div>` : ''}
+      ${!g || g.status !== 'playing' ? `
+        <button class="btn primary triqui-new" id="triqui-new" type="button">
+          <span class="material-symbols-outlined">replay</span> ${g ? 'Nueva partida' : 'Empezar partida'}
+        </button>` : ''}
+    </div>`;
 
-  $('#new-media-btn').addEventListener('click', () => openMediaEditor(null));
-  $('#media-filter').addEventListener('click', (e) => {
-    const b = e.target.closest('button[data-f]');
-    if (!b) return;
-    state.filterMedia = b.dataset.f;
-    renderMusica(root);
+  const boardEl = $('#triqui-board');
+  if (boardEl) boardEl.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-i]');
+    if (b && !b.disabled) triquiPlay(Number(b.dataset.i));
   });
-
-  if (featured.length) {
-    const strip = $('#featured-media-strip');
-    featured.forEach(m => strip.appendChild(renderMediaCard(m)));
-  }
-
-  const grid = $('#media-grid');
-  items.forEach(m => grid.appendChild(renderMediaCard(m)));
+  const newBtn = $('#triqui-new');
+  if (newBtn) newBtn.addEventListener('click', async () => { newBtn.disabled = true; await triquiNewGame(); });
 }
 
-function renderMediaCard(m) {
-  const card = document.createElement('article');
-  card.className = `card clickable media-card ${m.kind}`;
-  card.style.viewTransitionName = `media-${cssSafeId(m.id)}`;
-  if (m.featured) card.classList.add('featured');
-  card.setAttribute('role', 'button');
-  card.setAttribute('tabindex', '0');
-
-  if (isUnread(m)) {
-    const dot = document.createElement('span');
-    dot.className = 'unread-dot';
-    card.appendChild(dot);
-  }
-
-  // Card actions: feature + edit. (We dropped pin for music — featured
-  // is what now drives the "Destacadas" strip at the top of /musica.)
-  const actions = document.createElement('div');
-  actions.className = 'card-actions';
-  actions.innerHTML = `
-    <button title="Editar" data-action="edit"><span class="material-symbols-outlined">edit</span></button>
-    <button title="${m.featured ? 'Quitar de destacadas' : 'Destacar'}" class="${m.featured ? 'is-on' : ''}" data-action="feature"><span class="material-symbols-outlined ${m.featured ? 'filled' : ''}">star</span></button>
-  `;
-  actions.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    const btn = e.target.closest('button');
-    if (!btn) return;
-    if (btn.dataset.action === 'edit') openMediaEditor(m);
-    if (btn.dataset.action === 'feature') {
-      const next = !m.featured;
-      await togglePinWithTransition(async () => {
-        m.featured = next;
-        await supabase.from('media').update({ featured: next }).eq('id', m.id);
-        await router();
-      });
-    }
-  });
-  card.appendChild(actions);
-
-  // Thumbnail with play overlay
-  const thumbWrap = document.createElement('div');
-  thumbWrap.className = 'thumb-wrap';
-  if (m.thumbnail_url) {
-    const img = document.createElement('img');
-    img.src = m.thumbnail_url; img.alt = ''; img.loading = 'lazy';
-    thumbWrap.appendChild(img);
-  } else {
-    const ph = document.createElement('div');
-    ph.className = 'placeholder';
-    ph.innerHTML = `<span class="material-symbols-outlined" style="font-size:3rem;">${m.kind === 'spotify' ? 'music_note' : 'play_circle'}</span>`;
-    thumbWrap.appendChild(ph);
-  }
-  const overlay = document.createElement('div');
-  overlay.className = 'play-overlay';
-  overlay.innerHTML = '<div class="play"><span class="material-symbols-outlined">play_arrow</span></div>';
-  thumbWrap.appendChild(overlay);
-
-  // Kind chip pinned to bottom-right of thumbnail
-  const kindChip = document.createElement('div');
-  kindChip.className = 'kind-chip';
-  kindChip.textContent = m.kind === 'spotify' ? 'Spotify' : 'YouTube';
-  thumbWrap.appendChild(kindChip);
-
-  card.appendChild(thumbWrap);
-
-  const body = document.createElement('div');
-  body.className = 'body';
-  const h = document.createElement('h3');
-  h.textContent = displayMediaTitle(m);
-  body.appendChild(h);
-  if (m.note) {
-    const p = document.createElement('div');
-    p.className = 'preview';
-    p.textContent = m.note;
-    body.appendChild(p);
-  }
-  const meta = document.createElement('div');
-  meta.className = 'meta';
-  const featuredMark = m.featured ? '<span class="material-symbols-outlined filled" style="font-size:14px;vertical-align:-2px;color:#f9b233;">star</span>' : '';
-  meta.innerHTML = `<span>${fmtDate(m.created_at)} · ${escapeHtml(m.created_by || '?')} ${featuredMark}</span>`;
-  body.appendChild(meta);
-  card.appendChild(body);
-
-  // Whole card → theater
-  card.addEventListener('click', () => openTheater(m));
-  card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openTheater(m); } });
-  return card;
-}
+// Mientras la página del juego está abierta y visible, consulta cada
+// pocos segundos por si el otro ya jugó.
+setInterval(async () => {
+  if (state.route !== '#/triqui' || document.visibilityState !== 'visible') return;
+  if (!state.currentUser || state.triquiGames === null || triquiBusy) return;
+  if (await triquiFetch()) { rerenderCurrentPage(); updateSidebarBadges(); }
+}, 4000);
 
 // ============================================================
 // Page: Fotos
@@ -3490,11 +3438,15 @@ async function deletePhotosBatch(photos) {
   const ids = new Set(photos.map(p => p.id));
   const paths = photos.map(p => p.storage_path).filter(Boolean);
   try {
+    // Filas primero: si la base las rechaza no se borran los archivos
+    // (si no, quedaban fotos rotas). Con RLS un borrado sin permiso no da
+    // error, solo borra 0 filas — por eso se pide el resultado.
+    const { data: deleted, error } = await supabase.from('photos').delete().in('id', Array.from(ids)).select('id');
+    if (error) throw error;
+    if (!deleted?.length) throw new Error('sin permiso — vuelve a iniciar sesión');
     if (paths.length) {
       try { await supabase.storage.from(BUCKET).remove(paths); } catch (e) { console.warn('storage cleanup failed', e); }
     }
-    const { error } = await supabase.from('photos').delete().in('id', Array.from(ids));
-    if (error) throw error;
     // Update local state and re-render synchronously (no extra fetch)
     state.photos = state.photos.filter(p => !ids.has(p.id));
     // If we're inside an album detail page that's now empty, bounce to /fotos
@@ -3861,7 +3813,6 @@ function renderPlaceCard(p) {
 // ============================================================
 const SECTION_LABELS = {
   notes: 'Notas recientes',
-  media: 'Música reciente',
   photos: 'Fotos recientes',
   trips: 'Viajes',
   places: 'Lugares recientes',
@@ -3937,6 +3888,10 @@ function renderConfigCuenta(body) {
         <span class="status" id="cfg-pw-status"></span>
       </div>
     </div>
+    <div class="settings-card" id="cfg-push-card">
+      <h3>Notificaciones</h3>
+      <div id="cfg-push-body"></div>
+    </div>
     <div class="settings-card">
       <h3>Cerrar sesión</h3>
       <div class="sub" style="color:var(--text-dim);font-size:.82rem;">Tendrás que volver a meter la clave la próxima vez.</div>
@@ -3961,9 +3916,63 @@ function renderConfigCuenta(body) {
       $('#cfg-old-pw').value = ''; $('#cfg-new-pw').value = '';
     } catch (e) { uiToast(`Error: ${e.message || e}`, { error: true }); }
   });
+  renderPushSettings();
   $('#cfg-logout').addEventListener('click', async () => {
     if (!(await uiConfirm('¿Cerrar sesión ahora?', { title: 'Cerrar sesión', confirmLabel: 'Cerrar sesión' }))) return;
     await logout();
+  });
+}
+
+async function renderPushSettings() {
+  const box = $('#cfg-push-body');
+  if (!box) return;
+  const hint = (t) => `<div class="sub" style="color:var(--text-dim);font-size:.82rem;">${t}</div>`;
+  if (!pushSupported()) {
+    box.innerHTML = hint(isIOS && !isStandalone()
+      ? 'En iPhone las notificaciones solo funcionan con la app instalada: en Safari toca <strong>Compartir</strong> → <strong>Agregar a inicio</strong>, ábrela desde el ícono y vuelve aquí.'
+      : 'Este navegador no permite notificaciones.');
+    return;
+  }
+  if (Notification.permission === 'denied') {
+    box.innerHTML = hint('Están bloqueadas para Medusas en los ajustes del sistema. Actívalas ahí y vuelve a abrir la app.');
+    return;
+  }
+  const sub = Notification.permission === 'granted' ? await currentPushSubscription() : null;
+  if (!$('#cfg-push-body')) return; // la pestaña cambió mientras se consultaba
+  if (!sub) {
+    box.innerHTML = `
+      ${hint('Recibe un aviso cuando tu pareja agregue una nota, fotos o música.')}
+      <div class="row" style="margin-top:.7rem;">
+        <button class="btn primary" id="cfg-push-on"><span class="material-symbols-outlined">notifications_active</span> Activar notificaciones</button>
+      </div>`;
+    $('#cfg-push-on').addEventListener('click', async (e) => {
+      e.currentTarget.disabled = true;
+      try { await enablePush(); uiToast('Notificaciones activadas ✓'); }
+      catch (err) { uiToast(`No se pudieron activar: ${err.message || err}`, { error: true, duration: 5000 }); }
+      renderPushSettings();
+    });
+    return;
+  }
+  box.innerHTML = `
+    ${hint('Activadas en este dispositivo.')}
+    <div class="row" style="margin-top:.7rem;gap:.5rem;flex-wrap:wrap;">
+      <button class="btn primary" id="cfg-push-test"><span class="material-symbols-outlined">send</span> Enviar prueba</button>
+      <button class="btn" id="cfg-push-off">Desactivar</button>
+    </div>`;
+  $('#cfg-push-test').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      const r = await sendTestPush();
+      if (r && r.sent > 0) uiToast('Prueba enviada — debería llegar en unos segundos');
+      else uiToast(`No se pudo entregar: ${r?.failures?.[0]?.detail || r?.error || 'sin dispositivos suscritos'}`, { error: true, duration: 6000 });
+    } catch (err) { uiToast(`Error al enviar la prueba: ${err.message || err}`, { error: true, duration: 6000 }); }
+    btn.disabled = false;
+  });
+  $('#cfg-push-off').addEventListener('click', async () => {
+    await disablePush();
+    uiToast('Notificaciones desactivadas');
+    renderPushSettings();
   });
 }
 
@@ -4408,7 +4417,7 @@ let noteEditorReturnHash = '#/notas';
 let noteEditorRouteBypass = false;
 const noteDraft = {
   id: null, title: '', content: '', visibility: 'public',
-  links: [], images: [], tags: [], pinned: false, checklist: [],
+  links: [], images: [], tags: [], pinned: false, checklist: [], color: 'crema',
 };
 
 // Snapshot of the editor state taken at open, used to detect unsaved
@@ -4424,6 +4433,7 @@ function serializeNoteDraft() {
     images: noteDraft.images,
     tags: noteDraft.tags,
     checklist: noteDraft.checklist,
+    color: noteDraft.color,
   });
 }
 function noteEditorDirty() {
@@ -4458,6 +4468,24 @@ function hideNoteEditorPage() {
   noteSnapshot = null;
 }
 
+function renderNoteColorPicker() {
+  const row = $('#note-colors');
+  if (!row) return;
+  row.innerHTML = NOTE_COLORS.map(c => `
+    <button type="button" class="note-color-swatch ${noteDraft.color === c.key ? 'is-on' : ''}" data-color="${c.key}"
+      style="--sw:${c.hex}" aria-label="Color ${c.label}" aria-pressed="${noteDraft.color === c.key}" title="${c.label}">
+      ${noteDraft.color === c.key ? '<span class="material-symbols-outlined">check</span>' : ''}
+    </button>`).join('');
+  // El editor se tiñe con el color elegido, como la tarjeta.
+  $('#note-editor-page').style.setProperty('--note-bg', noteColorHex(noteDraft.color));
+}
+$('#note-colors').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-color]');
+  if (!b) return;
+  noteDraft.color = b.dataset.color;
+  renderNoteColorPicker();
+});
+
 function showNoteEditorPage(note) {
   noteDraft.id = note?.id || null;
   noteDraft.title = note?.title || '';
@@ -4467,6 +4495,8 @@ function showNoteEditorPage(note) {
   noteDraft.images = Array.isArray(note?.images) ? [...note.images] : [];
   noteDraft.tags = Array.isArray(note?.tags) ? [...note.tags] : [];
   noteDraft.pinned = !!note?.pinned;
+  noteDraft.color = note ? noteColorKey(note) : 'crema';
+  renderNoteColorPicker();
   noteDraft.archived_at = note?.archived_at || null;
   noteDraft.checklist = Array.isArray(note?.checklist)
     ? note.checklist.map(it => ({ text: String(it.text || ''), done: !!it.done }))
@@ -4867,18 +4897,30 @@ $('#note-save').addEventListener('click', async () => {
     tags: noteDraft.tags,
     pinned: noteDraft.pinned,
     checklist: cleanedChecklist,
+    color: noteDraft.color,
   };
   setStatus($('#note-status'), 'Guardando…');
   const isUpdate = !!noteDraft.id;
   try {
-    if (isUpdate) {
-      const { error } = await supabase.from('notes').update(payload).eq('id', noteDraft.id);
-      if (error) throw error;
-    } else {
+    // Si la base aún no tiene la columna color, se guarda sin ella.
+    const write = async (p) => isUpdate
+      ? supabase.from('notes').update(p).eq('id', noteDraft.id)
+      : supabase.from('notes').insert(p);
+    if (!isUpdate) {
       payload.created_by = state.currentUser;
       payload.seen_by = [state.currentUser];
-      const { error } = await supabase.from('notes').insert(payload);
-      if (error) throw error;
+    }
+    let { error } = await write(payload);
+    if (error && /color/i.test(error.message || '')) {
+      const { color, ...withoutColor } = payload;
+      ({ error } = await write(withoutColor));
+    }
+    if (error) throw error;
+    if (!isUpdate) {
+      // Las notas privadas no avisan a nadie.
+      if (payload.visibility !== 'private') {
+        notifyPartner({ title: `${state.currentUser} escribió una nota`, body: payload.title || '', hash: '#/notas' });
+      }
     }
     hideNoteEditorPage();
     uiToast(isUpdate ? 'Nota actualizada ✓' : 'Nota guardada ✓');
@@ -4927,172 +4969,6 @@ $('#note-archive').addEventListener('click', async () => {
     setStatus($('#note-status'), `Error al ${isArchived ? 'desarchivar' : 'archivar'}: ${e.message || e}`, true);
   }
 });
-
-// ============================================================
-// Media editor
-// ============================================================
-const dlgMedia = $('#dlg-media');
-const mediaDraft = { id: null, parsed: null, pinned: false, featured: false, thumbnail_url: null, artist: null };
-
-function setMediaPin(p) {
-  mediaDraft.pinned = p;
-  const b = $('#media-pin-toggle');
-  b.classList.toggle('is-pinned', p);
-  b.innerHTML = `<span class="material-symbols-outlined">keep</span> ${p ? 'Anclada' : 'Anclar'}`;
-}
-function setMediaFeatured(p) {
-  mediaDraft.featured = p;
-  const b = $('#media-feature-toggle');
-  b.classList.toggle('is-pinned', p);
-  b.innerHTML = `<span class="material-symbols-outlined">star</span> ${p ? 'Destacada' : 'Destacar'}`;
-}
-
-function updateMediaPreview() {
-  const parsed = parseMediaUrl($('#media-url').value);
-  mediaDraft.parsed = parsed;
-  const preview = $('#media-preview');
-  if (!parsed) { preview.hidden = true; preview.innerHTML = ''; return; }
-  preview.hidden = false;
-  preview.className = `embed-preview ${parsed.kind}`;
-  preview.innerHTML = `<iframe loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="autoplay; encrypted-media; picture-in-picture" src="${escapeHtml(parsed.embedUrl)}"></iframe>`;
-}
-
-async function tryAutofillTitle() {
-  const parsed = parseMediaUrl($('#media-url').value);
-  if (!parsed) return;
-  const titleInput = $('#media-title-input');
-  const artistInput = $('#media-artist-input');
-  const alreadyHasTitle = titleInput.value.trim();
-  const alreadyHasArtist = artistInput && artistInput.value.trim();
-  if (alreadyHasTitle && alreadyHasArtist) return;
-  $('#media-title-hint').textContent = '· buscando título…';
-  const oembed = await fetchOembedTitle(parsed);
-  $('#media-title-hint').textContent = '';
-  if (oembed?.title && !alreadyHasTitle) titleInput.value = oembed.title;
-  if (oembed?.author && !alreadyHasArtist && artistInput) {
-    artistInput.value = oembed.author;
-    mediaDraft.artist = oembed.author;
-  }
-  if (oembed?.thumbnail) mediaDraft.thumbnail_url = oembed.thumbnail;
-  else if (parsed.thumbnailUrl) mediaDraft.thumbnail_url = parsed.thumbnailUrl;
-}
-
-function openMediaEditor(m) {
-  mediaDraft.id = m?.id || null;
-  mediaDraft.thumbnail_url = m?.thumbnail_url || null;
-  mediaDraft.artist = m?.artist || null;
-  $('#media-url').value = m?.url || '';
-  $('#media-title-input').value = m?.title || '';
-  if ($('#media-artist-input')) $('#media-artist-input').value = m?.artist || '';
-  $('#media-note-input').value = m?.note || '';
-  $('#media-title-hint').textContent = '';
-  setMediaPin(!!m?.pinned);
-  setMediaFeatured(!!m?.featured);
-  if (m) updateMediaPreview();
-  else { $('#media-preview').hidden = true; $('#media-preview').innerHTML = ''; }
-  $('#media-status').textContent = '';
-  $('#dlg-media-title').textContent = m ? 'Editar música' : 'Nueva música';
-  $('#media-save').textContent = m ? 'Actualizar' : 'Guardar';
-  $('#media-delete').hidden = !m;
-  dlgMedia.showModal();
-  setTimeout(() => (m ? $('#media-title-input') : $('#media-url')).focus(), 0);
-
-  if (m && isUnread(m)) markSeen('media', m);
-}
-
-$('#media-url').addEventListener('input', updateMediaPreview);
-$('#media-url').addEventListener('paste', () => setTimeout(() => { updateMediaPreview(); tryAutofillTitle(); }, 50));
-$('#media-url').addEventListener('blur', () => tryAutofillTitle());
-$('#media-pin-toggle').addEventListener('click', () => setMediaPin(!mediaDraft.pinned));
-$('#media-feature-toggle').addEventListener('click', () => setMediaFeatured(!mediaDraft.featured));
-
-$('#media-save').addEventListener('click', async () => {
-  let title = $('#media-title-input').value.trim();
-  let artist = ($('#media-artist-input')?.value || '').trim();
-  const parsed = parseMediaUrl($('#media-url').value);
-  if (!parsed) { setStatus($('#media-status'), 'Pega un enlace válido de Spotify o YouTube', true); $('#media-url').focus(); return; }
-
-  // Last-ditch attempt to grab title/artist/thumbnail from oembed before
-  // we save. This means the user doesn't need to type the title — pasting
-  // the URL is enough.
-  let thumb = mediaDraft.thumbnail_url || parsed.thumbnailUrl;
-  if (!title || !artist || !thumb) {
-    try {
-      const oe = await fetchOembedTitle(parsed);
-      if (oe?.title && !title) title = oe.title;
-      if (oe?.author && !artist) artist = oe.author;
-      if (oe?.thumbnail && !thumb) thumb = oe.thumbnail;
-    } catch {}
-  }
-  if (!title) title = 'Sin título';
-
-  const payload = {
-    kind: parsed.kind,
-    title,
-    artist: artist || null,
-    url: parsed.normalizedUrl,
-    embed_url: parsed.embedUrl,
-    thumbnail_url: thumb,
-    note: $('#media-note-input').value,
-    pinned: mediaDraft.pinned,
-    featured: mediaDraft.featured,
-  };
-  setStatus($('#media-status'), 'Guardando…');
-  try {
-    if (mediaDraft.id) {
-      const { error } = await supabase.from('media').update(payload).eq('id', mediaDraft.id);
-      if (error) throw error;
-    } else {
-      payload.created_by = state.currentUser;
-      payload.seen_by = [state.currentUser];
-      const { error } = await supabase.from('media').insert(payload);
-      if (error) throw error;
-    }
-    dlgMedia.close();
-    await router();
-  } catch (e) { setStatus($('#media-status'), `Error al guardar: ${e.message || e}`, true); }
-});
-
-$('#media-delete').addEventListener('click', async () => {
-  if (!mediaDraft.id) return;
-  const m = state.media.find(x => x.id === mediaDraft.id);
-  if (!m) return;
-  if (!(await uiConfirm(`¿Eliminar "${m.title}"? Esta acción no se puede deshacer.`, { title: 'Eliminar', confirmLabel: 'Eliminar', danger: true }))) return;
-  setStatus($('#media-status'), 'Eliminando…');
-  try {
-    const { error } = await supabase.from('media').delete().eq('id', m.id);
-    if (error) throw error;
-    dlgMedia.close();
-    await router();
-  } catch (e) { setStatus($('#media-status'), `Error al eliminar: ${e.message || e}`, true); }
-});
-
-// ============================================================
-// Theater (music play modal)
-// ============================================================
-const dlgTheater = $('#dlg-theater');
-let theaterCurrent = null;
-
-function openTheater(m) {
-  theaterCurrent = m;
-  const stage = $('#theater-stage');
-  stage.className = `theater-stage ${m.kind}`;
-  const src = m.embed_url + (m.embed_url.includes('?') ? '&' : '?') + 'autoplay=1';
-  stage.innerHTML = `<iframe loading="eager" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" src="${escapeHtml(src)}"></iframe>`;
-  $('#theater-title').textContent = displayMediaTitle(m);
-  dlgTheater.showModal();
-  if (isUnread(m)) markSeen('media', m);
-}
-
-function closeTheater() {
-  $('#theater-stage').innerHTML = '';
-  if (dlgTheater.open) dlgTheater.close();
-}
-
-$('#theater-close').addEventListener('click', closeTheater);
-$('#theater-edit').addEventListener('click', () => { const m = theaterCurrent; closeTheater(); if (m) openMediaEditor(m); });
-dlgTheater.addEventListener('cancel', closeTheater);
-dlgTheater.addEventListener('click', (e) => { if (e.target === dlgTheater) closeTheater(); });
 
 // ============================================================
 // Photo upload (drag-drop + multi)
@@ -5325,6 +5201,15 @@ async function startConfirmedUpload() {
   // modal and jump to the album so the user sees the new photos. If any
   // row errored, keep the modal open so they can see what failed.
   const anyError = uploadList.querySelector('.upload-row.error');
+  // Un solo aviso por tanda, contando solo las que sí subieron.
+  const uploadedOk = uploadList.querySelectorAll('.upload-row.done').length;
+  if (uploadedOk > 0) {
+    notifyPartner({
+      title: `${state.currentUser} subió ${uploadedOk === 1 ? 'una foto' : `${uploadedOk} fotos`}`,
+      body: album ? `Álbum: ${album}` : '',
+      hash: '#/fotos',
+    });
+  }
   if (!anyError && uploadDone > 0) {
     afterUploadAlbumSlug = albumSlugFor(album);
     uiToast(`${uploadDone} foto${uploadDone === 1 ? '' : 's'} subida${uploadDone === 1 ? '' : 's'} ✓`);
@@ -5515,8 +5400,15 @@ $('#lb-delete').addEventListener('click', async (e) => {
   const p = lightboxState.list[lightboxState.index];
   if (!p) return;
   if (!(await uiConfirm('¿Eliminar esta foto? No se puede deshacer.', { title: 'Eliminar foto', confirmLabel: 'Eliminar', danger: true }))) return;
+  // Primero la fila: si la base la rechaza, la foto se queda (antes se
+  // escondía de la pantalla aunque fallara y volvía al recargar).
+  const { data: deleted, error } = await supabase.from('photos').delete().eq('id', p.id).select('id');
+  if (error || !deleted?.length) {
+    // uiAlert y no uiToast: el visor es un <dialog> modal y taparía el toast.
+    uiAlert(`No se pudo eliminar la foto${error ? `: ${error.message}` : ' (sin permiso — vuelve a iniciar sesión)'}`, { title: 'Error' });
+    return;
+  }
   try { await supabase.storage.from(BUCKET).remove([p.storage_path]); } catch {}
-  await supabase.from('photos').delete().eq('id', p.id);
   // Remove from state caches
   state.photos = state.photos.filter(x => x.id !== p.id);
   lightboxState.list.splice(lightboxState.index, 1);
@@ -5991,16 +5883,6 @@ function renderNotifList() {
       .filter(n => n.visibility !== 'private')
       .map(n => tagItem(n, 'note', mi('edit_note'), '#/notas',
         `${who(n.created_by)} escribió ${named(n.title, 'una nota')}`)),
-    ...state.media.map(m => {
-      const icon = mi(m.kind === 'spotify' ? 'music_note' : 'play_circle');
-      const kindLabel = m.kind === 'spotify' ? 'una canción' : 'un video';
-      const t = displayMediaTitle(m);
-      const author = who(m.created_by);
-      const label = (t && t !== 'Sin título')
-        ? `${author} guardó “${t}”`
-        : `${author} guardó ${kindLabel}`;
-      return tagItem(m, 'media', icon, '#/musica', label);
-    }),
     ...groupedPhotos.map(g => {
       const slug = g.album ? albumSlugFor(g.album) : '';
       const route = g.album ? `#/fotos/album/${slug}` : '#/fotos';
@@ -6656,6 +6538,7 @@ async function boot() {
     await loadSettings();
     if (!location.hash) location.hash = '#/inicio';
     await router();
+    registerServiceWorker().then(syncPushSubscription);
   } else {
     // Logged out: the auth overlay is already visible in HTML; just wire it up.
     showLogin();

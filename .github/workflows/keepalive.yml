@@ -1,0 +1,20 @@
+# Supabase pausa los proyectos gratuitos tras 1 semana sin actividad.
+# Esta tarea hace una consulta mínima cada 3 días para que no pase.
+name: Mantener Supabase activo
+on:
+  schedule:
+    - cron: '17 9 */3 * *'
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consulta mínima a la base
+        run: |
+          KEY='sb_publishable_ndJSJcAcexIbz9yn1zRoLw_iyeerQXy'
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            'https://vmdsibzivcugjidtkhzt.supabase.co/rest/v1/rpc/whoami' \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
+            -H 'Content-Type: application/json' -d '{}')
+          echo "HTTP $code"
+          test "$code" = "200"

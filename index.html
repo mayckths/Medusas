@@ -27,8 +27,10 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,200..700,0..1,-50..200&display=block&family=Caveat:wght@400;600;700&family=Playfair+Display:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" />
 
     <link rel="icon" type="image/png" href="./medusa-azul.png" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="manifest" href="./manifest.webmanifest" />
 
-    <link rel="stylesheet" href="./styles.css?v=20261105e" />
+    <link rel="stylesheet" href="./styles.css?v=20261124a" />
 
     <!-- Apply bg mode immediately to avoid a flash on first paint -->
     <script>
@@ -112,9 +114,9 @@
             <span class="material-symbols-outlined m-icon">photo_library</span><span>Fotos</span>
             <span class="badge-unread" data-unread="fotos" hidden></span>
           </a>
-          <a href="#/musica" data-route="#/musica">
-            <span class="material-symbols-outlined m-icon">music_note</span><span>Música</span>
-            <span class="badge-unread" data-unread="musica" hidden></span>
+          <a href="#/triqui" data-route="#/triqui">
+            <span class="material-symbols-outlined m-icon">grid_3x3</span><span>Triqui</span>
+            <span class="badge-unread" data-unread="triqui" hidden></span>
           </a>
           <a href="#/viajes" data-route="#/viajes">
             <span class="material-symbols-outlined m-icon">flight_takeoff</span><span>Viajes</span>
@@ -134,8 +136,8 @@
         <a href="#/fotos" data-route="#/fotos" class="m-item">
           <span class="material-symbols-outlined m-icon">photo_library</span><span class="m-label">Fotos</span>
         </a>
-        <a href="#/musica" data-route="#/musica" class="m-item">
-          <span class="material-symbols-outlined m-icon">music_note</span><span class="m-label">Música</span>
+        <a href="#/triqui" data-route="#/triqui" class="m-item">
+          <span class="material-symbols-outlined m-icon">grid_3x3</span><span class="m-label">Triqui</span>
         </a>
         <a href="#/viajes" data-route="#/viajes" class="m-item">
           <span class="material-symbols-outlined m-icon">flight_takeoff</span><span class="m-label">Viajes</span>
@@ -184,6 +186,7 @@
         <!-- Attach toolbar closes the page. Archive/delete live here (not
              in the top bar), beside the inline check — the always-reachable
              save while the keyboard covers the top bar. -->
+        <div class="note-color-row" id="note-colors" role="group" aria-label="Color de la nota"></div>
         <div class="note-icon-row">
           <button class="icon-btn" id="note-add-link" title="Añadir enlace" type="button"><span class="material-symbols-outlined">link</span></button>
           <button class="icon-btn" id="note-add-image" title="Añadir imagen" type="button"><span class="material-symbols-outlined">image</span></button>
@@ -196,61 +199,6 @@
         </div>
       </div>
     </section>
-
-    <!-- ==================== Media editor ==================== -->
-    <dialog class="modal" id="dlg-media">
-      <div class="modal-inner">
-        <div class="modal-head">
-          <h2 id="dlg-media-title">Nueva música</h2>
-          <button class="close-x" data-close><span class="material-symbols-outlined">close</span></button>
-        </div>
-
-        <div class="field">
-          <label for="media-url">Enlace de Spotify o YouTube</label>
-          <input type="url" id="media-url" placeholder="https://open.spotify.com/... o https://youtu.be/..." />
-        </div>
-        <div class="field two">
-          <div>
-            <label for="media-title-input">Título <span class="hint" id="media-title-hint"></span></label>
-            <input type="text" id="media-title-input" placeholder="Se rellena automáticamente" maxlength="200" />
-          </div>
-          <div>
-            <label for="media-artist-input">Artista</label>
-            <input type="text" id="media-artist-input" placeholder="Se rellena automáticamente" maxlength="200" />
-          </div>
-        </div>
-        <div class="field">
-          <label for="media-note-input">Nota (opcional)</label>
-          <textarea id="media-note-input" placeholder="Para qué momento, por qué te gusta…"></textarea>
-        </div>
-
-        <div class="embed-preview" id="media-preview" hidden></div>
-
-        <div class="modal-toolbar">
-          <button class="btn pin-toggle" id="media-pin-toggle" type="button"><span class="material-symbols-outlined">keep</span> Anclar</button>
-          <button class="btn pin-toggle" id="media-feature-toggle" type="button"><span class="material-symbols-outlined">star</span> Destacar</button>
-        </div>
-
-        <div class="modal-actions">
-          <div class="left">
-            <span class="status" id="media-status"></span>
-          </div>
-          <button class="btn danger" id="media-delete" hidden>Eliminar</button>
-          <div class="right">
-            <button class="btn ghost" data-close>Cancelar</button>
-            <button class="btn primary" id="media-save">Guardar</button>
-          </div>
-        </div>
-      </div>
-    </dialog>
-
-    <!-- ==================== Theater mode (music play) ==================== -->
-    <dialog class="theater" id="dlg-theater">
-      <button class="theater-close" id="theater-close" aria-label="Cerrar"><span class="material-symbols-outlined">close</span></button>
-      <button class="theater-edit" id="theater-edit">Editar</button>
-      <div class="theater-stage" id="theater-stage"></div>
-      <div class="theater-title" id="theater-title"></div>
-    </dialog>
 
     <!-- ==================== Photo upload ==================== -->
     <dialog class="modal" id="dlg-photo">
@@ -628,6 +576,6 @@
       <div class="notif-list" id="notif-list"></div>
     </div>
 
-    <script type="module" src="./app.js?v=20261105e"></script>
+    <script type="module" src="./app.js?v=20261124a"></script>
   </body>
 </html>
