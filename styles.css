@@ -1,5 +1,4 @@
 :root, :root[data-theme="dark"] {
-  --safe-top: env(safe-area-inset-top, 0px); /* readable from JS */
   color-scheme: dark;
   /* "Shared Hearth" palette — terracotta primary, forest-green secondary,
      cream tertiary, warm-brown neutral. Surfaces stay dark so the photo
@@ -2364,7 +2363,7 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
 }
 @media (min-width: 981px) {
   /* Side by side with the rest of Inicio: a slightly shorter photo so
-     it still fits under the (compact) chat without scrolling. */
+     it fits under the chat inside the sticky column. */
   .col-right .photo-widget { height: clamp(200px, 30vh, 300px); }
 }
 @media (max-width: 760px) {
@@ -2392,16 +2391,17 @@ dialog.lightbox .lb-tag-add .material-symbols-outlined { font-size: 14px; }
   color: var(--text);
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
-  /* Compact until it is used, then it grows (.is-open). Both heights
-     come from sizeChatWidget(); the fallbacks cover the first paint. */
-  height: var(--chat-h, 212px);
+  /* Always full size. Stacked layouts (phone, tablet) use this fixed
+     height; side by side, sizeChatWidget() sets --chat-h so the chat and
+     the photo under it fit the sticky column together. */
+  height: min(520px, 70vh);
+  height: min(520px, 70dvh);
   flex: none;
   display: flex; flex-direction: column; overflow: hidden;
-  transition: height 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.chat-widget.is-open { height: var(--chat-open-h, min(520px, 70dvh)); }
-.chat-widget:not(.is-open) { cursor: pointer; }
-@media (prefers-reduced-motion: reduce) { .chat-widget { transition: none; } }
+@media (min-width: 981px) {
+  .col-right .chat-widget { height: var(--chat-h, 480px); }
+}
 .chat-widget [hidden] { display: none !important; }
 .chat-widget .chat-head {
   padding: 0.5rem 0.55rem 0.5rem 0.6rem;
