@@ -6358,7 +6358,8 @@ async function startChatRecording() {
   // mp4 primero: es lo que graba Safari y lo que suena en todas partes.
   const mime = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg'].find(t => MediaRecorder.isTypeSupported(t)) || '';
   let recorder;
-  try { recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); }
+  // 48 kbps basta para voz: una nota de 2 minutos pesa menos de 1 MB.
+  try { recorder = new MediaRecorder(stream, { audioBitsPerSecond: 48000, ...(mime ? { mimeType: mime } : {}) }); }
   catch (e) { stream.getTracks().forEach(t => t.stop()); uiToast(`No se pudo grabar: ${e.message || e}`, { error: true }); return; }
   const rec = { recorder, stream, chunks: [], startedAt: Date.now(), send: false, timer: null };
   recorder.addEventListener('dataavailable', (e) => { if (e.data && e.data.size) rec.chunks.push(e.data); });
