@@ -7,12 +7,19 @@ self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 self.addEventListener('push', (e) => {
   let data = {};
   try { data = e.data ? e.data.json() : {}; } catch { /* payload no JSON */ }
-  e.waitUntil(self.registration.showNotification(data.title || 'Medusas', {
-    body: data.body || '',
-    icon: './icon-192.png',
-    badge: './icon-192.png',
-    data: { hash: data.hash || '#/inicio' },
-  }));
+  const hash = data.hash || '#/inicio';
+  e.waitUntil((async () => {
+    await self.registration.showNotification(data.title || 'Medusas', {
+      body: data.body || '',
+      icon: './icon-192.png',
+      badge: './icon-192.png',
+      data: { hash },
+    });
+    // Si la app está abierta, que se entere ya (p. ej. el chat se
+    // refresca sin esperar a su sondeo).
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const c of wins) c.postMessage({ type: 'medusas-push', hash });
+  })());
 });
 
 // Al tocar la notificación: trae la app al frente en la sección
